@@ -13,14 +13,16 @@ in-engine only.
 - **Margin of safety:** `buy_price = intrinsic × (1 − margin_of_safety)` (default 20%).
 - **Per share:** equity / current `shares_outstanding` (no future share projection).
 
-## SBC treatment (Option 2 — decided 2026-06-17)
+## SBC treatment (Option 2 — decided 2026-06-17; SBC dropped from DCF 2026-07-03)
 - `op_margins` are **GAAP** (SBC already expensed in operating income), so SBC is
   counted **once** via NOPAT. The engine does **not** subtract a separate SBC line
   from FCFF (that double-counted it and understated value — ≈18% for MSFT at 4.4%
   SBC, far more for high-SBC names).
-- `sbc_pct` / `sbc_per_year` are retained in configs for **display only**
-  (SBC-adjusted margin, Rule of 40) and must not move the valuation
-  (`tests/test_dcf_sbc.py` locks this).
+- SBC has **no line anywhere in the DCF** — not in the engine, not in the editor,
+  and it is no longer emitted into new configs (`sbc_pct` / `sbc_per_year` /
+  `terminal_sbc` dropped from `gather_data.py`). Any residual SBC field left in a
+  legacy config is **ignored** and must not move the valuation
+  (`tests/test_dcf_sbc.py` locks this backward-compat guard).
 - This is the Damodaran/GAAP convention: SBC is a real expense, kept in EBIT;
   dilution is captured through the lower GAAP NOPAT.
 - **Pre-SBC margins must not be used.** Convert any to GAAP value-preservingly:

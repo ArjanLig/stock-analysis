@@ -2469,17 +2469,6 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
     print(f"    Trend: {margin_trend} (slope: {margin_slope:+.1%}/yr)")
     print(f"    Margins: {op_margins[0]:.1%} → {op_margins[4]:.1%} → {op_margins[9]:.1%} (terminal: {term_margin:.1%})")
 
-    # ── SBC % ──
-    sbc_vals = financials["sbc"]
-    if sbc_vals and rev:
-        # Average of last 3 years
-        recent_sbc = sbc_vals[-3:] if len(sbc_vals) >= 3 else sbc_vals
-        recent_rev = rev[-3:] if len(rev) >= 3 else rev
-        sbc_ratios = [s / r for s, r in zip(recent_sbc, recent_rev) if r and r > 0 and s and s > 0]
-        sbc_pct = round(sum(sbc_ratios) / len(sbc_ratios), 4) if sbc_ratios else 0.004
-    else:
-        sbc_pct = 0.004
-
     # ── Tax rate ──
     tax_prov = financials["tax_provision"]
     pretax = financials["pretax_income"]
@@ -2583,7 +2572,6 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
         "terminal_growth": term_growth,
         "terminal_margin": term_margin,
         "sales_to_capital": sales_to_capital,
-        "sbc_pct": sbc_pct,
 
         "shares_outstanding": shares,
         "margin_of_safety": margin_of_safety or MARGIN_OF_SAFETY_DEFAULT,
@@ -2609,7 +2597,6 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
         "hist_operating_income": [v or 0 for v in oi],
         "hist_net_income": [v or 0 for v in ni],
         "hist_cost_of_revenue": [v or 0 for v in (financials["cost_of_revenue"] or [])],
-        "hist_sbc_values": [v or 0 for v in (sbc_vals or [])],
         "hist_shares": [v or 0 for v in (financials["shares"] or [])],
 
         "bull_growth_adj": 0.02,
@@ -2635,7 +2622,6 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
     print(f"  Market Cap:         ${market_cap:,.0f}M")
     print(f"  Credit Rating:      {credit_rating} (spread: {credit_spread:.2%})")
     print(f"  Tax Rate:           {tax_rate:.1%}")
-    print(f"  SBC %:              {sbc_pct:.2%}")
     print(f"  Sales/Capital:      {sales_to_capital:.2f}")
     print(f"  Starting Growth:    {revenue_growth[0]:.1%} → Terminal: {term_growth:.1%}")
     print(f"  Starting Margin:    {op_margins[0]:.1%} → Terminal: {term_margin:.1%}")
@@ -2805,7 +2791,6 @@ def write_config(cfg, output_path):
     lines.append(f"    'terminal_growth': {cfg['terminal_growth']},")
     lines.append(f"    'terminal_margin': {cfg['terminal_margin']},")
     lines.append(f"    'sales_to_capital': {cfg['sales_to_capital']},")
-    lines.append(f"    'sbc_pct': {cfg['sbc_pct']},")
     lines.append(f"")
 
     # Shares
@@ -2871,7 +2856,6 @@ def write_config(cfg, output_path):
         ("hist_operating_income", "hist_operating_income"),
         ("hist_net_income", "hist_net_income"),
         ("hist_cost_of_revenue", "hist_cost_of_revenue"),
-        ("hist_sbc_values", "hist_sbc_values"),
         ("hist_shares", "hist_shares"),
     ]
 

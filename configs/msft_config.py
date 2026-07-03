@@ -89,7 +89,6 @@ cfg = {
     'terminal_growth': 0.03,              # Long-term GDP + inflation
     'terminal_margin': 0.40,              # Steady-state operating margin
     'sales_to_capital': 0.65,             # Reinvestment efficiency
-    'sbc_pct': 0.038,                     # SBC as % of revenue (~$10.5B on $277B)
 
     # ──────────────────────────────────────────────
     # SHARES
@@ -127,7 +126,6 @@ cfg = {
     'hist_operating_income':  [ 52_959,  69_916,  83_383,  88_523, 109_433, 127_600],
     'hist_net_income':        [ 44_281,  61_271,  72_738,  72_361,  88_136, 105_600],
     'hist_cost_of_revenue':   [ 46_078,  52_232,  62_650,  65_863,  74_073,  88_900],
-    'hist_sbc_values':        [  5_289,   6_118,   7_502,   9_611,  10_800,  12_000],
     'hist_shares':            [  7_571,   7_519,   7_464,   7_430,   7_432,   7_432],
 
     # ──────────────────────────────────────────────

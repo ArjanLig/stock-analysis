@@ -5072,15 +5072,10 @@ def _dcf_editor(ticker):
             _stc_list = [float(x) for x in cfg.get('stc_per_year', [_default_stc] * _n)]
             if len(_stc_list) < _n:
                 _stc_list.extend([_stc_list[-1] if _stc_list else _default_stc] * (_n - len(_stc_list)))
-            _default_sbc = float(cfg.get('sbc_pct', 0.004))
-            _sbc_list = [float(x) for x in cfg.get('sbc_per_year', [_default_sbc] * _n)]
-            if len(_sbc_list) < _n:
-                _sbc_list.extend([_sbc_list[-1] if _sbc_list else _default_sbc] * (_n - len(_sbc_list)))
 
             # Terminal column editable values (defaults from config or last year)
             _tv_tax_default = float(cfg.get('terminal_tax', _tax_list[-1] if _tax_list else _default_tax))
             _tv_stc_default = float(cfg.get('terminal_stc', _stc_list[-1] if _stc_list else _default_stc))
-            _tv_sbc_default = float(cfg.get('terminal_sbc', _sbc_list[-1] if _sbc_list else _default_sbc))
             # Pre-read terminal WACC from session state (widget rendered after TV calc)
             _tv_wacc_default = cfg.get('terminal_wacc', _wacc_list[-1] if _wacc_list else _default_wacc)
             _tv_wacc = st.session_state.get("ed_w_tv", _tv_wacc_default * 100) / 100
@@ -5224,34 +5219,19 @@ def _dcf_editor(ticker):
                 _tv_reinvest = (_tv_rev - _revs[-1]) / _tv_stc if _tv_stc else 0
                 _dcf_row_val(ri_row, _tv_col, f"{_tv_reinvest:,.0f}")
 
-                # ── SBC % (editable) ──
-                sbc_row = st.columns(_cw)
-                _dcf_row_label(sbc_row, "SBC % of Revenue", bold=True)
-                _dcf_row_val(sbc_row, 1, "")
-                for i in range(_n):
-                    _sbc_list[i] = _dcf_row_input(sbc_row, i + 2, f"ed_sbc_{i}", _sbc_list[i], 0.1, "%.2f")
-                _tv_sbc_pct = _dcf_row_input(sbc_row, _tv_col, "ed_sbc_tv", _tv_sbc_default, 0.1, "%.2f")
-
-                # ── SBC After-Tax (computed) ──
-                sbc_at_row = st.columns(_cw)
-                _dcf_row_label(sbc_at_row, "SBC (after-tax)")
-                _dcf_row_val(sbc_at_row, 1, "")
-                _sbc_vals = [_revs[i + 1] * _sbc_list[i] * (1 - _tax_list[i]) for i in range(_n)]
-                for i in range(_n):
-                    _dcf_row_val(sbc_at_row, i + 2, f"{_sbc_vals[i]:,.0f}")
-                _tv_sbc = _tv_rev * _tv_sbc_pct * (1 - _tv_tax)
-                _dcf_row_val(sbc_at_row, _tv_col, f"{_tv_sbc:,.0f}")
-
                 _dcf_divider()  # ── Reinvestment → FCFF ──
 
                 # ── FCFF (computed) ──
+                # op_margins are GAAP (SBC already expensed in operating income),
+                # so FCFF = NOPAT − reinvestment with no separate SBC line — matches
+                # dcf_calculator.compute_intrinsic_value (SBC convention 2026-06-17).
                 fcff_row = st.columns(_cw)
                 _dcf_row_label(fcff_row, "FCFF")
                 _dcf_row_val(fcff_row, 1, "")
-                _fcff_vals = [_nopat_vals[i] - _reinvest_vals[i] - _sbc_vals[i] for i in range(_n)]
+                _fcff_vals = [_nopat_vals[i] - _reinvest_vals[i] for i in range(_n)]
                 for i in range(_n):
                     _dcf_row_val(fcff_row, i + 2, f"{_fcff_vals[i]:,.0f}")
-                _tv_fcff = _tv_nopat - _tv_reinvest - _tv_sbc
+                _tv_fcff = _tv_nopat - _tv_reinvest
                 _dcf_row_val(fcff_row, _tv_col, f"{_tv_fcff:,.0f}")
 
                 # ── Undiscounted TV ──
@@ -5308,28 +5288,26 @@ def _dcf_editor(ticker):
             _prev_snapshot = (
                 tuple(cfg.get('revenue_growth', [])), tuple(cfg.get('op_margins', [])),
                 tuple(cfg.get('wacc_per_year', [])), tuple(cfg.get('tax_per_year', [])),
-                tuple(cfg.get('stc_per_year', [])), tuple(cfg.get('sbc_per_year', [])),
+                tuple(cfg.get('stc_per_year', [])),
                 cfg.get('terminal_growth'), cfg.get('terminal_margin'),
                 cfg.get('terminal_tax'), cfg.get('terminal_stc'),
-                cfg.get('terminal_wacc'), cfg.get('terminal_sbc'),
+                cfg.get('terminal_wacc'),
             )
             cfg['revenue_growth'] = growth
             cfg['op_margins'] = margins
             cfg['wacc_per_year'] = _wacc_list
             cfg['tax_per_year'] = _tax_list
             cfg['stc_per_year'] = _stc_list
-            cfg['sbc_per_year'] = _sbc_list
             cfg['terminal_growth'] = _tg
             cfg['terminal_margin'] = _tm
             cfg['terminal_tax'] = _tv_tax
             cfg['terminal_stc'] = _tv_stc
             cfg['terminal_wacc'] = _tv_wacc
-            cfg['terminal_sbc'] = _tv_sbc_pct
             _new_snapshot = (
                 tuple(growth), tuple(margins),
                 tuple(_wacc_list), tuple(_tax_list),
-                tuple(_stc_list), tuple(_sbc_list),
-                _tg, _tm, _tv_tax, _tv_stc, _tv_wacc, _tv_sbc_pct,
+                tuple(_stc_list),
+                _tg, _tm, _tv_tax, _tv_stc, _tv_wacc,
             )
             if _new_snapshot != _prev_snapshot:
                 save_config(_sb_client, ticker, cfg)

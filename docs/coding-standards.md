@@ -36,7 +36,8 @@ Claude hooks run ruff automatically on every file edit and at session end.
 ### DCF (watchlist engine)
 - The DCF engine is `dcf_calculator.py`; see `docs/dcf-methodology.md` for conventions.
 - **SBC is counted once** via GAAP operating margins — do NOT subtract a separate SBC
-  line from FCFF (Option 2, 2026-06-17). `sbc_pct` is display-only.
+  line from FCFF (Option 2, 2026-06-17). SBC was fully dropped from the DCF (engine,
+  editor, config generation) on 2026-07-03; residual `sbc_pct` in legacy configs is ignored.
 - Use GAAP margins; convert any pre-SBC margins via `margin_gaap = margin_presbc − sbc%`.
 
 ### Security

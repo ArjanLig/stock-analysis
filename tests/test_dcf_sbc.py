@@ -1,7 +1,8 @@
-"""Lock the SBC convention (Option 2, 2026-06-17): op_margins are GAAP (SBC
-already expensed in operating income), so the DCF must NOT subtract SBC again.
-sbc_pct / terminal_sbc are kept in configs for display only and must not move
-the valuation."""
+"""Lock the SBC convention (Option 2, 2026-06-17; SBC fully dropped from the
+DCF 2026-07-03): op_margins are GAAP (SBC already expensed in operating income),
+so the DCF must NOT subtract SBC again. SBC has no line in the engine or editor
+anymore; any residual sbc_pct / sbc_per_year / terminal_sbc left in a legacy
+config is ignored and must not move the valuation (backward-compat guard)."""
 from dcf_calculator import compute_intrinsic_value
 
 _BASE = {

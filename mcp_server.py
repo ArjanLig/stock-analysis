@@ -913,7 +913,7 @@ def build_dcf_config(
     Args:
         ticker: Stock ticker symbol (e.g. "MSFT")
         financial_data: Parsed financials dict with keys: years, revenue,
-            operating_income, net_income, cost_of_revenue, sbc, shares,
+            operating_income, net_income, cost_of_revenue, shares,
             current_assets, cash, st_investments, current_liabilities,
             st_debt, st_leases, net_ppe, goodwill_intang,
             tax_provision, pretax_income, lt_debt_latest, lt_leases_latest,
