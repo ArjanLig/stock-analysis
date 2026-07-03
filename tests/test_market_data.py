@@ -415,11 +415,11 @@ def test_auto_fill_dividend_inputs_non_payer_writes_zeros(monkeypatch):
 
 
 def test_auto_fill_peer_populates_empty():
-    """All peer fields auto-filled, _auto_filled lists tracked per peer."""
+    """Missing peer fields are auto-filled and tracked in _auto_filled."""
     cfg = {
         "ticker": "ABT",
         "peers": [
-            {"ticker": "AAPL", "name": "Apple", "ev_ebitda": 99.9, "pe": 33.5},
+            {"ticker": "AAPL", "name": "Apple", "pe": 33.5},  # no fwd_pe / ev_ebitda
         ],
     }
     info = make_yf_info(forwardPE=30.5, enterpriseValue=3_500_000_000_000,
@@ -434,12 +434,12 @@ def test_auto_fill_peer_populates_empty():
     assert "_fetched_at" in peer
 
 
-def test_auto_fill_peer_respects_user_set_value():
-    """User-set fwd_pe (not in _auto_filled) → preserved."""
+def test_auto_fill_peer_respects_user_set_values():
+    """User-set fwd_pe AND ev_ebitda (present, not in _auto_filled) → both preserved."""
     cfg = {
         "ticker": "ABT",
         "peers": [
-            {"ticker": "AAPL", "fwd_pe": 28.0, "ev_ebitda": 99.9},  # no _auto_filled
+            {"ticker": "AAPL", "fwd_pe": 28.0, "ev_ebitda": 15.0},  # no _auto_filled
         ],
     }
     info = make_yf_info(forwardPE=30.5, enterpriseValue=3_500_000_000_000,
@@ -448,10 +448,29 @@ def test_auto_fill_peer_respects_user_set_value():
         auto_fetch.auto_fill_peer_market_data(cfg)
 
     peer = cfg["peers"][0]
-    assert peer["fwd_pe"] == 28.0   # preserved
-    assert peer["ev_ebitda"] == pytest.approx(24.1, rel=1e-3)  # was overwritten
-    assert "ev_ebitda" in peer["_auto_filled"]
-    assert "fwd_pe" not in peer["_auto_filled"]
+    assert peer["fwd_pe"] == 28.0    # preserved
+    assert peer["ev_ebitda"] == 15.0  # preserved (forward value pinned by user)
+    assert peer["_auto_filled"] == []
+
+
+def test_auto_fill_peer_refreshes_previously_auto_filled():
+    """Values marked _auto_filled are refreshed with fresh yfinance data."""
+    cfg = {
+        "ticker": "ABT",
+        "peers": [
+            {"ticker": "AAPL", "fwd_pe": 10.0, "ev_ebitda": 99.9,
+             "_auto_filled": ["fwd_pe", "ev_ebitda"]},
+        ],
+    }
+    info = make_yf_info(forwardPE=30.5, enterpriseValue=3_500_000_000_000,
+                        trailingEbitda=145_000_000_000)
+    with patch_yfinance_info(info):
+        auto_fetch.auto_fill_peer_market_data(cfg)
+
+    peer = cfg["peers"][0]
+    assert peer["fwd_pe"] == 30.5                              # refreshed
+    assert peer["ev_ebitda"] == pytest.approx(24.1, rel=1e-3)  # refreshed
+    assert set(peer["_auto_filled"]) == {"fwd_pe", "ev_ebitda"}
 
 
 def test_auto_fill_peer_skips_invalid_entries():

@@ -1027,6 +1027,17 @@ def save_to_watchlist(ticker: str, config: dict) -> str:
         ticker: Stock ticker symbol (e.g. "MSFT")
         config: Complete DCF config dict (from build_dcf_config).
 
+    Peers (config["peers"]) drive the multiples lens — each peer is a dict with
+    "ticker", "op_margin", "rev_growth", and the two multiples the lens reads:
+      • "fwd_pe"    — forward P/E. The lens IGNORES peers without it (a bare
+        "pe" does nothing). Leave it out and it auto-fills from yfinance's
+        forward P/E on the next refresh — that's the recommended default.
+      • "ev_ebitda" — EV/EBITDA. Auto-fills from yfinance as a *trailing*
+        multiple, which can skew the peer median upward for high-growth peers.
+        To pin a *forward* value with judgement, set "ev_ebitda" AND keep that
+        key OUT of the peer's "_auto_filled" list — it then survives refreshes.
+        (Any key listed in a peer's "_auto_filled" is refreshed from yfinance.)
+
     Returns:
         Confirmation message.
     """

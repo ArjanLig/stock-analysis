@@ -70,15 +70,20 @@ def auto_fill_valuation_inputs(cfg: dict) -> None:
 
 
 def auto_fill_peer_market_data(cfg: dict) -> None:
-    """Auto-fill yfinance fwd_pe and real ev_ebitda for each peer in cfg["peers"].
+    """Auto-fill yfinance fwd_pe and ev_ebitda for each peer in cfg["peers"].
 
-    fwd_pe: user-set values (present, not in _auto_filled) are preserved.
-    ev_ebitda: ALWAYS overwritten when yfinance provides real data. This is an
-    intentional Phase-2-B limitation: the existing values come from
-    gather_data.fetch_peer_data's oi*1.3 approximation and are never marked
-    as _auto_filled, so the standard precedence rule would treat them as
-    user-set. To keep the workflow simple we always replace them with the real
-    yfinance value.
+    Both fields follow the same `_auto_filled` precedence: a value is written
+    only when it is missing, or was itself previously auto-filled (key present
+    in the peer's `_auto_filled`). A user-set value — present and NOT listed in
+    `_auto_filled` — is preserved. This lets the MCP/user pin a judgement value
+    (e.g. a forward EV/EBITDA for a high-growth peer, so yfinance's trailing
+    EV/EBITDA doesn't skew the peer median) and have it survive refreshes.
+
+    Note: yfinance's ev_ebitda is EV / trailingEbitda; to make it stick as a
+    forward value, set it and leave "ev_ebitda" OUT of that peer's
+    `_auto_filled`. Conversely, a legacy peer whose ev_ebitda is present but
+    unmarked is now treated as user-set and won't be refreshed — clear the
+    value (or add the key to `_auto_filled`) to force a re-fetch.
 
     Updates peer["_fetched_at"]. Non-dict or ticker-less peers are skipped.
     """
@@ -97,7 +102,7 @@ def auto_fill_peer_market_data(cfg: dict) -> None:
             if yfinance_value is None:
                 continue
             original_value = peer.get(key)
-            if key == "ev_ebitda" or original_value is None or key in auto_filled:
+            if original_value is None or key in auto_filled:
                 peer[key] = yfinance_value
                 if key not in auto_filled:
                     auto_filled.append(key)
