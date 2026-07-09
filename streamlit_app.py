@@ -36,7 +36,6 @@ from gather_data import (
     fetch_sector_betas,
     fetch_sector_margins,
     fetch_sector_s2c,
-    fetch_consensus_estimates,
     fetch_peer_data,
     build_config,
     SIC_TO_SECTOR,
@@ -4204,7 +4203,6 @@ def _watchlist_overview():
                     manual_peers="",
                     margin_of_safety=MARGIN_OF_SAFETY_DEFAULT,
                     terminal_growth=TERMINAL_GROWTH_DEFAULT,
-                    n_peers=6,
                 )
                 save_config(_sb_client, ticker_clean, wl_cfg)
                 st.success(f"{ticker_clean} added to watchlist")
@@ -8370,7 +8368,7 @@ def _dcf_editor(ticker):
     )
 
 
-def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_growth, n_peers):
+def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_growth):
     """Run the full DCF pipeline and return (excel_bytes, cfg, credit_rating)."""
 
     buf = io.StringIO()
@@ -8475,8 +8473,6 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
                                 best_m = (sec_name, sec_margin)
                         if best_m and best_s > 0:
                             sector_margin = best_m[1]
-
-            consensus = fetch_consensus_estimates(ticker)
         pos = _flush_clean(buf, pos, status)
         status.write(f"\u2705 Credit: {credit_rating} (spread {credit_spread:.2%})")
 
@@ -8518,7 +8514,6 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
                 margin_of_safety=margin_of_safety,
                 terminal_growth=terminal_growth,
                 sector_margin=sector_margin,
-                consensus=consensus,
             )
         pos = _flush_clean(buf, pos, status)
 

@@ -81,7 +81,7 @@ Quick summary:
 
 ## Updating
 
-When `mcp_server.py` or its dependencies (`auto_fetch.py`, `valuation_lenses.py`,
+When `mcp_server.py` or its dependencies (`valuation_lenses.py`, `gather_data.py`,
 etc.) change, redeploy via `gcloud run deploy ...`. The Cloud Run image
 will pick up the latest version.
 

@@ -1579,69 +1579,6 @@ def fetch_sector_s2c():
         return {}
 
 
-def fetch_consensus_estimates(ticker):
-    """Fetch analyst consensus revenue estimates from Yahoo Finance via yfinance.
-
-    Returns dict with:
-      - 'rev_est_current_year': revenue estimate for current fiscal year ($M)
-      - 'rev_est_next_year': revenue estimate for next fiscal year ($M)
-      - 'growth_current_year': implied YoY revenue growth (decimal)
-      - 'growth_next_year': implied YoY revenue growth (decimal)
-      - 'n_analysts': number of analysts covering
-    Returns empty dict if unavailable.
-    """
-    print(f"[Yahoo] Fetching analyst consensus for {ticker}...")
-
-    try:
-        import yfinance as yf
-        t = yf.Ticker(ticker)
-        rev_est = t.revenue_estimate
-
-        if rev_est is None or rev_est.empty:
-            print("  No consensus estimates available")
-            return {}
-
-        result = {}
-
-        # revenue_estimate has columns: avg, low, high, numberOfAnalysts, yearAgoRevenue, growth
-        # Index is period labels like '0y', '+1y' (or date strings)
-        periods = list(rev_est.index)
-
-        for i, period in enumerate(periods):
-            row = rev_est.loc[period]
-            avg_rev = row.get("avg", 0)
-            growth = row.get("growth", 0)
-            n_analysts = row.get("numberOfAnalysts", 0)
-
-            if avg_rev and avg_rev > 0:
-                rev_m = round(avg_rev / 1e6, 0)  # Convert to millions
-                if i == 0:
-                    result["rev_est_current_year"] = rev_m
-                    result["growth_current_year"] = round(float(growth), 4) if growth else 0
-                    result["n_analysts"] = int(n_analysts) if n_analysts else 0
-                elif i == 1:
-                    result["rev_est_next_year"] = rev_m
-                    result["growth_next_year"] = round(float(growth), 4) if growth else 0
-
-        if result:
-            if "rev_est_current_year" in result:
-                print(f"  Current year: ${result['rev_est_current_year']:,.0f}M (growth: {result.get('growth_current_year', 0):.1%})")
-            if "rev_est_next_year" in result:
-                print(f"  Next year:    ${result['rev_est_next_year']:,.0f}M (growth: {result.get('growth_next_year', 0):.1%})")
-            print(f"  Analysts: {result.get('n_analysts', '?')}")
-        else:
-            print("  No usable estimates found")
-
-        return result
-
-    except ImportError:
-        print("  yfinance not installed, skipping consensus estimates")
-        return {}
-    except Exception as e:
-        print(f"  WARNING: Consensus fetch failed: {e}")
-        return {}
-
-
 def _yf_ebitda(info: dict) -> float | None:
     """Resolve EBITDA from yfinance info, preferring trailingEbitda but
     falling back to ebitda. Yfinance is inconsistent: large caps often
@@ -2063,75 +2000,6 @@ def _interpolate_quarterly_to_monthly(qbs_df, row_name, months_dt):
     return _interpolate_yearly_to_monthly(qbs_df, row_name, months_dt)
 
 
-# ── Peer Discovery Module ─────────────────────────────────────────────
-
-def _fetch_exchange_tickers():
-    """Fetch CIK → ticker mapping from SEC company_tickers_exchange.json."""
-    url = "https://www.sec.gov/files/company_tickers_exchange.json"
-    data = _http_get_json(url, EDGAR_HEADERS)
-    # fields: [cik, name, ticker, exchange]
-    cik_to_info = {}
-    for row in data.get("data", []):
-        cik, name, ticker, exchange = row[0], row[1], row[2], row[3]
-        cik_to_info[str(cik).zfill(10)] = {
-            "name": name,
-            "ticker": ticker,
-            "exchange": exchange,
-        }
-    return cik_to_info
-
-
-def _fetch_sic_companies(sic_code, max_companies=200):
-    """Fetch list of companies with a given SIC code from EDGAR browse endpoint."""
-    companies = []
-    start = 0
-    count = 100
-
-    while start < max_companies:
-        url = (
-            f"https://www.sec.gov/cgi-bin/browse-edgar"
-            f"?action=getcompany&SIC={sic_code}&owner=include"
-            f"&count={count}&start={start}&output=atom"
-        )
-        try:
-            data = _http_get(url, EDGAR_HEADERS)
-            text = data.decode("utf-8", errors="replace")
-
-            # Parse Atom XML — extract CIK and company name
-            ns = "http://www.w3.org/2005/Atom"
-            entries = re.findall(
-                rf"<entry[^>]*>.*?</entry>", text, re.DOTALL
-            )
-            if not entries:
-                break
-
-            for entry_xml in entries:
-                cik_match = re.search(rf"<{{?{ns}}}?cik>(.*?)</", entry_xml)
-                name_match = re.search(rf"<{{?{ns}}}?name>(.*?)</", entry_xml)
-                if not cik_match:
-                    # Try without namespace
-                    cik_match = re.search(r"<cik[^>]*>(.*?)</cik>", entry_xml)
-                    name_match = re.search(r"<name[^>]*>(.*?)</name>", entry_xml)
-
-                if cik_match:
-                    companies.append({
-                        "cik": cik_match.group(1).strip(),
-                        "name": name_match.group(1).strip() if name_match else "",
-                    })
-
-            if len(entries) < count:
-                break  # No more pages
-
-            start += count
-            time.sleep(0.3)
-
-        except Exception as e:
-            print(f"  WARNING: SIC company fetch failed at offset {start}: {e}")
-            break
-
-    return companies
-
-
 # ── Peer Data Module ──────────────────────────────────────────────────
 
 def fetch_peer_data(peer_tickers):
@@ -2245,12 +2113,9 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
                  valuation_basis="nominal", nominal_risk_free_rate=None):
     """Assemble all gathered data into the exact config dict for build_dcf_model().
 
-    Uses 5 smart assumption methods:
-      1. Margin trend extrapolation (historical trajectory before converging)
-      2. Sector median margin from Damodaran as terminal anchor
-      3. Exponential growth decay (not linear)
-      4. Size-adjusted growth ceiling (large-cap penalty)
-      5. Consensus estimates for year 1-2 (if available from yfinance)
+    Emits flat, neutral placeholder projections — revenue_growth flat at
+    terminal growth, op_margins flat at the last actual margin — which are
+    refined afterward via the MCP rather than auto-derived here.
     """
 
     print("\n[Config] Building configuration...")
@@ -2285,7 +2150,6 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
             print(f"  [Shares] Estimated from EntityPublicFloat: {shares:,.0f}M shares")
 
     term_growth = terminal_growth or TERMINAL_GROWTH_DEFAULT
-    consensus = consensus or {}
 
     # ── Real (TIPS) valuation mode ──
     breakeven_inflation = None
@@ -3410,9 +3274,6 @@ Examples:
                     sector_margin = best_match[1]
                     print(f"  Sector margin match: '{best_match[0]}' → {sector_margin:.1%}")
 
-    # ── Step 5c: Consensus estimates ──
-    consensus = fetch_consensus_estimates(ticker)
-
     # ── Step 6: Peer data ──
     # Peer auto-selection removed — only explicit --peers "A,B,C" is honoured.
     peer_tickers = []
@@ -3437,7 +3298,6 @@ Examples:
         margin_of_safety=args.margin_of_safety,
         terminal_growth=args.terminal_growth,
         sector_margin=sector_margin,
-        consensus=consensus,
     )
 
     # ── Step 8: Write config file ──

@@ -97,32 +97,6 @@ def _resolve_sector_betas(sic_code, sic_description=""):
     return [("Market", 1.0, 1.0)]
 
 
-def _resolve_sector_margin(sector_betas):
-    """Fetch sector median margin from Damodaran, matching on sector name."""
-    sector_name = sector_betas[0][0] if sector_betas else ""
-    if not sector_name:
-        return None
-
-    dam_margins = gather_data.fetch_sector_margins()
-    if not dam_margins:
-        return None
-
-    if sector_name in dam_margins:
-        return dam_margins[sector_name]
-
-    target_words = set(sector_name.lower().replace("/", " ").split())
-    best_match, best_score = None, 0
-    for sec_name, sec_margin in dam_margins.items():
-        sec_words = set(sec_name.lower().replace("/", " ").split())
-        overlap = len(target_words & sec_words)
-        if overlap > best_score:
-            best_score = overlap
-            best_match = (sec_name, sec_margin)
-    if best_match and best_score > 0:
-        return best_match[1]
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Tool implementations (testable without MCP decorator)
 # ---------------------------------------------------------------------------
@@ -160,9 +134,6 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
 
     sector_betas = _resolve_sector_betas(sic_code, sic_description)
 
-    if sector_margin is None:
-        sector_margin = _resolve_sector_margin(sector_betas)
-
     # Peer auto-selection removed — peers are authored via the MCP.
     peers = []
 
@@ -180,7 +151,6 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
         company_name=company_name,
         margin_of_safety=margin_of_safety,
         terminal_growth=terminal_growth,
-        sector_margin=sector_margin,
         consensus=consensus,
         valuation_basis=valuation_basis,
         nominal_risk_free_rate=nominal_risk_free_rate,
