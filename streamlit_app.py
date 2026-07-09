@@ -162,6 +162,34 @@ def _fmt_fv_dollar(x: float) -> str:
     return f"${x:.2f}"
 
 
+def _latest_fcf_yield(fund: dict, equity_market_value: float | None,
+                      live_price: float | None) -> float | None:
+    """Trailing FCF yield from the most recent year that reports FCF.
+
+    Per-share when that same year also reports a share count: compacting the
+    fcf and shares lists separately and taking [-1] of each pairs a year's FCF
+    with whatever year last reported shares, which silently mixes fiscal years.
+    Otherwise falls back to FCF / equity market value — some filers (V) never
+    tag a share count in XBRL at all.
+
+    Returns None when there is no FCF, or no way to scale it.
+    """
+    fcf = fund.get("fcf") or []
+    shares = fund.get("shares") or []
+
+    latest = next((i for i in range(len(fcf) - 1, -1, -1) if fcf[i] is not None), None)
+    if latest is None:
+        return None
+
+    shares_same_year = shares[latest] if latest < len(shares) else None
+    if live_price and live_price > 0 and shares_same_year:
+        return (fcf[latest] * 1e6 / shares_same_year) / live_price
+
+    if equity_market_value and equity_market_value > 0:
+        return fcf[latest] / equity_market_value  # both in $M
+    return None
+
+
 def _render_fv_cell(price: float, summary: dict | None,
                     legacy_intrinsic: float | None, theme: dict) -> str:
     """Return HTML for the Fair Value cell.
@@ -4296,24 +4324,26 @@ def _watchlist_overview():
 
     @st.cache_data(ttl=86400, show_spinner=False)
     def _cached_fundamentals(t):
-        try:
-            # 10 years so the watchlist can show a meaningful Avg ROCE
-            return fetch_fundamentals(t, n_years=10)
-        except Exception as e:
-            logger.debug("Fundamentals fetch failed for %s: %s", t, e)
-            return {}
+        # 10 years so the watchlist can show a meaningful Avg ROCE.
+        # Exceptions deliberately propagate: st.cache_data never caches a
+        # raised exception, so a transient SEC outage retries on the next
+        # rerun. Swallowing it here would cache an empty result for 24h and
+        # blank the ticker's FCF Yield for a full day.
+        return fetch_fundamentals(t, n_years=10)
 
     # Pre-fetch fundamentals in parallel (cached 24h, only slow on first load)
     from concurrent.futures import ThreadPoolExecutor
     _fund_map = {}
+    _fund_unavailable = set()
     with ThreadPoolExecutor(max_workers=6) as _fund_exec:
         _fund_futures = {t: _fund_exec.submit(_cached_fundamentals, t) for t in wl_tickers}
     for t, f in _fund_futures.items():
         try:
-            _fund_map[t] = f.result(timeout=10)
+            _fund_map[t] = f.result()
         except Exception as e:
-            logger.debug("Fundamentals parallel fetch failed for %s: %s", t, e)
+            logger.warning("Fundamentals fetch failed for %s: %s", t, e)
             _fund_map[t] = {}
+            _fund_unavailable.add(t)
 
     rows = []
     for t, cfg_wl in _wl_configs.items():
@@ -4341,7 +4371,6 @@ def _watchlist_overview():
             eps = ni[-1] / sh if ni and sh else 0
             pe = live_price / eps if eps > 0 else None
             # FCF Yield — from fundamentals (cached 24h)
-            fcf_yield_val = None
             _fund = _fund_map.get(t, {})
             # Apply per-year overrides silently so the watchlist row
             # reflects corrected values for tickers with broken EDGAR
@@ -4349,16 +4378,8 @@ def _watchlist_overview():
             _fund_overrides = cfg_wl.get('fundamentals_overrides') or {}
             if _fund_overrides and _fund:
                 _fund = apply_fundamentals_overrides(_fund, _fund_overrides)
-            _fcf_vals = [v for v in _fund.get('fcf', []) if v is not None]
-            _sh_vals = [v for v in _fund.get('shares', []) if v and v > 0]
-            if _fcf_vals and _sh_vals and live_price > 0:
-                fcf_yield_val = (_fcf_vals[-1] * 1e6 / _sh_vals[-1]) / live_price
-            elif _fcf_vals:
-                # Fallback: FCF / Market Cap (for tickers like V without
-                # XBRL share counts)
-                _mc = cfg_wl.get('equity_market_value', 0) or 0  # in $M
-                if _mc > 0:
-                    fcf_yield_val = _fcf_vals[-1] / _mc
+            fcf_yield_val = _latest_fcf_yield(
+                _fund, cfg_wl.get('equity_market_value'), live_price)
             # Avg ROCE (EBIT/(TA−CL)) with float ROE-fallback + manual override
             # — shared single source of truth (scorecard_utils.compute_roce_metric).
             roce_metric, roce_avg = compute_roce_metric(_fund, cfg_wl)
@@ -4387,6 +4408,7 @@ def _watchlist_overview():
             'cap_phase': _rob_roce.get('phase'),
             'cap_basis': _rob_roce.get('basis'),
             'fcf_yield': fcf_yield_val,
+            'fcf_unavailable': t in _fund_unavailable,
             'valuation_summary': cfg_wl.get('valuation_summary'),
         })
 
@@ -4522,7 +4544,17 @@ def _watchlist_overview():
             f'<div style="text-align:center;white-space:nowrap">{_cap_cell_md(row)}</div>',
             unsafe_allow_html=True,
         )
-        cols[8].markdown(f"{row['fcf_yield']:.1%}" if row['fcf_yield'] else "—")
+        if row['fcf_yield'] is not None:
+            cols[8].markdown(f"{row['fcf_yield']:.1%}")
+        elif row['fcf_unavailable']:
+            # SEC fetch failed — say so rather than implying the filer has no FCF
+            cols[8].markdown(
+                f'<span title="SEC EDGAR unavailable — retries on next refresh" '
+                f'style="color:{T["text_muted"]}">⚠</span>',
+                unsafe_allow_html=True,
+            )
+        else:
+            cols[8].markdown("—")
         _earn = _earnings_map.get(t)
         if _earn and _earn.get('date'):
             _days_to_earn = (_earn['date'] - date.today()).days

@@ -22,10 +22,13 @@ import os
 import re
 import ssl
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +44,11 @@ except (ImportError, Exception):
 # ── Constants ──────────────────────────────────────────────────────────
 
 EDGAR_BASE = "https://data.sec.gov"
+# SEC requires a real contact address in the User-Agent; requests carrying an
+# obvious placeholder get throttled or refused. Override per deployment.
 EDGAR_HEADERS = {
-    "User-Agent": "StockAnalysis/1.0 (research@example.com)",
+    "User-Agent": os.environ.get("SEC_USER_AGENT",
+                                 "LazyTheta/1.0 (contact@lazytheta.io)"),
     "Accept": "application/json",
 }
 YAHOO_HEADERS = {
@@ -170,19 +176,77 @@ SIC_TO_SECTOR = {
 
 # ── HTTP Helpers ───────────────────────────────────────────────────────
 
-def _http_get(url, headers=None, retries=3, delay=0.5):
-    """Make an HTTP GET request with retries. Returns bytes."""
+
+class EdgarFetchError(RuntimeError):
+    """EDGAR data could not be retrieved (network/HTTP failure).
+
+    Distinct from a filer simply not tagging a value: an empty result is a
+    fact about the filing, an EdgarFetchError is a fact about our request.
+    Callers must not cache the latter as if it were data.
+    """
+
+
+# SEC rate limit is 10 requests/second across all clients sharing an IP.
+# Serialise every sec.gov call through one gate so that a ThreadPoolExecutor
+# fanning out over a watchlist cannot burst past it.
+_SEC_MIN_INTERVAL = 0.12  # ≈8 req/s, leaves headroom
+_sec_gate = threading.Lock()
+_sec_last_request = 0.0
+
+# HTTP statuses worth retrying: throttling and transient server faults.
+# 404 and friends are answers, not failures — fail fast on those.
+_RETRY_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
+
+
+def _sec_throttle():
+    """Block until at least _SEC_MIN_INTERVAL has passed since the last call."""
+    global _sec_last_request
+    with _sec_gate:
+        wait = _SEC_MIN_INTERVAL - (time.monotonic() - _sec_last_request)
+        if wait > 0:
+            time.sleep(wait)
+        _sec_last_request = time.monotonic()
+
+
+def _http_get(url, headers=None, retries=4, delay=1.0):
+    """Make an HTTP GET request with retries. Returns bytes.
+
+    sec.gov requests are rate-limited process-wide. Retries use exponential
+    backoff and honour a Retry-After header when the server sends one.
+    """
     hdrs = headers or {}
+    is_sec = ".sec.gov" in urllib.parse.urlsplit(url).netloc
+    last_exc = None
     for attempt in range(retries):
+        if is_sec:
+            _sec_throttle()
         try:
             req = urllib.request.Request(url, headers=hdrs)
             with urllib.request.urlopen(req, timeout=30, context=_ssl_ctx) as resp:
                 return resp.read()
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+        except urllib.error.HTTPError as e:
+            last_exc = e
+            if e.code not in _RETRY_STATUSES or attempt == retries - 1:
+                raise
+            backoff = delay * (2 ** attempt)
+            retry_after = e.headers.get("Retry-After") if e.headers else None
+            if retry_after:
+                try:
+                    backoff = max(backoff, float(retry_after))
+                except ValueError:
+                    pass
+            logger.warning("HTTP %s from %s — retry %s/%s in %.1fs",
+                           e.code, url, attempt + 1, retries, backoff)
+            time.sleep(backoff)
+        except (urllib.error.URLError, TimeoutError) as e:
+            last_exc = e
             if attempt == retries - 1:
                 raise
-            print(f"  Retry {attempt + 1}/{retries} for {url}: {e}")
-            time.sleep(delay * (attempt + 1))
+            backoff = delay * (2 ** attempt)
+            logger.warning("%s from %s — retry %s/%s in %.1fs",
+                           e, url, attempt + 1, retries, backoff)
+            time.sleep(backoff)
+    raise last_exc  # unreachable; keeps static analysers happy
 
 
 def _http_get_json(url, headers=None):
@@ -193,18 +257,43 @@ def _http_get_json(url, headers=None):
 
 # ── SEC EDGAR Module ──────────────────────────────────────────────────
 
+_ticker_map_lock = threading.Lock()
+
+
+@lru_cache(maxsize=1)
+def _sec_ticker_map_cached():
+    url = "https://www.sec.gov/files/company_tickers.json"
+    print("[EDGAR] Loading SEC ticker index...")
+    data = _http_get_json(url, EDGAR_HEADERS)
+    return {
+        entry["ticker"].upper(): (entry["cik_str"], entry.get("title", ""))
+        for entry in data.values()
+        if entry.get("ticker")
+    }
+
+
+def _sec_ticker_map():
+    """Ticker → (cik, company name), from SEC's company_tickers.json.
+
+    Cached for the process lifetime: the file is ~1.1 MB and previously got
+    re-downloaded once per get_cik() call, which meant one request per ticker
+    on top of each companyfacts fetch. A failed call raises and is not cached.
+
+    The lock serialises the cold path — lru_cache alone lets every thread in a
+    concurrent fan-out miss and download simultaneously.
+    """
+    with _ticker_map_lock:
+        return _sec_ticker_map_cached()
+
+
 def get_cik(ticker):
     """Look up CIK number from ticker using SEC's company_tickers.json."""
-    print(f"[EDGAR] Looking up CIK for {ticker}...")
-    url = "https://www.sec.gov/files/company_tickers.json"
-    data = _http_get_json(url, EDGAR_HEADERS)
-    ticker_upper = ticker.upper()
-    for entry in data.values():
-        if entry.get("ticker", "").upper() == ticker_upper:
-            cik = entry["cik_str"]
-            print(f"  CIK: {cik} ({entry.get('title', '')})")
-            return cik
-    raise ValueError(f"Ticker '{ticker}' not found in SEC database")
+    hit = _sec_ticker_map().get(ticker.upper())
+    if hit is None:
+        raise ValueError(f"Ticker '{ticker}' not found in SEC database")
+    cik, title = hit
+    print(f"[EDGAR] {ticker}: CIK {cik} ({title})")
+    return cik
 
 
 def fetch_company_submissions(cik):
@@ -3087,10 +3176,31 @@ def fetch_fundamentals(ticker, n_years=10):
             return None
 
     # ── EDGAR XBRL ──────────────────────────────────────────────────
+    # The two network calls sit outside the parse try/except on purpose: a
+    # transport failure must reach the caller as an EdgarFetchError, not be
+    # flattened into an empty-but-valid result that looks like "this filer
+    # reports nothing". Callers cache results; they must not cache outages.
     facts = None
     try:
         cik = get_cik(ticker)
-        facts = fetch_company_facts(cik)
+    except ValueError:
+        # Not in SEC's index (foreign listing, delisted). Genuinely no data.
+        logger.info("No SEC CIK for %s — skipping EDGAR", ticker)
+        cik = None
+    except (urllib.error.HTTPError, urllib.error.URLError,
+            TimeoutError, json.JSONDecodeError) as e:
+        raise EdgarFetchError(f"SEC ticker index unavailable ({ticker}): {e}") from e
+
+    if cik is not None:
+        try:
+            facts = fetch_company_facts(cik)
+        except (urllib.error.HTTPError, urllib.error.URLError,
+                TimeoutError, json.JSONDecodeError) as e:
+            raise EdgarFetchError(f"EDGAR companyfacts unavailable ({ticker}): {e}") from e
+
+    try:
+        if facts is None:
+            raise ValueError(f"no EDGAR facts available for {ticker}")
         edgar = parse_financials(facts, n_years, ticker=ticker)
 
         edgar_years = edgar.get("years", [])
@@ -3128,10 +3238,18 @@ def fetch_fundamentals(ticker, n_years=10):
             "total_equity": ["StockholdersEquity",
                              "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
             "total_debt": ["LongTermDebt", "LongTermDebtAndCapitalLeaseObligations"],
+            # Continuing-operations variant last: some filers (DIS) tag only
+            # that one, but where both exist the all-in figure is preferred.
             "cfo": ["NetCashProvidedByOperatingActivities",
-                    "NetCashProvidedByUsedInOperatingActivities"],
+                    "NetCashProvidedByUsedInOperatingActivities",
+                    "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
+            # Broadest tags first — _try_tags prefers the tag with the most
+            # recent year and ties go to the earlier entry, so a filer that
+            # reports both the total and the "Other" subset (LLY tags only
+            # the latter in its 10-Ks) still gets the total when available.
             "capex": ["PaymentsToAcquirePropertyPlantAndEquipment",
-                      "PaymentsToAcquireProductiveAssets"],
+                      "PaymentsToAcquireProductiveAssets",
+                      "PaymentsToAcquireOtherPropertyPlantAndEquipment"],
             "total_assets": ["Assets"],
             "current_liabilities": ["LiabilitiesCurrent"],
             "goodwill": ["Goodwill"],
@@ -3315,6 +3433,7 @@ def fetch_fundamentals(ticker, n_years=10):
 
     except Exception as e:
         print(f"[EDGAR] Warning: {e}")
+        logger.warning("EDGAR parse failed for %s: %s", ticker, e)
 
     # ── IFRS fallback: foreign private issuers (Form 20-F) report under
     #    ifrs-full with USD convenience translation. Fill anything still

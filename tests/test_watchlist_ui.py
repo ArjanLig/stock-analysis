@@ -2,7 +2,7 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-import pytest  # noqa: F401
+import pytest
 
 import streamlit_app
 
@@ -396,3 +396,60 @@ def test_render_football_field_handles_no_summary():
     """Empty/None summary → returns a placeholder (no crash)."""
     assert streamlit_app._render_football_field(None, theme=_theme_stub()) != ""
     assert streamlit_app._render_football_field({}, theme=_theme_stub()) != ""
+
+
+# ── FCF Yield cell ─────────────────────────────────────────────────────────
+# Regression guard: the watchlist blanked FCF Yield for tickers that had data,
+# because a failed SEC fetch was cached as an empty result for 24h. These pin
+# the arithmetic; tests/test_edgar_fetch_resilience.py pins the fetch layer.
+
+def test_fcf_yield_per_share_uses_price():
+    fund = {"fcf": [1000.0, 2000.0], "shares": [100_000_000, 200_000_000]}
+    # 2000 $M / 200M shares = $10/share; at $250 → 4%
+    assert streamlit_app._latest_fcf_yield(fund, None, 250.0) == pytest.approx(0.04)
+
+
+def test_fcf_yield_pairs_fcf_and_shares_from_the_same_year():
+    """The latest year reports FCF but no share count. Reaching back for an
+    older year's share count would divide FY2 FCF by FY1 shares."""
+    fund = {"fcf": [1000.0, 2000.0], "shares": [100_000_000, None]}
+    # Must not return (2000e6/100e6)/250 = 8%. Falls back to FCF / market cap.
+    assert streamlit_app._latest_fcf_yield(fund, 50_000.0, 250.0) == pytest.approx(0.04)
+
+
+def test_fcf_yield_falls_back_to_market_cap_without_shares():
+    """Visa never tags a share count in XBRL."""
+    fund = {"fcf": [21_577.0], "shares": []}
+    assert streamlit_app._latest_fcf_yield(fund, 595_014.0, 320.5) == pytest.approx(0.0363, abs=1e-4)
+
+
+def test_fcf_yield_falls_back_to_market_cap_when_price_missing():
+    fund = {"fcf": [1000.0], "shares": [100_000_000]}
+    assert streamlit_app._latest_fcf_yield(fund, 25_000.0, 0.0) == pytest.approx(0.04)
+
+
+def test_fcf_yield_skips_trailing_none_fcf_years():
+    fund = {"fcf": [1000.0, None], "shares": [100_000_000, 100_000_000]}
+    assert streamlit_app._latest_fcf_yield(fund, None, 100.0) == pytest.approx(0.10)
+
+
+def test_fcf_yield_none_when_no_fcf_at_all():
+    assert streamlit_app._latest_fcf_yield({"fcf": [], "shares": []}, 1000.0, 50.0) is None
+    assert streamlit_app._latest_fcf_yield({"fcf": [None]}, 1000.0, 50.0) is None
+
+
+def test_fcf_yield_none_when_nothing_to_scale_by():
+    fund = {"fcf": [1000.0], "shares": [None]}
+    assert streamlit_app._latest_fcf_yield(fund, None, 100.0) is None
+    assert streamlit_app._latest_fcf_yield(fund, 0, 0) is None
+
+
+def test_fcf_yield_empty_fundamentals_from_failed_fetch():
+    """A failed EDGAR fetch yields {} — must be None, and the caller renders a
+    warning glyph rather than "—", which would claim the filer has no FCF."""
+    assert streamlit_app._latest_fcf_yield({}, 500_000.0, 100.0) is None
+
+
+def test_fcf_yield_negative_fcf_is_reported_not_swallowed():
+    fund = {"fcf": [-500.0], "shares": [100_000_000]}
+    assert streamlit_app._latest_fcf_yield(fund, None, 100.0) == pytest.approx(-0.05)
