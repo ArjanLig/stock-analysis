@@ -6,7 +6,6 @@ Fetches financial data from SEC EDGAR, Treasury.gov,
 and Damodaran's website to build a complete DCF config file.
 
 Usage:
-    python3 gather_data.py PANW --auto-peers
     python3 gather_data.py PANW --peers "CRWD,FTNT,ZS,S,OKTA,NET"
     python3 gather_data.py PANW --sectors "Software (System & Application):1.23:0.7,Computer Services:0.92:0.3" --peers auto
     python3 gather_data.py PANW --margin-of-safety 0.20
@@ -17,7 +16,6 @@ No API keys required. Uses only public endpoints.
 import argparse
 import json
 import logging
-import math
 import os
 import re
 import ssl
@@ -2134,117 +2132,6 @@ def _fetch_sic_companies(sic_code, max_companies=200):
     return companies
 
 
-def find_peers(sic_code, target_ticker, target_market_cap, n_peers=6):
-    """Auto-discover peer companies based on SIC code and market cap similarity.
-
-    1. Fetches all companies with the same SIC code from EDGAR
-    2. Cross-references with exchange tickers to get ticker symbols
-    3. Gets stock prices to estimate market caps
-    4. Selects peers closest in market cap to the target
-    """
-    print(f"\n[Peers] Auto-discovering peers (SIC {sic_code})...")
-
-    # Step 1: Get companies with same SIC
-    sic_companies = _fetch_sic_companies(sic_code)
-    print(f"  Found {len(sic_companies)} companies with SIC {sic_code}")
-
-    if not sic_companies:
-        print("  No companies found, cannot auto-select peers")
-        return []
-
-    # Step 2: Cross-reference with exchange tickers
-    print("  Cross-referencing with exchange-listed tickers...")
-    exchange_data = _fetch_exchange_tickers()
-
-    candidates = []
-    for comp in sic_companies:
-        cik_padded = comp["cik"].zfill(10)
-        if cik_padded in exchange_data:
-            info = exchange_data[cik_padded]
-            ticker = info["ticker"]
-            if ticker.upper() == target_ticker.upper():
-                continue  # Skip the target company itself
-            # Only include major US exchanges
-            if info["exchange"] in ("NYSE", "Nasdaq"):
-                candidates.append({
-                    "cik": comp["cik"],
-                    "ticker": ticker,
-                    "name": info["name"],
-                    "exchange": info["exchange"],
-                })
-
-    print(f"  {len(candidates)} exchange-listed candidates (excl. {target_ticker})")
-
-    if not candidates:
-        print("  No exchange-listed peers found")
-        return []
-
-    # Step 3: Get market caps for candidates (batch stock price lookups)
-    # Limit to a reasonable number to avoid too many API calls
-    sample_size = min(len(candidates), 30)
-    candidates = candidates[:sample_size]
-
-    print(f"  Fetching market data for {len(candidates)} candidates...")
-    scored = []
-    for cand in candidates:
-        try:
-            price, _, _ = fetch_stock_price(cand["ticker"])
-            if price <= 0:
-                continue
-
-            # Get shares from EDGAR company facts
-            time.sleep(0.2)  # SEC rate limit: 10 req/sec
-            cik_padded = cand["cik"].zfill(10)
-            try:
-                facts_url = f"{EDGAR_BASE}/api/xbrl/companyfacts/CIK{cik_padded}.json"
-                facts_data = _http_get_json(facts_url, EDGAR_HEADERS)
-                shares_tag = _try_tags(facts_data, [
-                    "WeightedAverageNumberOfDilutedSharesOutstanding",
-                    "CommonStockSharesOutstanding",
-                ], n_years=2, unit_key="shares")
-                if shares_tag:
-                    shares = shares_tag[-1][1] / 1e6  # to millions
-                    mkt_cap = price * shares
-                else:
-                    continue
-            except Exception:
-                continue
-
-            if mkt_cap < 500:  # Skip micro-caps (< $500M)
-                continue
-
-            # Score by market cap proximity (log scale)
-            if target_market_cap > 0 and mkt_cap > 0:
-                log_ratio = abs(math.log10(mkt_cap / target_market_cap))
-            else:
-                log_ratio = 10  # Large penalty
-
-            scored.append({
-                "ticker": cand["ticker"],
-                "name": cand["name"],
-                "market_cap": mkt_cap,
-                "log_distance": log_ratio,
-            })
-            print(f"    {cand['ticker']:6s}  ${mkt_cap:>10,.0f}M  (log dist: {log_ratio:.2f})")
-
-        except Exception:
-            continue
-
-    if not scored:
-        print("  Could not determine market caps for any candidates")
-        return []
-
-    # Step 4: Sort by market cap proximity, take top N
-    scored.sort(key=lambda x: x["log_distance"])
-    selected = scored[:n_peers]
-
-    print(f"\n  Selected {len(selected)} peers (closest by market cap):")
-    for s in selected:
-        print(f"    {s['ticker']:6s}  ${s['market_cap']:>10,.0f}M")
-
-    return [s["ticker"] for s in selected]
-
-
 # ── Peer Data Module ──────────────────────────────────────────────────
 
 def fetch_peer_data(peer_tickers):
@@ -3378,7 +3265,6 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 gather_data.py PANW --auto-peers
   python3 gather_data.py PANW --peers "CRWD,FTNT,ZS,S"
   python3 gather_data.py PANW --sectors "Software (System & Application):1.23:1.0" --peers auto
   python3 gather_data.py MSFT --peers "AAPL,GOOGL,AMZN,META" --margin-of-safety 0.25
@@ -3392,17 +3278,6 @@ Examples:
     parser.add_argument(
         "--peers",
         help='Comma-separated peer tickers (e.g., "CRWD,FTNT,ZS,S"). Use "auto" for auto-discovery.',
-    )
-    parser.add_argument(
-        "--auto-peers",
-        action="store_true",
-        help="Auto-discover peers from SIC code (same as --peers auto)",
-    )
-    parser.add_argument(
-        "--n-peers",
-        type=int,
-        default=6,
-        help="Number of peers to auto-select (default: 6)",
     )
     parser.add_argument(
         "--margin-of-safety",
@@ -3539,18 +3414,9 @@ Examples:
     consensus = fetch_consensus_estimates(ticker)
 
     # ── Step 6: Peer data ──
+    # Peer auto-selection removed — only explicit --peers "A,B,C" is honoured.
     peer_tickers = []
-    auto_peers = args.auto_peers or (args.peers and args.peers.strip().lower() == "auto")
-
-    if auto_peers:
-        # Auto-discover peers from SIC code + market cap similarity
-        peer_tickers = find_peers(
-            sic_code=sic_code,
-            target_ticker=ticker,
-            target_market_cap=market_cap,
-            n_peers=args.n_peers,
-        )
-    elif args.peers and args.peers.strip().lower() != "auto":
+    if args.peers and args.peers.strip().lower() != "auto":
         peer_tickers = [t.strip().upper() for t in args.peers.split(",") if t.strip()]
 
     peers = fetch_peer_data(peer_tickers)

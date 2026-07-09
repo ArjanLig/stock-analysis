@@ -164,17 +164,8 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
     if sector_margin is None:
         sector_margin = _resolve_sector_margin(sector_betas)
 
+    # Peer auto-selection removed — peers are authored via the MCP.
     peers = []
-    if sic_code and market_cap > 0:
-        try:
-            peer_tickers = gather_data.find_peers(
-                sic_code=int(sic_code),
-                target_ticker=ticker,
-                target_market_cap=market_cap,
-            )
-            peers = gather_data.fetch_peer_data(peer_tickers)
-        except Exception as e:
-            logger.warning("Peer lookup failed: %s", e)
 
     cfg = gather_data.build_config(
         ticker=ticker,

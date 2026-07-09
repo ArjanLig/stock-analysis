@@ -37,7 +37,6 @@ from gather_data import (
     fetch_sector_margins,
     fetch_sector_s2c,
     fetch_consensus_estimates,
-    find_peers,
     fetch_peer_data,
     build_config,
     SIC_TO_SECTOR,
@@ -8501,17 +8500,8 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
         peers = []
         peer_tickers = []
         if peer_mode == "Auto-discover":
-            status.write(f"\u23f3 Auto-discovering {n_peers} comparable companies...")
-            with contextlib.redirect_stdout(buf):
-                peer_tickers = find_peers(
-                    sic_code=sic_code,
-                    target_ticker=ticker,
-                    target_market_cap=market_cap,
-                    n_peers=n_peers,
-                )
-            pos = _flush_clean(buf, pos, status)
-            if peer_tickers:
-                status.write(f"\u2705 Found peers: {', '.join(peer_tickers)}")
+            # Peer auto-selection removed \u2014 no peers on a fresh analysis.
+            pass
         elif peer_mode == "Manual" and manual_peers:
             peer_tickers = [t.strip().upper() for t in manual_peers.split(",") if t.strip()]
 
