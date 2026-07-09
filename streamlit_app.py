@@ -653,16 +653,6 @@ def calculate_multi_lens_valuation_remote(cfg: dict) -> dict:
     return valuation_lenses.calculate_multi_lens_valuation(cfg, scenario_grid=False)
 
 
-# Auto-fill helpers live in auto_fetch (shared with mcp_server). Re-exported
-# under their underscore-prefixed names so existing call sites in this file
-# (and tests that monkey-patch streamlit_app._auto_fill_*) keep working.
-from auto_fetch import (
-    auto_fill_dividend_inputs as _auto_fill_dividend_inputs,
-    auto_fill_peer_market_data as _auto_fill_peer_market_data,
-    auto_fill_valuation_inputs as _auto_fill_valuation_inputs,
-)
-
-
 def _refresh_stale_valuations(client, cfgs: dict, user_id: str | None = None,
                                force: bool = False, max_workers: int = 6,
                                on_progress=None) -> dict:
@@ -700,12 +690,6 @@ def _refresh_stale_valuations(client, cfgs: dict, user_id: str | None = None,
     def _refresh_one(ticker):
         cfg = dict(cfgs[ticker])
         cfg.setdefault("ticker", ticker)
-        # Auto-fetch market inputs, peer multiples, and dividend history
-        # before computing the summary. All are best-effort: yfinance
-        # failures don't block the orchestrator.
-        _auto_fill_valuation_inputs(cfg)
-        _auto_fill_peer_market_data(cfg)
-        _auto_fill_dividend_inputs(cfg)
         summary = calculate_multi_lens_valuation_remote(cfg)
         cfg["valuation_summary"] = summary
         save_config(client, ticker, cfg, user_id=user_id)

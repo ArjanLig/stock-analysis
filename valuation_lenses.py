@@ -29,11 +29,10 @@ DEFAULT_LENS_WEIGHTS = {
 # excluded only when the user hasn't opted in via lens_weights, but the lens
 # ITSELF is forward-looking and belongs in this list.
 #
-# Single source of truth for 4 consumers:
+# Single source of truth for 3 consumers:
 # - streamlit_app._render_lens_dots (order)
 # - streamlit_app._render_football_field (lens_order, uses display labels)
 # - config_store.list_watchlist (_COUNTED_LENSES — derives keys only)
-# - scripts/force_refresh_all.py (_counted — derives keys only)
 #
 # Adding a new forward lens is now a one-line change here instead of 4-site
 # lockstep updates.

@@ -136,9 +136,6 @@ def test_calculate_multi_lens_valuation_impl_uses_explicit_user_id(monkeypatch):
     monkeypatch.setattr(mcp_server, "get_supabase_client", lambda: MagicMock())
     monkeypatch.setattr(mcp_server.config_store, "load_config", fake_load)
     monkeypatch.setattr(mcp_server.config_store, "save_config", fake_save)
-    monkeypatch.setattr(mcp_server.auto_fetch, "auto_fill_valuation_inputs", lambda c: None)
-    monkeypatch.setattr(mcp_server.auto_fetch, "auto_fill_peer_market_data", lambda c: None)
-    monkeypatch.setattr(mcp_server.auto_fetch, "auto_fill_dividend_inputs", lambda c: None)
     monkeypatch.setattr(mcp_server, "USER_ID", "env-fallback-uid")
 
     mcp_server._calculate_multi_lens_valuation_impl("TEST", user_id="explicit-uid")
@@ -258,3 +255,29 @@ def test_set_robustness_impl_builds_and_persists(monkeypatch):
     # override (management=fragile) wins over the passed 'robust' -> fragile verdict
     assert saved["robustness"]["verdict_mapped"] == "pass"
     assert "META" in out
+
+
+def test_calculate_multi_lens_does_not_autofill(monkeypatch):
+    """Valuation no longer reaches out to yfinance: the config handed to the
+    orchestrator equals the loaded config plus valuation_summary — user-authored
+    valuation_inputs are never mutated."""
+    import mcp_server
+    loaded = {
+        "ticker": "TEST",
+        "valuation_inputs": {"forward_eps": 7.77, "_auto_filled": []},
+        "peers": [{"ticker": "PEER", "fwd_pe": 20.0}],
+    }
+    saved = {}
+    monkeypatch.setattr(mcp_server, "get_supabase_client", lambda: object())
+    monkeypatch.setattr(mcp_server.config_store, "load_config",
+                        lambda *a, **k: dict(loaded))
+    monkeypatch.setattr(mcp_server.config_store, "save_config",
+                        lambda client, ticker, cfg, **k: saved.update(cfg))
+    monkeypatch.setattr(mcp_server.valuation_lenses, "calculate_multi_lens_valuation",
+                        lambda cfg, **k: {"weighted_fv_mid": 100.0})
+    # auto_fetch must no longer exist as an attribute on mcp_server
+    assert not hasattr(mcp_server, "auto_fetch")
+
+    mcp_server._calculate_multi_lens_valuation_impl("TEST", user_id="u")
+    assert saved["valuation_inputs"] == {"forward_eps": 7.77, "_auto_filled": []}
+    assert saved["peers"] == [{"ticker": "PEER", "fwd_pe": 20.0}]
