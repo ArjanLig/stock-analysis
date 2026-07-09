@@ -67,10 +67,11 @@ from scorecard_utils import parse_scorecard, parse_scorecard_json
 
 # ---------------------------------------------------------------- compute_cost_of_equity
 
-def test_compute_cost_of_equity_basic():
-    """Cost of equity = risk_free_rate + levered_beta × erp."""
+def test_compute_cost_of_equity_capm():
+    """CAPM mode: cost of equity = risk_free_rate + levered_beta × erp."""
     import dcf_calculator
     cfg = {
+        "discount_mode": "capm",
         "equity_market_value": 1000,
         "debt_market_value": 200,
         "sector_betas": [("Software", 1.10, 1.0)],
@@ -85,6 +86,29 @@ def test_compute_cost_of_equity_basic():
     assert ke == pytest.approx(0.10369, abs=1e-4)
 
 
+def test_compute_cost_of_equity_opportunity_cost_ignores_beta():
+    """Opportunity-cost mode (the default): ke = rf + ERP, effective β = 1.0.
+    The sector beta is present but must not affect the discount rate."""
+    import dcf_calculator
+    cfg = {
+        # discount_mode omitted → defaults to opportunity_cost
+        "equity_market_value": 1000,
+        "debt_market_value": 200,
+        "sector_betas": [("Software", 1.80, 1.0)],  # deliberately high; must be ignored
+        "tax_rate": 0.21,
+        "risk_free_rate": 0.0449,
+        "erp": 0.0445,
+    }
+    ke = dcf_calculator.compute_cost_of_equity(cfg)
+    assert ke == pytest.approx(0.0449 + 0.0445, abs=1e-9)   # 8.94%
+    # Explicit opportunity_cost is identical to the default.
+    assert dcf_calculator.compute_cost_of_equity(
+        {**cfg, "discount_mode": "opportunity_cost"}) == pytest.approx(ke, abs=1e-12)
+    # And a wildly different beta leaves ke unchanged.
+    assert dcf_calculator.compute_cost_of_equity(
+        {**cfg, "sector_betas": [("X", 0.3, 1.0)]}) == pytest.approx(ke, abs=1e-12)
+
+
 def test_compute_cost_of_equity_matches_wacc_internals():
     """Cost of equity from the new helper must equal the ke that compute_wacc
     computes internally — they share the same formula and inputs.
@@ -93,6 +117,7 @@ def test_compute_cost_of_equity_matches_wacc_internals():
     then check the two functions agree."""
     import dcf_calculator
     cfg = {
+        "discount_mode": "capm",
         "equity_market_value": 1000,
         "debt_market_value": 0,           # no debt → WACC == ke
         "sector_betas": [("Software", 0.9, 1.0)],
@@ -114,6 +139,7 @@ def test_wacc_derives_equity_market_value_when_missing():
     Matches the mkt_cap fallback convention in dcf_template."""
     import dcf_calculator
     base = {
+        "discount_mode": "capm",    # exercise the emv-derived D/E in the beta relevering
         "debt_market_value": 200,
         "sector_betas": [("Software", 1.10, 1.0)],
         "tax_rate": 0.21,

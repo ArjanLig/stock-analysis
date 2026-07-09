@@ -21,23 +21,48 @@ def _equity_market_value(cfg):
     return (cfg.get("stock_price", 0) or 0) * (cfg.get("shares_outstanding", 0) or 0)
 
 
+DEFAULT_DISCOUNT_MODE = "opportunity_cost"
+
+
+def _effective_beta(cfg):
+    """Beta applied to the equity risk premium in the discount rate.
+
+    Two philosophies, selected by cfg['discount_mode']:
+
+    - "capm" (legacy): the weighted unlevered sector beta, Hamada-relevered
+      for the config's debt/equity. Company risk lives in the discount rate.
+
+    - "opportunity_cost" (default): effective beta = 1.0, so ke = rf + ERP —
+      one market-wide opportunity-cost hurdle for every company. Company-
+      specific risk is expressed in the cash-flow assumptions and margin of
+      safety instead, not the discount rate.
+
+    In both modes the returned value multiplies cfg['erp']. sector_betas is
+    left untouched in the config either way (its sector name still drives the
+    margin lookup); "opportunity_cost" simply does not read the beta figures.
+    """
+    if cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE) == "capm":
+        eq_val = _equity_market_value(cfg)
+        debt_val = cfg["debt_market_value"]
+        wu_beta = sum(ub * wt for _, ub, wt in cfg["sector_betas"])
+        de_ratio = debt_val / eq_val if eq_val > 0 else 0
+        return wu_beta * (1 + (1 - cfg["tax_rate"]) * de_ratio)
+    return 1.0
+
+
 def compute_cost_of_equity(cfg):
-    """Compute the cost of equity (CAPM) from the config dict.
+    """Compute the cost of equity from the config dict.
 
-    ke = risk_free_rate + levered_beta × erp
+    ke = risk_free_rate + effective_beta × erp
 
-    Levered beta uses the existing weighted-unlevered-beta + Hamada
-    re-levering convention from compute_wacc, kept consistent so that
-    when debt = 0, this function returns exactly compute_wacc(cfg).
+    effective_beta follows cfg['discount_mode'] (see _effective_beta): the
+    Hamada-relevered sector beta under "capm", or 1.0 under "opportunity_cost".
+    Kept consistent with compute_wacc so that when debt = 0 this function
+    returns exactly compute_wacc(cfg) in either mode.
 
     Returns the cost of equity as a float (e.g. 0.087 for 8.7%).
     """
-    eq_val = _equity_market_value(cfg)
-    debt_val = cfg["debt_market_value"]
-    wu_beta = sum(ub * wt for _, ub, wt in cfg["sector_betas"])
-    de_ratio = debt_val / eq_val if eq_val > 0 else 0
-    lev_beta = wu_beta * (1 + (1 - cfg["tax_rate"]) * de_ratio)
-    return cfg["risk_free_rate"] + lev_beta * cfg["erp"]
+    return cfg["risk_free_rate"] + _effective_beta(cfg) * cfg["erp"]
 
 
 def compute_wacc(cfg):
@@ -49,10 +74,7 @@ def compute_wacc(cfg):
     debt_val = cfg['debt_market_value']
     eq_wt = eq_val / (eq_val + debt_val)
     debt_wt = debt_val / (eq_val + debt_val)
-    wu_beta = sum(ub * wt for _, ub, wt in cfg['sector_betas'])
-    de_ratio = debt_val / eq_val if eq_val > 0 else 0
-    lev_beta = wu_beta * (1 + (1 - cfg['tax_rate']) * de_ratio)
-    ke = cfg['risk_free_rate'] + lev_beta * cfg['erp']
+    ke = cfg['risk_free_rate'] + _effective_beta(cfg) * cfg['erp']
     kd = (cfg['risk_free_rate'] + cfg['credit_spread']) * (1 - cfg['tax_rate'])
     return eq_wt * ke + debt_wt * kd
 

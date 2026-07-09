@@ -4849,6 +4849,22 @@ def _dcf_editor(ticker):
                     step=0.5, format="%.1f", key="ed_tax",
                 ) / 100
 
+                _disc_modes = ["opportunity_cost", "capm"]
+                _disc_labels = {
+                    "opportunity_cost": "Opportunity cost (ke = rf + ERP, β = 1)",
+                    "capm": "CAPM (ke = rf + levered β × ERP)",
+                }
+                cfg['discount_mode'] = st.selectbox(
+                    "Discount mode",
+                    _disc_modes,
+                    index=_disc_modes.index(cfg.get('discount_mode', 'opportunity_cost')),
+                    format_func=lambda m: _disc_labels[m],
+                    key="ed_disc_mode",
+                    help="Opportunity cost: één marktbrede hurdle voor elk bedrijf; "
+                         "bedrijfsrisico zit in de kasstromen en margin of safety. "
+                         "CAPM: bedrijfsrisico via de sector-β in de discontovoet.",
+                )
+
                 st.markdown(_ww_sep, unsafe_allow_html=True)
 
                 cfg['equity_market_value'] = int(st.number_input(
@@ -4940,9 +4956,16 @@ def _dcf_editor(ticker):
 
                 _wu_beta = sum(ub * wt for _, ub, wt in cfg['sector_betas']) if cfg['sector_betas'] else 1.0
                 _de_ratio = _debt_val / _eq_val if _eq_val > 0 else 0
-                _lev_beta = _wu_beta * (1 + (1 - cfg['tax_rate']) * _de_ratio)
+                _capm_lev_beta = _wu_beta * (1 + (1 - cfg['tax_rate']) * _de_ratio)
+                # Beta that actually feeds the discount rate \u2014 mirrors
+                # dcf_calculator._effective_beta so the preview matches the engine.
+                _eff_beta = 1.0 if cfg.get('discount_mode', 'opportunity_cost') == 'opportunity_cost' else _capm_lev_beta
                 st.markdown(_ww_val.format(label="Weighted Unlevered \u03b2", value=f"{_wu_beta:.2f}", extra=f"color:{T['text_muted']};"), unsafe_allow_html=True)
-                st.markdown(_ww_val.format(label="Levered \u03b2", value=f"{_lev_beta:.2f}", extra="font-weight:700;"), unsafe_allow_html=True)
+                if cfg.get('discount_mode', 'opportunity_cost') == 'opportunity_cost':
+                    st.markdown(_ww_val.format(label="Effective \u03b2 (opportunity cost)", value="1.00", extra="font-weight:700;"), unsafe_allow_html=True)
+                    st.markdown(_ww_val.format(label="Levered \u03b2 (unused)", value=f"{_capm_lev_beta:.2f}", extra=f"color:{T['text_muted']};font-size:0.82rem;"), unsafe_allow_html=True)
+                else:
+                    st.markdown(_ww_val.format(label="Levered \u03b2", value=f"{_capm_lev_beta:.2f}", extra="font-weight:700;"), unsafe_allow_html=True)
 
                 if cfg.get('valuation_basis') == 'real':
                     _be = cfg.get('breakeven_inflation', 0)
@@ -4957,7 +4980,7 @@ def _dcf_editor(ticker):
 
                 st.markdown(_ww_sep, unsafe_allow_html=True)
 
-                _ke = cfg['risk_free_rate'] + _lev_beta * cfg['erp']
+                _ke = cfg['risk_free_rate'] + _eff_beta * cfg['erp']
                 _kd = (cfg['risk_free_rate'] + cfg['credit_spread']) * (1 - cfg['tax_rate'])
                 st.markdown(_ww_val.format(label="Cost of Equity", value=f"{_ke:.2%}", extra="font-weight:700;"), unsafe_allow_html=True)
                 st.markdown(_ww_val.format(label="Cost of Debt (after-tax)", value=f"{_kd:.2%}", extra="font-weight:700;"), unsafe_allow_html=True)
