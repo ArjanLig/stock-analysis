@@ -392,6 +392,27 @@ def test_build_config_real_mode():
         assert real_g < nom_g or nom_g <= 0
 
 
+def test_build_config_uses_neutral_placeholders():
+    """Auto-derived projection curves are removed: revenue_growth is flat at
+    terminal growth, op_margins flat at the last actual margin, and no peers
+    are auto-selected. Assumptions are authored via the MCP, not guessed."""
+    import gather_data
+    financials = _make_test_financials()
+    cfg = gather_data.build_config(
+        ticker="TEST", financials=financials, stock_price=100.0,
+        market_cap=100000, shares_yahoo=1000, risk_free_rate=0.04,
+        sector_betas=[("Tech", 1.0, 1.0)], credit_spread=0.01,
+        credit_rating="A", peers=[], company_name="Test Corp",
+        sector_margin=0.30,          # must be IGNORED now
+        consensus={"growth_current_year": 0.40},  # must be IGNORED now
+    )
+    # base_op_margin = oi[-1]/rev[-1] = 23000/95000 = 0.242
+    assert cfg["revenue_growth"] == [0.025] * 10   # flat at nominal terminal growth
+    assert cfg["op_margins"] == [0.242] * 10       # flat at last actual margin
+    assert cfg["terminal_margin"] == 0.242
+    assert cfg["peers"] == []
+
+
 def test_convert_to_real():
     """convert_to_real should transform a nominal config to real basis."""
     import gather_data

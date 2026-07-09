@@ -2411,152 +2411,21 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
         if not terminal_growth:
             term_growth = TERMINAL_GROWTH_REAL_DEFAULT
 
-    # ── [IMPROVEMENT 1 & 3 & 4 & 5] Revenue growth assumptions ──
-    print("  [Growth] Deriving revenue growth curve...")
-
-    # Historical CAGRs at different horizons
-    cagr_1y = (rev[-1] / rev[-2] - 1) if len(rev) >= 2 and rev[-2] and rev[-2] > 0 and rev[-1] else 0.05
-    cagr_3y = ((rev[-1] / rev[-4]) ** (1/3) - 1) if len(rev) >= 4 and rev[-4] and rev[-4] > 0 and rev[-1] else cagr_1y
-    cagr_5y = ((rev[-1] / rev[-6]) ** (1/5) - 1) if len(rev) >= 6 and rev[-6] and rev[-6] > 0 and rev[-1] else cagr_3y
-
-    # Detect acceleration/deceleration trend
-    if cagr_1y > cagr_3y > 0:
-        trend = "accelerating"
-        start_growth = cagr_1y  # Use recent momentum
-    elif cagr_1y < cagr_3y:
-        trend = "decelerating"
-        start_growth = (cagr_1y + cagr_3y) / 2  # Blend
-    else:
-        trend = "stable"
-        start_growth = cagr_3y
-
-    # [IMPROVEMENT 5] Use consensus estimates for year 1-2 if available
-    consensus_y1 = consensus.get("growth_current_year")
-    consensus_y2 = consensus.get("growth_next_year")
-    if consensus_y1 and consensus_y1 > 0:
-        print(f"    Using analyst consensus for Y1: {consensus_y1:.1%} ({consensus.get('n_analysts', '?')} analysts)")
-        start_growth = consensus_y1
-
-    # [IMPROVEMENT 4] Size-adjusted growth ceiling
-    # Larger companies can't sustain high growth as easily
-    if market_cap > 0:
-        if market_cap > 1_000_000:      # > $1T
-            growth_cap = 0.15
-        elif market_cap > 500_000:      # > $500B
-            growth_cap = 0.20
-        elif market_cap > 100_000:      # > $100B
-            growth_cap = 0.25
-        elif market_cap > 10_000:       # > $10B
-            growth_cap = 0.35
-        else:
-            growth_cap = 0.50
-        if start_growth > growth_cap:
-            print(f"    Size cap applied: {start_growth:.1%} → {growth_cap:.1%} (mkt cap ${market_cap:,.0f}M)")
-            start_growth = growth_cap
-
-    # Floor
-    start_growth = max(start_growth, 0.02)
-
-    # [IMPROVEMENT 3] Exponential decay curve instead of linear
-    # g(t) = terminal + (start - terminal) * e^(-lambda * t)
-    # lambda controls speed of decay: higher = faster decay to terminal
-    decay_lambda = 0.35  # ~65% of excess growth remains after 1 year
-    if trend == "decelerating":
-        decay_lambda = 0.45  # Faster decay for decelerating companies
-    elif trend == "accelerating":
-        decay_lambda = 0.25  # Slower decay — momentum persists
-
-    revenue_growth = []
-    for i in range(10):
-        g = term_growth + (start_growth - term_growth) * math.exp(-decay_lambda * i)
-        # [IMPROVEMENT 5] Override year 2 with consensus if available
-        if i == 1 and consensus_y2 and consensus_y2 > 0:
-            g = max(consensus_y2, term_growth)
-        revenue_growth.append(round(g, 3))
-
-    print(f"    Trend: {trend}, CAGR 1y={cagr_1y:.1%} 3y={cagr_3y:.1%} 5y={cagr_5y:.1%}")
-    print(f"    Growth: {revenue_growth[0]:.1%} → {revenue_growth[4]:.1%} → {revenue_growth[9]:.1%} (exp decay λ={decay_lambda})")
+    # ── Revenue growth: neutral placeholder ──
+    # Auto-derived projection curves were removed — forward assumptions are
+    # authored via the MCP, not guessed here. Flat at terminal growth.
+    revenue_growth = [term_growth] * 10
 
     # Deflate revenue growth for real valuation
     if valuation_basis == "real" and breakeven_inflation is not None:
         nominal_revenue_growth = list(revenue_growth)
         revenue_growth = [max(g - breakeven_inflation, 0.0) for g in revenue_growth]
 
-    # ── [IMPROVEMENT 1 & 2] Operating margin trajectory ──
-    print("  [Margins] Deriving operating margin trajectory...")
-
-    recent_margin = base_op_margin
-
-    # [IMPROVEMENT 1] Detect margin trend from history
-    hist_margins = []
-    for r, o in zip(rev, oi):
-        if r > 0 and o is not None:
-            hist_margins.append(o / r)
-        else:
-            hist_margins.append(0)
-
-    # Linear regression slope over available years (simple OLS)
-    if len(hist_margins) >= 3:
-        x_vals = list(range(len(hist_margins)))
-        x_mean = sum(x_vals) / len(x_vals)
-        y_mean = sum(hist_margins) / len(hist_margins)
-        num = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_vals, hist_margins))
-        den = sum((x - x_mean) ** 2 for x in x_vals)
-        margin_slope = num / den if den > 0 else 0  # pp per year
-    else:
-        margin_slope = 0
-
-    margin_trend = "expanding" if margin_slope > 0.005 else ("contracting" if margin_slope < -0.005 else "stable")
-
-    # [IMPROVEMENT 2] Terminal margin = blend of sector median and current margin
-    # If the company is well above sector median, terminal is a weighted blend
-    # (sector dominance doesn't fully erode, but mean reversion pulls)
-    if sector_margin is not None:
-        if recent_margin > sector_margin:
-            # Company outperforms sector — blend 60% sector, 40% current
-            term_margin = round(sector_margin * 0.6 + recent_margin * 0.4, 3)
-        else:
-            # Company underperforms sector — converge toward sector
-            term_margin = round(sector_margin * 0.7 + recent_margin * 0.3, 3)
-        print(f"    Sector median: {sector_margin:.1%}, terminal margin (blended): {term_margin:.1%}")
-    else:
-        # Fallback: compress from current level
-        if recent_margin > 0.25:
-            term_margin = round(recent_margin - 0.05, 3)
-        elif recent_margin > 0.10:
-            term_margin = round(recent_margin - 0.03, 3)
-        else:
-            term_margin = round(max(recent_margin, 0.05), 3)
-
-    # [IMPROVEMENT 1] Extrapolate margin trend before converging
-    # Phase 1 (years 1-3): continue historical trend (capped)
-    # Phase 2 (years 4-10): converge to terminal margin
-    max_trend_extension = min(abs(margin_slope), 0.03)  # Cap at 3pp/year change
-    if margin_slope > 0:
-        margin_slope_capped = max_trend_extension
-    else:
-        margin_slope_capped = -max_trend_extension
-
-    op_margins = []
-    for i in range(10):
-        if i < 3:
-            # Phase 1: extrapolate trend from current level (capped)
-            projected = recent_margin + margin_slope_capped * (i + 1)
-            # Cap: don't go more than 5pp above current or 5pp below terminal
-            if margin_slope_capped > 0:
-                projected = min(projected, recent_margin + 0.05)
-            else:
-                projected = max(projected, term_margin - 0.05)
-            op_margins.append(round(projected, 3))
-        else:
-            # Phase 2: converge from year-3 level to terminal
-            y3_margin = op_margins[2]
-            t = (i - 3) / 6  # 0 at year 4, 1 at year 10
-            m = y3_margin + (term_margin - y3_margin) * t
-            op_margins.append(round(m, 3))
-
-    print(f"    Trend: {margin_trend} (slope: {margin_slope:+.1%}/yr)")
-    print(f"    Margins: {op_margins[0]:.1%} → {op_margins[4]:.1%} → {op_margins[9]:.1%} (terminal: {term_margin:.1%})")
+    # ── Operating margin: neutral placeholder ──
+    # Flat at the last actual margin; terminal margin = same. No sector-blend
+    # or trend-extrapolation guesswork.
+    op_margins = [base_op_margin] * 10
+    term_margin = base_op_margin
 
     # ── Tax rate ──
     tax_prov = financials["tax_provision"]
