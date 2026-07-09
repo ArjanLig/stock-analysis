@@ -6,7 +6,6 @@ Fetches financial data from SEC EDGAR, Treasury.gov,
 and Damodaran's website to build a complete DCF config file.
 
 Usage:
-    python3 gather_data.py PANW --auto-peers
     python3 gather_data.py PANW --peers "CRWD,FTNT,ZS,S,OKTA,NET"
     python3 gather_data.py PANW --sectors "Software (System & Application):1.23:0.7,Computer Services:0.92:0.3" --peers auto
     python3 gather_data.py PANW --margin-of-safety 0.20
@@ -17,7 +16,6 @@ No API keys required. Uses only public endpoints.
 import argparse
 import json
 import logging
-import math
 import os
 import re
 import ssl
@@ -1581,69 +1579,6 @@ def fetch_sector_s2c():
         return {}
 
 
-def fetch_consensus_estimates(ticker):
-    """Fetch analyst consensus revenue estimates from Yahoo Finance via yfinance.
-
-    Returns dict with:
-      - 'rev_est_current_year': revenue estimate for current fiscal year ($M)
-      - 'rev_est_next_year': revenue estimate for next fiscal year ($M)
-      - 'growth_current_year': implied YoY revenue growth (decimal)
-      - 'growth_next_year': implied YoY revenue growth (decimal)
-      - 'n_analysts': number of analysts covering
-    Returns empty dict if unavailable.
-    """
-    print(f"[Yahoo] Fetching analyst consensus for {ticker}...")
-
-    try:
-        import yfinance as yf
-        t = yf.Ticker(ticker)
-        rev_est = t.revenue_estimate
-
-        if rev_est is None or rev_est.empty:
-            print("  No consensus estimates available")
-            return {}
-
-        result = {}
-
-        # revenue_estimate has columns: avg, low, high, numberOfAnalysts, yearAgoRevenue, growth
-        # Index is period labels like '0y', '+1y' (or date strings)
-        periods = list(rev_est.index)
-
-        for i, period in enumerate(periods):
-            row = rev_est.loc[period]
-            avg_rev = row.get("avg", 0)
-            growth = row.get("growth", 0)
-            n_analysts = row.get("numberOfAnalysts", 0)
-
-            if avg_rev and avg_rev > 0:
-                rev_m = round(avg_rev / 1e6, 0)  # Convert to millions
-                if i == 0:
-                    result["rev_est_current_year"] = rev_m
-                    result["growth_current_year"] = round(float(growth), 4) if growth else 0
-                    result["n_analysts"] = int(n_analysts) if n_analysts else 0
-                elif i == 1:
-                    result["rev_est_next_year"] = rev_m
-                    result["growth_next_year"] = round(float(growth), 4) if growth else 0
-
-        if result:
-            if "rev_est_current_year" in result:
-                print(f"  Current year: ${result['rev_est_current_year']:,.0f}M (growth: {result.get('growth_current_year', 0):.1%})")
-            if "rev_est_next_year" in result:
-                print(f"  Next year:    ${result['rev_est_next_year']:,.0f}M (growth: {result.get('growth_next_year', 0):.1%})")
-            print(f"  Analysts: {result.get('n_analysts', '?')}")
-        else:
-            print("  No usable estimates found")
-
-        return result
-
-    except ImportError:
-        print("  yfinance not installed, skipping consensus estimates")
-        return {}
-    except Exception as e:
-        print(f"  WARNING: Consensus fetch failed: {e}")
-        return {}
-
-
 def _yf_ebitda(info: dict) -> float | None:
     """Resolve EBITDA from yfinance info, preferring trailingEbitda but
     falling back to ebitda. Yfinance is inconsistent: large caps often
@@ -2065,186 +2000,6 @@ def _interpolate_quarterly_to_monthly(qbs_df, row_name, months_dt):
     return _interpolate_yearly_to_monthly(qbs_df, row_name, months_dt)
 
 
-# ── Peer Discovery Module ─────────────────────────────────────────────
-
-def _fetch_exchange_tickers():
-    """Fetch CIK → ticker mapping from SEC company_tickers_exchange.json."""
-    url = "https://www.sec.gov/files/company_tickers_exchange.json"
-    data = _http_get_json(url, EDGAR_HEADERS)
-    # fields: [cik, name, ticker, exchange]
-    cik_to_info = {}
-    for row in data.get("data", []):
-        cik, name, ticker, exchange = row[0], row[1], row[2], row[3]
-        cik_to_info[str(cik).zfill(10)] = {
-            "name": name,
-            "ticker": ticker,
-            "exchange": exchange,
-        }
-    return cik_to_info
-
-
-def _fetch_sic_companies(sic_code, max_companies=200):
-    """Fetch list of companies with a given SIC code from EDGAR browse endpoint."""
-    companies = []
-    start = 0
-    count = 100
-
-    while start < max_companies:
-        url = (
-            f"https://www.sec.gov/cgi-bin/browse-edgar"
-            f"?action=getcompany&SIC={sic_code}&owner=include"
-            f"&count={count}&start={start}&output=atom"
-        )
-        try:
-            data = _http_get(url, EDGAR_HEADERS)
-            text = data.decode("utf-8", errors="replace")
-
-            # Parse Atom XML — extract CIK and company name
-            ns = "http://www.w3.org/2005/Atom"
-            entries = re.findall(
-                rf"<entry[^>]*>.*?</entry>", text, re.DOTALL
-            )
-            if not entries:
-                break
-
-            for entry_xml in entries:
-                cik_match = re.search(rf"<{{?{ns}}}?cik>(.*?)</", entry_xml)
-                name_match = re.search(rf"<{{?{ns}}}?name>(.*?)</", entry_xml)
-                if not cik_match:
-                    # Try without namespace
-                    cik_match = re.search(r"<cik[^>]*>(.*?)</cik>", entry_xml)
-                    name_match = re.search(r"<name[^>]*>(.*?)</name>", entry_xml)
-
-                if cik_match:
-                    companies.append({
-                        "cik": cik_match.group(1).strip(),
-                        "name": name_match.group(1).strip() if name_match else "",
-                    })
-
-            if len(entries) < count:
-                break  # No more pages
-
-            start += count
-            time.sleep(0.3)
-
-        except Exception as e:
-            print(f"  WARNING: SIC company fetch failed at offset {start}: {e}")
-            break
-
-    return companies
-
-
-def find_peers(sic_code, target_ticker, target_market_cap, n_peers=6):
-    """Auto-discover peer companies based on SIC code and market cap similarity.
-
-    1. Fetches all companies with the same SIC code from EDGAR
-    2. Cross-references with exchange tickers to get ticker symbols
-    3. Gets stock prices to estimate market caps
-    4. Selects peers closest in market cap to the target
-    """
-    print(f"\n[Peers] Auto-discovering peers (SIC {sic_code})...")
-
-    # Step 1: Get companies with same SIC
-    sic_companies = _fetch_sic_companies(sic_code)
-    print(f"  Found {len(sic_companies)} companies with SIC {sic_code}")
-
-    if not sic_companies:
-        print("  No companies found, cannot auto-select peers")
-        return []
-
-    # Step 2: Cross-reference with exchange tickers
-    print("  Cross-referencing with exchange-listed tickers...")
-    exchange_data = _fetch_exchange_tickers()
-
-    candidates = []
-    for comp in sic_companies:
-        cik_padded = comp["cik"].zfill(10)
-        if cik_padded in exchange_data:
-            info = exchange_data[cik_padded]
-            ticker = info["ticker"]
-            if ticker.upper() == target_ticker.upper():
-                continue  # Skip the target company itself
-            # Only include major US exchanges
-            if info["exchange"] in ("NYSE", "Nasdaq"):
-                candidates.append({
-                    "cik": comp["cik"],
-                    "ticker": ticker,
-                    "name": info["name"],
-                    "exchange": info["exchange"],
-                })
-
-    print(f"  {len(candidates)} exchange-listed candidates (excl. {target_ticker})")
-
-    if not candidates:
-        print("  No exchange-listed peers found")
-        return []
-
-    # Step 3: Get market caps for candidates (batch stock price lookups)
-    # Limit to a reasonable number to avoid too many API calls
-    sample_size = min(len(candidates), 30)
-    candidates = candidates[:sample_size]
-
-    print(f"  Fetching market data for {len(candidates)} candidates...")
-    scored = []
-    for cand in candidates:
-        try:
-            price, _, _ = fetch_stock_price(cand["ticker"])
-            if price <= 0:
-                continue
-
-            # Get shares from EDGAR company facts
-            time.sleep(0.2)  # SEC rate limit: 10 req/sec
-            cik_padded = cand["cik"].zfill(10)
-            try:
-                facts_url = f"{EDGAR_BASE}/api/xbrl/companyfacts/CIK{cik_padded}.json"
-                facts_data = _http_get_json(facts_url, EDGAR_HEADERS)
-                shares_tag = _try_tags(facts_data, [
-                    "WeightedAverageNumberOfDilutedSharesOutstanding",
-                    "CommonStockSharesOutstanding",
-                ], n_years=2, unit_key="shares")
-                if shares_tag:
-                    shares = shares_tag[-1][1] / 1e6  # to millions
-                    mkt_cap = price * shares
-                else:
-                    continue
-            except Exception:
-                continue
-
-            if mkt_cap < 500:  # Skip micro-caps (< $500M)
-                continue
-
-            # Score by market cap proximity (log scale)
-            if target_market_cap > 0 and mkt_cap > 0:
-                log_ratio = abs(math.log10(mkt_cap / target_market_cap))
-            else:
-                log_ratio = 10  # Large penalty
-
-            scored.append({
-                "ticker": cand["ticker"],
-                "name": cand["name"],
-                "market_cap": mkt_cap,
-                "log_distance": log_ratio,
-            })
-            print(f"    {cand['ticker']:6s}  ${mkt_cap:>10,.0f}M  (log dist: {log_ratio:.2f})")
-
-        except Exception:
-            continue
-
-    if not scored:
-        print("  Could not determine market caps for any candidates")
-        return []
-
-    # Step 4: Sort by market cap proximity, take top N
-    scored.sort(key=lambda x: x["log_distance"])
-    selected = scored[:n_peers]
-
-    print(f"\n  Selected {len(selected)} peers (closest by market cap):")
-    for s in selected:
-        print(f"    {s['ticker']:6s}  ${s['market_cap']:>10,.0f}M")
-
-    return [s["ticker"] for s in selected]
-
-
 # ── Peer Data Module ──────────────────────────────────────────────────
 
 def fetch_peer_data(peer_tickers):
@@ -2358,12 +2113,9 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
                  valuation_basis="nominal", nominal_risk_free_rate=None):
     """Assemble all gathered data into the exact config dict for build_dcf_model().
 
-    Uses 5 smart assumption methods:
-      1. Margin trend extrapolation (historical trajectory before converging)
-      2. Sector median margin from Damodaran as terminal anchor
-      3. Exponential growth decay (not linear)
-      4. Size-adjusted growth ceiling (large-cap penalty)
-      5. Consensus estimates for year 1-2 (if available from yfinance)
+    Emits flat, neutral placeholder projections — revenue_growth flat at
+    terminal growth, op_margins flat at the last actual margin — which are
+    refined afterward via the MCP rather than auto-derived here.
     """
 
     print("\n[Config] Building configuration...")
@@ -2398,7 +2150,6 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
             print(f"  [Shares] Estimated from EntityPublicFloat: {shares:,.0f}M shares")
 
     term_growth = terminal_growth or TERMINAL_GROWTH_DEFAULT
-    consensus = consensus or {}
 
     # ── Real (TIPS) valuation mode ──
     breakeven_inflation = None
@@ -2411,152 +2162,21 @@ def build_config(ticker, financials, stock_price, market_cap, shares_yahoo,
         if not terminal_growth:
             term_growth = TERMINAL_GROWTH_REAL_DEFAULT
 
-    # ── [IMPROVEMENT 1 & 3 & 4 & 5] Revenue growth assumptions ──
-    print("  [Growth] Deriving revenue growth curve...")
-
-    # Historical CAGRs at different horizons
-    cagr_1y = (rev[-1] / rev[-2] - 1) if len(rev) >= 2 and rev[-2] and rev[-2] > 0 and rev[-1] else 0.05
-    cagr_3y = ((rev[-1] / rev[-4]) ** (1/3) - 1) if len(rev) >= 4 and rev[-4] and rev[-4] > 0 and rev[-1] else cagr_1y
-    cagr_5y = ((rev[-1] / rev[-6]) ** (1/5) - 1) if len(rev) >= 6 and rev[-6] and rev[-6] > 0 and rev[-1] else cagr_3y
-
-    # Detect acceleration/deceleration trend
-    if cagr_1y > cagr_3y > 0:
-        trend = "accelerating"
-        start_growth = cagr_1y  # Use recent momentum
-    elif cagr_1y < cagr_3y:
-        trend = "decelerating"
-        start_growth = (cagr_1y + cagr_3y) / 2  # Blend
-    else:
-        trend = "stable"
-        start_growth = cagr_3y
-
-    # [IMPROVEMENT 5] Use consensus estimates for year 1-2 if available
-    consensus_y1 = consensus.get("growth_current_year")
-    consensus_y2 = consensus.get("growth_next_year")
-    if consensus_y1 and consensus_y1 > 0:
-        print(f"    Using analyst consensus for Y1: {consensus_y1:.1%} ({consensus.get('n_analysts', '?')} analysts)")
-        start_growth = consensus_y1
-
-    # [IMPROVEMENT 4] Size-adjusted growth ceiling
-    # Larger companies can't sustain high growth as easily
-    if market_cap > 0:
-        if market_cap > 1_000_000:      # > $1T
-            growth_cap = 0.15
-        elif market_cap > 500_000:      # > $500B
-            growth_cap = 0.20
-        elif market_cap > 100_000:      # > $100B
-            growth_cap = 0.25
-        elif market_cap > 10_000:       # > $10B
-            growth_cap = 0.35
-        else:
-            growth_cap = 0.50
-        if start_growth > growth_cap:
-            print(f"    Size cap applied: {start_growth:.1%} → {growth_cap:.1%} (mkt cap ${market_cap:,.0f}M)")
-            start_growth = growth_cap
-
-    # Floor
-    start_growth = max(start_growth, 0.02)
-
-    # [IMPROVEMENT 3] Exponential decay curve instead of linear
-    # g(t) = terminal + (start - terminal) * e^(-lambda * t)
-    # lambda controls speed of decay: higher = faster decay to terminal
-    decay_lambda = 0.35  # ~65% of excess growth remains after 1 year
-    if trend == "decelerating":
-        decay_lambda = 0.45  # Faster decay for decelerating companies
-    elif trend == "accelerating":
-        decay_lambda = 0.25  # Slower decay — momentum persists
-
-    revenue_growth = []
-    for i in range(10):
-        g = term_growth + (start_growth - term_growth) * math.exp(-decay_lambda * i)
-        # [IMPROVEMENT 5] Override year 2 with consensus if available
-        if i == 1 and consensus_y2 and consensus_y2 > 0:
-            g = max(consensus_y2, term_growth)
-        revenue_growth.append(round(g, 3))
-
-    print(f"    Trend: {trend}, CAGR 1y={cagr_1y:.1%} 3y={cagr_3y:.1%} 5y={cagr_5y:.1%}")
-    print(f"    Growth: {revenue_growth[0]:.1%} → {revenue_growth[4]:.1%} → {revenue_growth[9]:.1%} (exp decay λ={decay_lambda})")
+    # ── Revenue growth: neutral placeholder ──
+    # Auto-derived projection curves were removed — forward assumptions are
+    # authored via the MCP, not guessed here. Flat at terminal growth.
+    revenue_growth = [term_growth] * 10
 
     # Deflate revenue growth for real valuation
     if valuation_basis == "real" and breakeven_inflation is not None:
         nominal_revenue_growth = list(revenue_growth)
         revenue_growth = [max(g - breakeven_inflation, 0.0) for g in revenue_growth]
 
-    # ── [IMPROVEMENT 1 & 2] Operating margin trajectory ──
-    print("  [Margins] Deriving operating margin trajectory...")
-
-    recent_margin = base_op_margin
-
-    # [IMPROVEMENT 1] Detect margin trend from history
-    hist_margins = []
-    for r, o in zip(rev, oi):
-        if r > 0 and o is not None:
-            hist_margins.append(o / r)
-        else:
-            hist_margins.append(0)
-
-    # Linear regression slope over available years (simple OLS)
-    if len(hist_margins) >= 3:
-        x_vals = list(range(len(hist_margins)))
-        x_mean = sum(x_vals) / len(x_vals)
-        y_mean = sum(hist_margins) / len(hist_margins)
-        num = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_vals, hist_margins))
-        den = sum((x - x_mean) ** 2 for x in x_vals)
-        margin_slope = num / den if den > 0 else 0  # pp per year
-    else:
-        margin_slope = 0
-
-    margin_trend = "expanding" if margin_slope > 0.005 else ("contracting" if margin_slope < -0.005 else "stable")
-
-    # [IMPROVEMENT 2] Terminal margin = blend of sector median and current margin
-    # If the company is well above sector median, terminal is a weighted blend
-    # (sector dominance doesn't fully erode, but mean reversion pulls)
-    if sector_margin is not None:
-        if recent_margin > sector_margin:
-            # Company outperforms sector — blend 60% sector, 40% current
-            term_margin = round(sector_margin * 0.6 + recent_margin * 0.4, 3)
-        else:
-            # Company underperforms sector — converge toward sector
-            term_margin = round(sector_margin * 0.7 + recent_margin * 0.3, 3)
-        print(f"    Sector median: {sector_margin:.1%}, terminal margin (blended): {term_margin:.1%}")
-    else:
-        # Fallback: compress from current level
-        if recent_margin > 0.25:
-            term_margin = round(recent_margin - 0.05, 3)
-        elif recent_margin > 0.10:
-            term_margin = round(recent_margin - 0.03, 3)
-        else:
-            term_margin = round(max(recent_margin, 0.05), 3)
-
-    # [IMPROVEMENT 1] Extrapolate margin trend before converging
-    # Phase 1 (years 1-3): continue historical trend (capped)
-    # Phase 2 (years 4-10): converge to terminal margin
-    max_trend_extension = min(abs(margin_slope), 0.03)  # Cap at 3pp/year change
-    if margin_slope > 0:
-        margin_slope_capped = max_trend_extension
-    else:
-        margin_slope_capped = -max_trend_extension
-
-    op_margins = []
-    for i in range(10):
-        if i < 3:
-            # Phase 1: extrapolate trend from current level (capped)
-            projected = recent_margin + margin_slope_capped * (i + 1)
-            # Cap: don't go more than 5pp above current or 5pp below terminal
-            if margin_slope_capped > 0:
-                projected = min(projected, recent_margin + 0.05)
-            else:
-                projected = max(projected, term_margin - 0.05)
-            op_margins.append(round(projected, 3))
-        else:
-            # Phase 2: converge from year-3 level to terminal
-            y3_margin = op_margins[2]
-            t = (i - 3) / 6  # 0 at year 4, 1 at year 10
-            m = y3_margin + (term_margin - y3_margin) * t
-            op_margins.append(round(m, 3))
-
-    print(f"    Trend: {margin_trend} (slope: {margin_slope:+.1%}/yr)")
-    print(f"    Margins: {op_margins[0]:.1%} → {op_margins[4]:.1%} → {op_margins[9]:.1%} (terminal: {term_margin:.1%})")
+    # ── Operating margin: neutral placeholder ──
+    # Flat at the last actual margin; terminal margin = same. No sector-blend
+    # or trend-extrapolation guesswork.
+    op_margins = [base_op_margin] * 10
+    term_margin = base_op_margin
 
     # ── Tax rate ──
     tax_prov = financials["tax_provision"]
@@ -3509,7 +3129,6 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 gather_data.py PANW --auto-peers
   python3 gather_data.py PANW --peers "CRWD,FTNT,ZS,S"
   python3 gather_data.py PANW --sectors "Software (System & Application):1.23:1.0" --peers auto
   python3 gather_data.py MSFT --peers "AAPL,GOOGL,AMZN,META" --margin-of-safety 0.25
@@ -3523,17 +3142,6 @@ Examples:
     parser.add_argument(
         "--peers",
         help='Comma-separated peer tickers (e.g., "CRWD,FTNT,ZS,S"). Use "auto" for auto-discovery.',
-    )
-    parser.add_argument(
-        "--auto-peers",
-        action="store_true",
-        help="Auto-discover peers from SIC code (same as --peers auto)",
-    )
-    parser.add_argument(
-        "--n-peers",
-        type=int,
-        default=6,
-        help="Number of peers to auto-select (default: 6)",
     )
     parser.add_argument(
         "--margin-of-safety",
@@ -3666,22 +3274,10 @@ Examples:
                     sector_margin = best_match[1]
                     print(f"  Sector margin match: '{best_match[0]}' → {sector_margin:.1%}")
 
-    # ── Step 5c: Consensus estimates ──
-    consensus = fetch_consensus_estimates(ticker)
-
     # ── Step 6: Peer data ──
+    # Peer auto-selection removed — only explicit --peers "A,B,C" is honoured.
     peer_tickers = []
-    auto_peers = args.auto_peers or (args.peers and args.peers.strip().lower() == "auto")
-
-    if auto_peers:
-        # Auto-discover peers from SIC code + market cap similarity
-        peer_tickers = find_peers(
-            sic_code=sic_code,
-            target_ticker=ticker,
-            target_market_cap=market_cap,
-            n_peers=args.n_peers,
-        )
-    elif args.peers and args.peers.strip().lower() != "auto":
+    if args.peers and args.peers.strip().lower() != "auto":
         peer_tickers = [t.strip().upper() for t in args.peers.split(",") if t.strip()]
 
     peers = fetch_peer_data(peer_tickers)
@@ -3702,7 +3298,6 @@ Examples:
         margin_of_safety=args.margin_of_safety,
         terminal_growth=args.terminal_growth,
         sector_margin=sector_margin,
-        consensus=consensus,
     )
 
     # ── Step 8: Write config file ──

@@ -63,7 +63,6 @@ mcp = FastMCP(
 
 import gather_data
 import dcf_calculator
-import auto_fetch
 import config_store
 import valuation_lenses
 from scorecard_utils import compute_roce_metric
@@ -96,32 +95,6 @@ def _resolve_sector_betas(sic_code, sic_description=""):
             return [(best_match[0], best_match[1], 1.0)]
 
     return [("Market", 1.0, 1.0)]
-
-
-def _resolve_sector_margin(sector_betas):
-    """Fetch sector median margin from Damodaran, matching on sector name."""
-    sector_name = sector_betas[0][0] if sector_betas else ""
-    if not sector_name:
-        return None
-
-    dam_margins = gather_data.fetch_sector_margins()
-    if not dam_margins:
-        return None
-
-    if sector_name in dam_margins:
-        return dam_margins[sector_name]
-
-    target_words = set(sector_name.lower().replace("/", " ").split())
-    best_match, best_score = None, 0
-    for sec_name, sec_margin in dam_margins.items():
-        sec_words = set(sec_name.lower().replace("/", " ").split())
-        overlap = len(target_words & sec_words)
-        if overlap > best_score:
-            best_score = overlap
-            best_match = (sec_name, sec_margin)
-    if best_match and best_score > 0:
-        return best_match[1]
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -161,20 +134,8 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
 
     sector_betas = _resolve_sector_betas(sic_code, sic_description)
 
-    if sector_margin is None:
-        sector_margin = _resolve_sector_margin(sector_betas)
-
+    # Peer auto-selection removed — peers are authored via the MCP.
     peers = []
-    if sic_code and market_cap > 0:
-        try:
-            peer_tickers = gather_data.find_peers(
-                sic_code=int(sic_code),
-                target_ticker=ticker,
-                target_market_cap=market_cap,
-            )
-            peers = gather_data.fetch_peer_data(peer_tickers)
-        except Exception as e:
-            logger.warning("Peer lookup failed: %s", e)
 
     cfg = gather_data.build_config(
         ticker=ticker,
@@ -190,7 +151,6 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
         company_name=company_name,
         margin_of_safety=margin_of_safety,
         terminal_growth=terminal_growth,
-        sector_margin=sector_margin,
         consensus=consensus,
         valuation_basis=valuation_basis,
         nominal_risk_free_rate=nominal_risk_free_rate,
@@ -232,22 +192,16 @@ def _calculate_valuation_impl(cfg, user_id: str | None = None):
 
 def _calculate_multi_lens_valuation_impl(ticker, scenario_grid=False,
                                           user_id: str | None = None):
-    """Core logic for calculate_multi_lens_valuation: load cfg, auto-fetch
-    yfinance market data + historical multiples, run all lenses, persist
-    summary, return JSON."""
+    """Core logic for calculate_multi_lens_valuation: load cfg, run all
+    lenses, persist summary, return JSON."""
     user_id = user_id or USER_ID
     client = get_supabase_client()
     cfg = config_store.load_config(client, ticker, user_id=user_id)
     if cfg is None:
         return json.dumps({"error": f"{ticker.upper()} not on watchlist"})
 
-    # Auto-fetch yfinance market data + historical multiples before the
-    # orchestrator. Matches Streamlit's _refresh_one. Best-effort: yfinance
-    # failures don't block the lens computation.
+    # Valuation uses only what the config already holds — no yfinance autofill.
     cfg.setdefault("ticker", ticker)
-    auto_fetch.auto_fill_valuation_inputs(cfg)
-    auto_fetch.auto_fill_peer_market_data(cfg)
-    auto_fetch.auto_fill_dividend_inputs(cfg)
 
     summary = valuation_lenses.calculate_multi_lens_valuation(
         cfg, scenario_grid=scenario_grid
@@ -309,9 +263,6 @@ def _refresh_all_valuations_impl(force: bool = False,
     def _refresh_one(ticker: str) -> str:
         cfg = dict(loaded[ticker])
         cfg.setdefault("ticker", ticker)
-        auto_fetch.auto_fill_valuation_inputs(cfg)
-        auto_fetch.auto_fill_peer_market_data(cfg)
-        auto_fetch.auto_fill_dividend_inputs(cfg)
         summary = valuation_lenses.calculate_multi_lens_valuation(cfg, scenario_grid=False)
         cfg["valuation_summary"] = summary
         config_store.save_config(client, ticker, cfg, user_id=user_id)

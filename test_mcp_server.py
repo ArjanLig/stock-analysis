@@ -94,7 +94,7 @@ def test_mcp_env_vars_present(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_build_dcf_config_tool():
-    """build_dcf_config should resolve sector betas, fetch peers, and call build_config."""
+    """build_dcf_config should resolve sector betas and call build_config with no auto-selected peers."""
     import mcp_server
 
     with patch.object(mcp_server, "gather_data") as mock_gd:
@@ -103,11 +103,7 @@ def test_build_dcf_config_tool():
         mock_gd.synthetic_credit_rating.return_value = ("A+", 0.01)
         mock_gd.SIC_TO_SECTOR = {7372: ("Software (System & Application)", 1.23)}
         mock_gd.fetch_sector_margins.return_value = {"Software (System & Application)": 0.25}
-        mock_gd.find_peers.return_value = ["AAPL", "GOOGL"]
-        mock_gd.fetch_peer_data.return_value = [
-            {"ticker": "AAPL", "name": "Apple", "ev_revenue": 9.5, "ev_ebitda": 26.0,
-             "pe": 33.5, "op_margin": 0.315, "rev_growth": 0.05, "roic": 0.55},
-        ]
+        # Peer auto-selection removed — build_dcf_config no longer selects peers.
         mock_gd.build_config.return_value = {"company": "Test Corp", "ticker": "TEST"}
 
         financial_data = {
@@ -135,8 +131,8 @@ def test_build_dcf_config_tool():
         assert isinstance(sector_betas_arg[0], tuple)
         assert sector_betas_arg[0][0] == "Software (System & Application)"
 
-        # Verify fetch_peer_data was called (not just find_peers)
-        mock_gd.fetch_peer_data.assert_called_once_with(["AAPL", "GOOGL"])
+        # No peer auto-selection: build_config receives an empty peers list.
+        assert call_kwargs.kwargs.get("peers") == []
 
 
 # ---------------------------------------------------------------------------
@@ -290,10 +286,9 @@ def _make_test_financials():
 @patch("gather_data.fetch_stock_price", return_value=(150.0, 0, 0))
 @patch("gather_data.fetch_sector_betas", return_value={"Tech": 1.0})
 @patch("gather_data.fetch_sector_margins", return_value={"Tech": 0.25})
-@patch("gather_data.find_peers", return_value=[])
 @patch("gather_data.fetch_peer_data", return_value=[])
 def test_build_dcf_config_impl_real_mode(
-    mock_peers_data, mock_peers, mock_margins, mock_betas,
+    mock_peers_data, mock_margins, mock_betas,
     mock_price, mock_tips, mock_treasury,
 ):
     """_build_dcf_config_impl with valuation_basis='real' should use TIPS yield."""
@@ -390,6 +385,27 @@ def test_build_config_real_mode():
     # Real revenue growth should be lower than nominal by ~breakeven
     for real_g, nom_g in zip(cfg["revenue_growth"], cfg["nominal_revenue_growth"]):
         assert real_g < nom_g or nom_g <= 0
+
+
+def test_build_config_uses_neutral_placeholders():
+    """Auto-derived projection curves are removed: revenue_growth is flat at
+    terminal growth, op_margins flat at the last actual margin, and no peers
+    are auto-selected. Assumptions are authored via the MCP, not guessed."""
+    import gather_data
+    financials = _make_test_financials()
+    cfg = gather_data.build_config(
+        ticker="TEST", financials=financials, stock_price=100.0,
+        market_cap=100000, shares_yahoo=1000, risk_free_rate=0.04,
+        sector_betas=[("Tech", 1.0, 1.0)], credit_spread=0.01,
+        credit_rating="A", peers=[], company_name="Test Corp",
+        sector_margin=0.30,          # must be IGNORED now
+        consensus={"growth_current_year": 0.40},  # must be IGNORED now
+    )
+    # base_op_margin = oi[-1]/rev[-1] = 23000/95000 = 0.242
+    assert cfg["revenue_growth"] == [0.025] * 10   # flat at nominal terminal growth
+    assert cfg["op_margins"] == [0.242] * 10       # flat at last actual margin
+    assert cfg["terminal_margin"] == 0.242
+    assert cfg["peers"] == []
 
 
 def test_convert_to_real():

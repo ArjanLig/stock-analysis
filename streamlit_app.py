@@ -36,8 +36,6 @@ from gather_data import (
     fetch_sector_betas,
     fetch_sector_margins,
     fetch_sector_s2c,
-    fetch_consensus_estimates,
-    find_peers,
     fetch_peer_data,
     build_config,
     SIC_TO_SECTOR,
@@ -654,16 +652,6 @@ def calculate_multi_lens_valuation_remote(cfg: dict) -> dict:
     return valuation_lenses.calculate_multi_lens_valuation(cfg, scenario_grid=False)
 
 
-# Auto-fill helpers live in auto_fetch (shared with mcp_server). Re-exported
-# under their underscore-prefixed names so existing call sites in this file
-# (and tests that monkey-patch streamlit_app._auto_fill_*) keep working.
-from auto_fetch import (
-    auto_fill_dividend_inputs as _auto_fill_dividend_inputs,
-    auto_fill_peer_market_data as _auto_fill_peer_market_data,
-    auto_fill_valuation_inputs as _auto_fill_valuation_inputs,
-)
-
-
 def _refresh_stale_valuations(client, cfgs: dict, user_id: str | None = None,
                                force: bool = False, max_workers: int = 6,
                                on_progress=None) -> dict:
@@ -701,12 +689,6 @@ def _refresh_stale_valuations(client, cfgs: dict, user_id: str | None = None,
     def _refresh_one(ticker):
         cfg = dict(cfgs[ticker])
         cfg.setdefault("ticker", ticker)
-        # Auto-fetch market inputs, peer multiples, and dividend history
-        # before computing the summary. All are best-effort: yfinance
-        # failures don't block the orchestrator.
-        _auto_fill_valuation_inputs(cfg)
-        _auto_fill_peer_market_data(cfg)
-        _auto_fill_dividend_inputs(cfg)
         summary = calculate_multi_lens_valuation_remote(cfg)
         cfg["valuation_summary"] = summary
         save_config(client, ticker, cfg, user_id=user_id)
@@ -4221,7 +4203,6 @@ def _watchlist_overview():
                     manual_peers="",
                     margin_of_safety=MARGIN_OF_SAFETY_DEFAULT,
                     terminal_growth=TERMINAL_GROWTH_DEFAULT,
-                    n_peers=6,
                 )
                 save_config(_sb_client, ticker_clean, wl_cfg)
                 st.success(f"{ticker_clean} added to watchlist")
@@ -8387,7 +8368,7 @@ def _dcf_editor(ticker):
     )
 
 
-def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_growth, n_peers):
+def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_growth):
     """Run the full DCF pipeline and return (excel_bytes, cfg, credit_rating)."""
 
     buf = io.StringIO()
@@ -8492,8 +8473,6 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
                                 best_m = (sec_name, sec_margin)
                         if best_m and best_s > 0:
                             sector_margin = best_m[1]
-
-            consensus = fetch_consensus_estimates(ticker)
         pos = _flush_clean(buf, pos, status)
         status.write(f"\u2705 Credit: {credit_rating} (spread {credit_spread:.2%})")
 
@@ -8501,17 +8480,8 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
         peers = []
         peer_tickers = []
         if peer_mode == "Auto-discover":
-            status.write(f"\u23f3 Auto-discovering {n_peers} comparable companies...")
-            with contextlib.redirect_stdout(buf):
-                peer_tickers = find_peers(
-                    sic_code=sic_code,
-                    target_ticker=ticker,
-                    target_market_cap=market_cap,
-                    n_peers=n_peers,
-                )
-            pos = _flush_clean(buf, pos, status)
-            if peer_tickers:
-                status.write(f"\u2705 Found peers: {', '.join(peer_tickers)}")
+            # Peer auto-selection removed \u2014 no peers on a fresh analysis.
+            pass
         elif peer_mode == "Manual" and manual_peers:
             peer_tickers = [t.strip().upper() for t in manual_peers.split(",") if t.strip()]
 
@@ -8544,7 +8514,6 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
                 margin_of_safety=margin_of_safety,
                 terminal_growth=terminal_growth,
                 sector_margin=sector_margin,
-                consensus=consensus,
             )
         pos = _flush_clean(buf, pos, status)
 
