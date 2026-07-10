@@ -188,6 +188,30 @@ def _latest_fcf_yield(fund: dict, equity_market_value: float | None,
     return None
 
 
+def _apply_wacc_persistence(cfg: dict, wacc_list: list, tv_wacc: float,
+                            default_wacc: float) -> tuple[bool, bool]:
+    """Persist per-year / terminal WACC only when they deviate from the live
+    compute_wacc default, compared at 2-decimal-percent display precision (the
+    granularity the editor's inputs expose — sidesteps float-rounding false
+    positives). Otherwise remove the keys so the discount rate is always taken
+    live, preventing frozen-WACC drift after an rf/ERP change.
+
+    Mutates cfg. Returns (wacc_overridden, tv_overridden).
+    """
+    default_pct = round(default_wacc * 100, 2)
+    wacc_overridden = any(round(w * 100, 2) != default_pct for w in wacc_list)
+    tv_overridden = round(tv_wacc * 100, 2) != default_pct
+    if wacc_overridden:
+        cfg['wacc_per_year'] = wacc_list
+    else:
+        cfg.pop('wacc_per_year', None)
+    if tv_overridden:
+        cfg['terminal_wacc'] = tv_wacc
+    else:
+        cfg.pop('terminal_wacc', None)
+    return wacc_overridden, tv_overridden
+
+
 def _render_fv_cell(price: float, summary: dict | None,
                     legacy_intrinsic: float | None, theme: dict) -> str:
     """Return HTML for the Fair Value cell.
@@ -5353,19 +5377,21 @@ def _dcf_editor(ticker):
             )
             cfg['revenue_growth'] = growth
             cfg['op_margins'] = margins
-            cfg['wacc_per_year'] = _wacc_list
             cfg['tax_per_year'] = _tax_list
             cfg['stc_per_year'] = _stc_list
             cfg['terminal_growth'] = _tg
             cfg['terminal_margin'] = _tm
             cfg['terminal_tax'] = _tv_tax
             cfg['terminal_stc'] = _tv_stc
-            cfg['terminal_wacc'] = _tv_wacc
+            # Persist per-year / terminal WACC only when the user overrode the
+            # live compute_wacc default; otherwise leave them absent so the
+            # discount rate is always taken live (no frozen-WACC drift).
+            _apply_wacc_persistence(cfg, _wacc_list, _tv_wacc, _default_wacc)
             _new_snapshot = (
                 tuple(growth), tuple(margins),
-                tuple(_wacc_list), tuple(_tax_list),
+                tuple(cfg.get('wacc_per_year', [])), tuple(_tax_list),
                 tuple(_stc_list),
-                _tg, _tm, _tv_tax, _tv_stc, _tv_wacc,
+                _tg, _tm, _tv_tax, _tv_stc, cfg.get('terminal_wacc'),
             )
             if _new_snapshot != _prev_snapshot:
                 save_config(_sb_client, ticker, cfg)
