@@ -407,6 +407,23 @@ def _render_football_field(summary: dict | None, theme: dict) -> str:
                 f'</div>'
             )
             continue
+        # DCF renders as a single point at its mid — under opportunity_cost
+        # discounting that mid is the "index break-even" price (return = index),
+        # so it reads as one actionable number, not a scenario range.
+        dcf_mid = lens.get("fv_mid")
+        if key == "dcf" and dcf_mid is not None:
+            x_mid = _x(dcf_mid)
+            bar_rows.append(
+                f'<div class="ff-row">'
+                f'<div class="ff-label">{label}</div>'
+                f'<div class="ff-bar">'
+                f'<div class="ff-point" style="left:{x_mid:.1f}%"></div>'
+                f'</div>'
+                f'<div class="ff-range-label" style="color:{text}">'
+                f'${dcf_mid:.0f} · index break-even</div>'
+                f'</div>'
+            )
+            continue
         low = lens.get("fv_low") or 0
         high = lens.get("fv_high") or 0
         x_low, x_high = _x(low), _x(high)
@@ -444,6 +461,11 @@ def _render_football_field(summary: dict | None, theme: dict) -> str:
   position:absolute; top:0; bottom:0;
   background:linear-gradient(90deg,#6cc070,#d8a448,#d96a5a);
   border-radius:3px; opacity:0.85;
+}}
+.ff-point {{
+  position:absolute; top:50%; left:0; transform:translate(-50%,-50%);
+  width:11px; height:11px; border-radius:50%;
+  background:{accent}; box-shadow:0 0 3px rgba(0,0,0,0.45);
 }}
 .ff-range-label {{ width:120px; font-size:0.72rem; }}
 .ff-markers {{
