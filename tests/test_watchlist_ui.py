@@ -392,6 +392,54 @@ def test_render_football_field_handles_missing_lens():
     assert "(skipped)" in html
 
 
+def test_render_football_field_dcf_renders_as_point_not_range():
+    """The DCF row is a single point (its fv_mid = index break-even), not a
+    range bar. Every other lens keeps its range bar. With opportunity_cost
+    discounting the DCF mid is the price at which return = index, so it reads
+    as one actionable number."""
+    summary = {
+        "stock_price": 100.0,
+        "weighted_fv_low": 80.0,
+        "weighted_fv_mid": 100.0,
+        "weighted_fv_high": 120.0,
+        "buy_price": 80.0,
+        "lenses": {
+            "dcf":        {"fv_low": 90.0, "fv_mid": 100.0, "fv_high": 110.0},
+            "multiples":  {"fv_low": 70.0, "fv_mid": 95.0,  "fv_high": 130.0},
+            "historical": {"fv_low": 95.0, "fv_mid": 105.0, "fv_high": 115.0},
+            "dividend":   {"fv_low": 85.0, "fv_mid": 95.0,  "fv_high": 105.0},
+            "sotp":       {"fv_low": 88.0, "fv_mid": 98.0,  "fv_high": 108.0},
+        },
+    }
+    html = streamlit_app._render_football_field(summary, theme=_theme_stub())
+    # Exactly one point marker — the DCF row.
+    assert html.count('class="ff-point"') == 1
+    # The four non-DCF lenses still render range fills.
+    assert html.count('class="ff-range"') == 4
+    # DCF labelled as the index break-even, showing its mid ($100), not a range.
+    assert "index break-even" in html
+    assert "$100" in html
+
+
+def test_render_football_field_dcf_missing_falls_back_to_skipped():
+    """DCF lens absent (None) → no point; the row greys out like any missing
+    lens instead of crashing."""
+    summary = {
+        "stock_price": 100.0,
+        "weighted_fv_low": 90.0,
+        "weighted_fv_mid": 100.0,
+        "weighted_fv_high": 110.0,
+        "buy_price": 80.0,
+        "lenses": {
+            "dcf":        None,
+            "multiples":  {"fv_low": 70.0, "fv_mid": 95.0, "fv_high": 130.0},
+        },
+    }
+    html = streamlit_app._render_football_field(summary, theme=_theme_stub())
+    assert 'class="ff-point"' not in html
+    assert "(skipped)" in html
+
+
 def test_render_football_field_handles_no_summary():
     """Empty/None summary → returns a placeholder (no crash)."""
     assert streamlit_app._render_football_field(None, theme=_theme_stub()) != ""
