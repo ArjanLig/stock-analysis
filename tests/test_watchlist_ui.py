@@ -501,3 +501,69 @@ def test_fcf_yield_empty_fundamentals_from_failed_fetch():
 def test_fcf_yield_negative_fcf_is_reported_not_swallowed():
     fund = {"fcf": [-500.0], "shares": [100_000_000]}
     assert streamlit_app._latest_fcf_yield(fund, None, 100.0) == pytest.approx(-0.05)
+
+
+# ── WACC persistence: only store per-year / terminal WACC when overridden ──
+# Guards against re-freezing an auto-computed discount rate into the config,
+# which caused the detail page to drift from the watchlist multi-lens after the
+# opportunity_cost switch.
+
+def test_wacc_persistence_removes_default_per_year():
+    """Per-year WACC all equal to the live compute_wacc default → key removed
+    so the rate is taken live, and the caller learns it was not overridden."""
+    cfg = {"wacc_per_year": [0.0893] * 10}   # a previously-frozen value
+    default = 0.089269
+    wacc_over, tv_over = streamlit_app._apply_wacc_persistence(
+        cfg, [default] * 10, default, default)
+    assert "wacc_per_year" not in cfg
+    assert wacc_over is False
+    assert tv_over is False
+
+
+def test_wacc_persistence_default_at_display_rounding_still_removed():
+    """Widget returns the value rounded to display precision (8.93% ↔ 0.0893)
+    while the live default is 0.089269 — must be treated as 'not overridden'."""
+    cfg = {}
+    default = 0.089269
+    wacc_over, _ = streamlit_app._apply_wacc_persistence(
+        cfg, [0.0893] * 10, 0.0893, default)
+    assert "wacc_per_year" not in cfg
+    assert wacc_over is False
+
+
+def test_wacc_persistence_stores_overridden_per_year():
+    """A genuine per-year edit (differs at 2-decimal-percent precision) is
+    persisted verbatim."""
+    cfg = {}
+    default = 0.089269
+    edited = [default] * 10
+    edited[3] = 0.095          # 9.50% vs 8.93% default
+    wacc_over, _ = streamlit_app._apply_wacc_persistence(
+        cfg, edited, default, default)
+    assert cfg["wacc_per_year"] == edited
+    assert wacc_over is True
+
+
+def test_wacc_persistence_terminal_default_removed_override_stored():
+    cfg_default = {"terminal_wacc": 0.0798}
+    d = 0.089269
+    _, tv_over = streamlit_app._apply_wacc_persistence(
+        cfg_default, [d] * 10, d, d)
+    assert "terminal_wacc" not in cfg_default
+    assert tv_over is False
+
+    cfg_edit = {}
+    _, tv_over2 = streamlit_app._apply_wacc_persistence(
+        cfg_edit, [d] * 10, 0.10, d)      # terminal 10% vs 8.93% default
+    assert cfg_edit["terminal_wacc"] == 0.10
+    assert tv_over2 is True
+
+
+def test_wacc_persistence_self_heals_stale_frozen_value():
+    """A config still carrying a stale frozen WACC equal to today's live default
+    gets the key stripped on the next editor render."""
+    cfg = {"wacc_per_year": [0.0798] * 10, "terminal_wacc": 0.0798}
+    d = 0.089269
+    streamlit_app._apply_wacc_persistence(cfg, [d] * 10, d, d)
+    assert "wacc_per_year" not in cfg
+    assert "terminal_wacc" not in cfg
