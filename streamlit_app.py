@@ -239,7 +239,7 @@ def _render_fv_cell(price: float, summary: dict | None,
         # Lens-dots row WITH hover-tooltip "details" trigger that reveals
         # the football field. Pure CSS — no JS / no Streamlit widget.
         lens_dots_html = _render_lens_dots(lenses, theme)
-        football_field_html = _render_football_field(summary, theme)
+        football_field_html = _render_football_field(summary, theme, live_price=price)
         details_row = (
             f'<div class="ff-trigger-row">'
             f'  {lens_dots_html}'
@@ -370,12 +370,18 @@ def _render_robustness_table(cfg: dict, theme: dict) -> str:
             f'{header}{cap}{"".join(rows)}{foot}</div>')
 
 
-def _render_football_field(summary: dict | None, theme: dict) -> str:
+def _render_football_field(summary: dict | None, theme: dict,
+                           live_price: float | None = None) -> str:
     """Render a football-field HTML block: one horizontal range bar per lens
     + vertical markers for current price, weighted mid, and buy price.
 
     Used inside an st.popover triggered from the watchlist row. Pure CSS;
     width fixes at ~600px so the popover sizes naturally.
+
+    The Price marker tracks ``live_price`` when a positive value is given,
+    falling back to the stored ``summary['stock_price']`` snapshot otherwise.
+    ``summary['stock_price']`` is frozen at the last valuation refresh, so
+    without this the marker drifts stale versus the live watchlist row.
     """
     text = theme.get("text", "#eee")
     muted = theme.get("text_muted", "#888")
@@ -398,7 +404,10 @@ def _render_football_field(summary: dict | None, theme: dict) -> str:
     lens_order = list(FORWARD_LENSES)
     lenses = summary.get("lenses") or {}
 
-    price = summary.get("stock_price") or 0.0
+    # Live price wins over the frozen snapshot so the marker matches the
+    # live watchlist row; snapshot is the fallback when no live price is given.
+    price = (live_price if live_price and live_price > 0 else None) \
+        or summary.get("stock_price") or 0.0
     mid = summary.get("weighted_fv_mid") or 0.0
     buy = summary.get("buy_price") or 0.0
 

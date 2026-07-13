@@ -446,6 +446,56 @@ def test_render_football_field_handles_no_summary():
     assert streamlit_app._render_football_field({}, theme=_theme_stub()) != ""
 
 
+def _ff_summary_stale_price():
+    """Summary whose stored stock_price ($320.50) is a stale snapshot from the
+    last valuation refresh — the live price has since moved."""
+    return {
+        "stock_price": 320.50,
+        "weighted_fv_low": 300.0,
+        "weighted_fv_mid": 340.0,
+        "weighted_fv_high": 380.0,
+        "buy_price": 300.0,
+        "lenses": {
+            "dcf":        {"fv_low": 300.0, "fv_mid": 330.0, "fv_high": 360.0},
+            "multiples":  {"fv_low": 320.0, "fv_mid": 350.0, "fv_high": 380.0},
+        },
+    }
+
+
+def test_render_football_field_price_marker_uses_live_price():
+    """Regression: the Price marker must track the LIVE price, not the frozen
+    valuation_summary['stock_price'] snapshot. Given a stale snapshot of
+    $320.50 and a live price of $348.97, the marker shows the live price."""
+    summary = _ff_summary_stale_price()
+    html = streamlit_app._render_football_field(
+        summary, theme=_theme_stub(), live_price=348.97
+    )
+    assert "Price $348.97" in html
+    assert "Price $320.50" not in html
+
+
+def test_render_football_field_falls_back_to_summary_price_without_live():
+    """No usable live price (None or 0) → fall back to the stored snapshot so
+    the marker never disappears."""
+    summary = _ff_summary_stale_price()
+    for missing in (None, 0.0):
+        html = streamlit_app._render_football_field(
+            summary, theme=_theme_stub(), live_price=missing
+        )
+        assert "Price $320.50" in html
+
+
+def test_render_fv_cell_threads_live_price_into_football_field():
+    """The FV cell already receives the live price; it must pass it down so the
+    detail popover's Price marker matches the live row price, not the snapshot."""
+    summary = _ff_summary_stale_price()
+    html = streamlit_app._render_fv_cell(
+        price=348.97, summary=summary, legacy_intrinsic=None, theme=_theme_stub()
+    )
+    assert "Price $348.97" in html
+    assert "Price $320.50" not in html
+
+
 # ── FCF Yield cell ─────────────────────────────────────────────────────────
 # Regression guard: the watchlist blanked FCF Yield for tickers that had data,
 # because a failed SEC fetch was cached as an empty result for 24h. These pin
