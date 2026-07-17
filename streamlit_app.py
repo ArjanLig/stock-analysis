@@ -8793,7 +8793,13 @@ def _load_portfolio_data():
             st.session_state.pop(k, None)
 
     if "portfolio_data" not in st.session_state:
-        _broker_name = "Interactive Brokers" if get_active_broker() == "ibkr" else "Tastytrade"
+        _active_broker = get_active_broker()
+        if _active_broker == "ibkr":
+            _broker_name = "Interactive Brokers"
+        elif _active_broker == "t212":
+            _broker_name = "Trading 212"
+        else:
+            _broker_name = "Tastytrade"
         with st.spinner(f"Fetching portfolio data from {_broker_name}..."):
             try:
                 cost_basis, acct = fetch_portfolio_data()
@@ -8804,7 +8810,12 @@ def _load_portfolio_data():
                 if _is_auth_error(e):
                     logger.warning("Broker auth failed — clearing token so user can reconnect")
                     log_error("AUTH_ERROR", "Broker session expired", page="Portfolio", metadata={"broker": get_active_broker()})
-                    st.session_state.pop("tt_refresh_token", None)
+                    if _active_broker == "t212":
+                        st.session_state.pop("t212_credentials", None)
+                    elif _active_broker == "ibkr":
+                        st.session_state.pop("ibkr_credentials", None)
+                    else:
+                        st.session_state.pop("tt_refresh_token", None)
                     st.session_state.pop("portfolio_data", None)
                     st.error("Your broker session has expired. Please reconnect via **Account > Broker Connections**.")
                 else:
