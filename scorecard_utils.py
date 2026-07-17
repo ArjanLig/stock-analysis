@@ -98,10 +98,12 @@ def compute_roce_metric(fund, cfg=None):
 
     roce_pcts, ce_ta_ratios = [], []
     for i in range(n):
+        oi_v = oi_w[i] if i < len(oi_w) else None
         ta_v = ta_w[i] if i < len(ta_w) else None
         cl_v = cl_w[i] if i < len(cl_w) else None
-        # Float test uses the ORIGINAL CE = TA − CL (unchanged).
-        if ta_v and ta_v > 0 and cl_v is not None:
+        # Float test uses the ORIGINAL CE = TA − CL (unchanged, incl. the
+        # original oi-present gate).
+        if oi_v is not None and ta_v and ta_v > 0 and cl_v is not None:
             ce_orig = ta_v - cl_v
             ce_ta_ratios.append(max(ce_orig, 0) / ta_v)
         # ROCE value uses the excess-liquidity-adjusted CE, with ceiling cap.
