@@ -1425,3 +1425,23 @@ def test_premortem_dict_accepts_string_and_strips_bullets():
     d = mcp_server._premortem_dict(sell="- a\n- b\n\n  c ")
     assert d["sell"] == ["a", "b", "c"]
     assert d["add"] == [] and d["current"] == ""
+
+
+def test_headline_roce_uses_excess_adjusted_and_flags_capped():
+    import mcp_server
+    fund = {
+        "years": [2022, 2023],
+        "operating_income": [30.0, 20.0],
+        "total_assets": [50.0, 100.0],
+        "current_liabilities": [10.0, 20.0],
+        "cash": [200.0, 0.0],
+        "short_term_investments": [0.0, 0.0], "long_term_investments": [0.0, 0.0],
+        "total_debt": [0.0, 100.0],
+        "operating_lease_liabilities": [0.0, 0.0], "finance_lease_liabilities": [0.0, 0.0],
+        "fcf": [None, None], "cash_flow": [None, None],
+    }
+    h = mcp_server._compute_fundamentals_headline(fund, {})
+    # latest year (2023) is net-debt normal ROCE 20/80 = 25%
+    assert round(h["roce_latest_pct"], 1) == 25.0
+    # yr0 was capped (CE≤0) → headline flags it
+    assert h["roce_capped"] is True

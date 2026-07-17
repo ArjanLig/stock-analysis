@@ -606,7 +606,9 @@ def _phase_gate_metrics(fund):
     """Extra metrics for the phase-aware ROCE gate (robustness engine, see
     specs/2026-06-16-phase-aware-roce-gate-design): Rule of 40 (3y revenue CAGR
     + FCF margin), incremental ROIC (3-delta, best-effort), and latest-year
-    ROCE + rising trend on the same EBIT/(TA−CL) basis as the headline ROCE.
+    ROCE + rising trend on the same excess-liquidity-adjusted basis as the
+    headline ROCE (scorecard_utils.roce_for_year — shared with
+    compute_roce_metric so mean and latest/trend cannot diverge).
     Every key defaults to None when not computable."""
     out = {
         "revenue_cagr_3y_pct": None, "fcf_margin_pct": None, "rule_of_40_pct": None,
@@ -620,8 +622,6 @@ def _phase_gate_metrics(fund):
     debt = fund.get("total_debt") or []
     eq = fund.get("total_equity") or []
     cash = fund.get("cash") or []
-    ta = fund.get("total_assets") or []
-    cl = fund.get("current_liabilities") or []
     n = len(fund.get("years") or [])
 
     # Revenue 3y CAGR over the last 4 usable revenue points (steadier than YoY)
@@ -671,19 +671,22 @@ def _phase_gate_metrics(fund):
         if d_inv > 0:  # guard: shrinking capital → sign-flipped artifact
             out["incremental_roic_pct"] = d_nopat / d_inv * 100
 
-    # Latest-year ROCE + rising trend, EBIT/(TA−CL) (cash kept, like headline)
+    # Latest-year ROCE + rising trend, excess-liquidity-adjusted (shared helper
+    # with compute_roce_metric so mean and latest/trend cannot diverge).
+    from scorecard_utils import roce_for_year
     roce = {}
+    any_capped = False
     for i in range(n):
-        oi_v = oi[i] if i < len(oi) else None
-        ta_v = ta[i] if i < len(ta) else None
-        cl_v = cl[i] if i < len(cl) else None
-        if oi_v is not None and ta_v and cl_v is not None and (ta_v - cl_v) > 0:
-            roce[i] = oi_v / (ta_v - cl_v) * 100
+        pct, capped = roce_for_year(fund, i)
+        if pct is not None:
+            roce[i] = pct
+            any_capped = any_capped or capped
     rk = sorted(roce)
     if rk:
         out["roce_latest_pct"] = roce[rk[-1]]
         if len(rk) >= 2:
             out["roce_rising"] = roce[rk[-1]] > roce[rk[max(0, len(rk) - 4)]]
+    out["roce_capped"] = any_capped
     return out
 
 
