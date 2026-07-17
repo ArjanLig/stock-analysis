@@ -20,6 +20,9 @@ LIVE_BASE_URL = "https://live.trading212.com/api/v0"
 # per-endpoint rate limits without a shared client object.
 _LAST_CALL: dict = {}
 
+# Module-level cache of instrument metadata (code -> resolved info).
+_INSTRUMENTS_CACHE: dict | None = None
+
 
 def _get(path: str, creds: dict, *, min_interval: float = 1.0, max_retries: int = 3):
     """GET a T212 endpoint with throttling + 429 retry. Returns parsed JSON."""
@@ -46,3 +49,37 @@ def _auth_header(creds: dict) -> dict:
     """Build the HTTP Basic auth header from key+secret."""
     raw = f"{creds['t212_api_key']}:{creds['t212_api_secret']}".encode()
     return {"Authorization": "Basic " + base64.b64encode(raw).decode()}
+
+
+def _suffix_strip(code: str) -> dict:
+    """Fallback: derive symbol + exchange from a T212 code like AAPL_US_EQ."""
+    parts = code.split("_")
+    symbol = parts[0] if parts else code
+    exchange = parts[1] if len(parts) > 2 else ""
+    return {"symbol": symbol, "currency": "", "isin": "", "exchange": exchange}
+
+
+def _resolve_instruments(creds: dict) -> dict:
+    """Fetch + cache the T212 instrument metadata as code -> resolved dict."""
+    global _INSTRUMENTS_CACHE
+    if _INSTRUMENTS_CACHE is not None:
+        return _INSTRUMENTS_CACHE
+    out = {}
+    for item in _get("/equity/metadata/instruments", creds, min_interval=5.0):
+        code = item.get("ticker")
+        if not code:
+            continue
+        fb = _suffix_strip(code)
+        out[code] = {
+            "symbol": item.get("shortName") or fb["symbol"],
+            "currency": item.get("currencyCode") or "",
+            "isin": item.get("isin") or "",
+            "exchange": fb["exchange"],
+        }
+    _INSTRUMENTS_CACHE = out
+    return out
+
+
+def _clean(code: str, creds: dict) -> dict:
+    """Resolve one instrument code, falling back to suffix-strip if unknown."""
+    return _resolve_instruments(creds).get(code) or _suffix_strip(code)

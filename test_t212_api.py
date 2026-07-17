@@ -15,6 +15,13 @@ import t212_api
 
 _CREDS = {"t212_api_key": "KEY123", "t212_api_secret": "SECRET456"}
 
+_META = [
+    {"ticker": "AAPL_US_EQ", "shortName": "AAPL", "currencyCode": "USD",
+     "isin": "US0378331005"},
+    {"ticker": "ASML_NL_EQ", "shortName": "ASML", "currencyCode": "EUR",
+     "isin": "NL0010273215"},
+]
+
 
 class TestAuthHeader(unittest.TestCase):
     def test_auth_header_is_basic_base64_key_colon_secret(self):
@@ -60,3 +67,32 @@ class TestGet(unittest.TestCase):
         mock_get.return_value = self._resp(429, headers={"Retry-After": "1"})
         with self.assertRaises(requests.HTTPError):
             t212_api._get("/equity/positions", _CREDS, max_retries=2)
+
+
+class TestResolve(unittest.TestCase):
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None  # reset module cache between tests
+
+    @patch("t212_api._get")
+    def test_resolves_us_and_non_us_codes(self, mock_get):
+        mock_get.return_value = _META
+        m = t212_api._resolve_instruments(_CREDS)
+        self.assertEqual(m["AAPL_US_EQ"]["symbol"], "AAPL")
+        self.assertEqual(m["AAPL_US_EQ"]["currency"], "USD")
+        self.assertEqual(m["ASML_NL_EQ"]["symbol"], "ASML")
+        self.assertEqual(m["ASML_NL_EQ"]["currency"], "EUR")
+        self.assertEqual(m["ASML_NL_EQ"]["exchange"], "NL")
+
+    @patch("t212_api._get")
+    def test_metadata_fetched_once_and_cached(self, mock_get):
+        mock_get.return_value = _META
+        t212_api._resolve_instruments(_CREDS)
+        t212_api._resolve_instruments(_CREDS)
+        self.assertEqual(mock_get.call_count, 1)
+
+    @patch("t212_api._get")
+    def test_clean_falls_back_to_suffix_strip(self, mock_get):
+        mock_get.return_value = _META
+        info = t212_api._clean("TSLA_US_EQ", _CREDS)  # not in _META
+        self.assertEqual(info["symbol"], "TSLA")
+        self.assertEqual(info["exchange"], "US")
