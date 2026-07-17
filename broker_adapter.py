@@ -7,7 +7,6 @@ or credentials; the adapter handles that internally.
 """
 
 import streamlit as st
-import t212_api
 import tastytrade_api
 
 
@@ -24,18 +23,15 @@ def get_active_broker():
     if explicit:
         return explicit
     # Auto-detect: if only one broker is connected, use that one.
-    # If more than one are connected the sidebar switcher should be shown so
-    # the user picks explicitly; default to tastytrade until they do.
+    # If both are connected the sidebar switcher should be shown so the
+    # user picks explicitly; default to tastytrade until they do.
     has_tt = bool(st.session_state.get("tt_refresh_token"))
     has_ibkr = bool(st.session_state.get("ibkr_credentials"))
-    has_t212 = bool(st.session_state.get("t212_credentials"))
-    if has_t212 and not has_tt and not has_ibkr:
-        return "t212"
     if has_ibkr and not has_tt:
         return "ibkr"
     if has_tt and not has_ibkr:
         return "tastytrade"
-    # Multiple connected — default to tastytrade (sidebar switcher lets user change)
+    # Both connected — default to tastytrade (sidebar switcher lets user change)
     return "tastytrade"
 
 
@@ -44,7 +40,6 @@ def has_active_broker():
     return bool(
         st.session_state.get("tt_refresh_token")
         or st.session_state.get("ibkr_credentials")
-        or st.session_state.get("t212_credentials")
     )
 
 
@@ -82,56 +77,29 @@ def _get_refresh_token():
     return _TT_RT_CACHE
 
 
-# Module-level cache mirroring _TT_RT_CACHE above, so worker threads can
-# resolve T212 credentials too. Single-user app, no cross-user concern.
-_T212_CREDS_CACHE: dict | None = None
-
-
-def _get_t212_creds():
-    """Get T212 credentials, working from main and worker threads (see _get_refresh_token)."""
-    global _T212_CREDS_CACHE
-    try:
-        creds = st.session_state.get("t212_credentials")
-        if creds:
-            _T212_CREDS_CACHE = creds
-            return creds
-    except Exception:
-        pass
-    return _T212_CREDS_CACHE
-
-
 # ---------------------------------------------------------------------------
 # Routed broker-specific functions
 # ---------------------------------------------------------------------------
 
 def fetch_portfolio_data():
-    if get_active_broker() == "t212":
-        return t212_api.fetch_portfolio_data(_get_t212_creds())
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_portfolio_data()
     return tastytrade_api.fetch_portfolio_data(refresh_token=_get_refresh_token())
 
 
 def fetch_account_balances():
-    if get_active_broker() == "t212":
-        return t212_api.fetch_account_balances(_get_t212_creds())
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_account_balances()
     return tastytrade_api.fetch_account_balances(refresh_token=_get_refresh_token())
 
 
 def fetch_margin_requirements():
-    # T212 has no margin (cash/no-leverage broker); no TT/IBKR equivalent applies.
-    if get_active_broker() == "t212":
-        return {}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_margin_requirements()
     return tastytrade_api.fetch_margin_requirements(refresh_token=_get_refresh_token())
 
 
 def fetch_margin_for_position(ticker, quantity):
-    if get_active_broker() == "t212":
-        return None
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_margin_for_position(ticker, quantity)
     return tastytrade_api.fetch_margin_for_position(
@@ -140,8 +108,6 @@ def fetch_margin_for_position(ticker, quantity):
 
 
 def fetch_net_liq_history(time_back="1y"):
-    if get_active_broker() == "t212":
-        return []
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_net_liq_history(time_back=time_back)
     return tastytrade_api.fetch_net_liq_history(
@@ -150,41 +116,30 @@ def fetch_net_liq_history(time_back="1y"):
 
 
 def fetch_portfolio_greeks():
-    # T212 is options-only-free (equities only for now); no Greeks to report.
-    if get_active_broker() == "t212":
-        return {"positions": [], "totals": {"delta": 0, "theta": 0, "gamma": 0, "vega": 0}}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_portfolio_greeks()
     return tastytrade_api.fetch_portfolio_greeks(refresh_token=_get_refresh_token())
 
 
 def fetch_greeks_and_bwd():
-    if get_active_broker() == "t212":
-        return fetch_portfolio_greeks(), fetch_beta_weighted_delta()
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_greeks_and_bwd()
     return tastytrade_api.fetch_greeks_and_bwd(refresh_token=_get_refresh_token())
 
 
 def fetch_beta_weighted_delta():
-    if get_active_broker() == "t212":
-        return {"positions": [], "portfolio_bwd": 0, "spy_price": 0, "dollar_per_1pct": 0}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_beta_weighted_delta()
     return tastytrade_api.fetch_beta_weighted_delta(refresh_token=_get_refresh_token())
 
 
 def fetch_yearly_transfers():
-    if get_active_broker() == "t212":
-        return {}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_yearly_transfers()
     return tastytrade_api.fetch_yearly_transfers(refresh_token=_get_refresh_token())
 
 
 def fetch_margin_interest():
-    if get_active_broker() == "t212":
-        return {"current_month": 0, "ytd": 0, "total": 0, "monthly": {}}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_margin_interest()
     return tastytrade_api.fetch_margin_interest(refresh_token=_get_refresh_token())
@@ -198,8 +153,6 @@ def fetch_option_chain(
     num_strikes=8,
     fallback_price=0.0,
 ):
-    if get_active_broker() == "t212":
-        return {"underlying_price": fallback_price, "expirations": []}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_option_chain(
             ticker,
@@ -221,8 +174,6 @@ def fetch_option_chain(
 
 
 def fetch_earnings_dates(tickers):
-    if get_active_broker() == "t212":
-        return {t: None for t in tickers}
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_earnings_dates(tickers)
     return tastytrade_api.fetch_earnings_dates(
