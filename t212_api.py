@@ -114,3 +114,21 @@ def fetch_portfolio_data(creds: dict):
     info = _get("/equity/account/info", creds, min_interval=5.0)
     account_id = str(info.get("id") or "")
     return cost_basis, account_id
+
+
+def fetch_account_balances(creds: dict) -> dict:
+    """Return the app balances dict from T212 account cash."""
+    cash = _get("/equity/account/cash", creds, min_interval=5.0) or {}
+    total = cash.get("total") or 0.0
+    free = cash.get("free") or 0.0
+    return {
+        "net_liquidating_value": total,
+        "cash_balance": free,
+        "equity_buying_power": free,
+        "derivative_buying_power": free,
+        "maintenance_requirement": 0.0,
+        "maintenance_excess": 0.0,
+        "margin_equity": total,
+        "used_derivative_buying_power": 0.0,
+        "reg_t_margin_requirement": 0.0,
+    }

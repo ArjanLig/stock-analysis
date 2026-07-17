@@ -130,3 +130,22 @@ class TestPortfolio(unittest.TestCase):
         self.assertEqual(cb["AAPL"]["currency"], "USD")
         self.assertEqual(cb["ASML"]["currency"], "EUR")
         self.assertEqual(cb["ASML"]["exchange"], "NL")
+
+
+class TestBalances(unittest.TestCase):
+    @patch("t212_api._get")
+    def test_cash_maps_to_balances_shape(self, mock_get):
+        mock_get.return_value = {
+            "free": 250.0, "total": 10250.0, "invested": 10000.0,
+            "ppl": 250.0, "result": 0.0, "pieCash": 0.0, "blocked": 0.0,
+        }
+        b = t212_api.fetch_account_balances(_CREDS)
+        self.assertEqual(b["net_liquidating_value"], 10250.0)
+        self.assertEqual(b["cash_balance"], 250.0)
+        self.assertEqual(b["margin_equity"], 10250.0)
+        self.assertEqual(b["maintenance_requirement"], 0.0)
+        # all expected keys present
+        for k in ("equity_buying_power", "derivative_buying_power",
+                  "maintenance_excess", "used_derivative_buying_power",
+                  "reg_t_margin_requirement"):
+            self.assertIn(k, b)
