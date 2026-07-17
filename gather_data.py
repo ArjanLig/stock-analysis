@@ -2629,6 +2629,7 @@ OVERRIDABLE_FUNDAMENTALS_FIELDS = (
     "ppe", "da", "gross_profit", "eps", "dividends_per_share",
     "short_term_debt", "operating_lease_liabilities",
     "finance_lease_liabilities", "pension_liabilities",
+    "short_term_investments", "long_term_investments",
 )
 
 
@@ -2781,6 +2782,8 @@ def fetch_fundamentals(ticker, n_years=10):
         # Extended debt-like obligations for adjusted Net Debt (Moody's/S&P style)
         "short_term_debt", "operating_lease_liabilities",
         "finance_lease_liabilities", "pension_liabilities",
+        # Marketable holdings for the ROCE excess-liquidity strip
+        "short_term_investments", "long_term_investments",
     ]
 
     def _safe(val):
@@ -2879,6 +2882,14 @@ def fetch_fundamentals(ticker, n_years=10):
             "da": ["DepreciationDepletionAndAmortization",
                    "DepreciationAndAmortization"],
             "gross_profit": ["GrossProfit"],
+            "short_term_investments": ["ShortTermInvestments",
+                                       "MarketableSecuritiesCurrent",
+                                       "AvailableForSaleSecuritiesCurrent",
+                                       "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
+            "long_term_investments": ["LongTermInvestments",
+                                      "InvestmentsAndAdvances",
+                                      "MarketableSecuritiesNoncurrent",
+                                      "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"],
         }
         for our_key, tags in _extra_tags.items():
             tag_data = _try_tags(facts, tags, n_years)
