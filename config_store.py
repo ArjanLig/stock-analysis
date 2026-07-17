@@ -401,6 +401,44 @@ def delete_ibkr_credentials(client):
 
 
 # ---------------------------------------------------------------------------
+# Trading 212 credential bundle
+# ---------------------------------------------------------------------------
+
+T212_CREDENTIAL_KEYS = [
+    "t212_api_key",
+    "t212_api_secret",
+]
+
+
+def save_t212_credentials(client, creds):
+    """Save all T212 credentials. creds is a dict with keys matching T212_CREDENTIAL_KEYS."""
+    for key in T212_CREDENTIAL_KEYS:
+        if creds.get(key):
+            save_credential(client, key, creds[key])
+
+
+def load_t212_credentials(client):
+    """Load all T212 credentials. Returns dict or None if not connected."""
+    result = {}
+    for key in T212_CREDENTIAL_KEYS:
+        val = load_credential(client, key)
+        if val:
+            result[key] = val
+    if "t212_api_key" in result and "t212_api_secret" in result:
+        return result
+    return None
+
+
+def delete_t212_credentials(client):
+    """Delete all T212 credentials."""
+    for key in T212_CREDENTIAL_KEYS:
+        try:
+            delete_credential(client, key)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Page view analytics
 # ---------------------------------------------------------------------------
 
