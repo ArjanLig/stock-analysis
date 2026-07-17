@@ -21,6 +21,12 @@ Prior research: `Obsidian/lazytheta-vault/Idea - Trading 212 API integration.md`
   equity/ETF only and exposes no equivalent.
 - Multi-user broker credentials — the broker side of the app is single-user
   (see `broker_adapter.py:55`), so no per-user isolation is needed.
+- **Non-US price fetch and DCF valuation** — the user runs US names today but
+  intends to add non-US names later. v1 *resolves and displays* non-US positions
+  correctly (right symbol + currency), but the Yahoo exchange-suffix price fetch
+  (`.AS` / `.PA` / `.L`) and DCF valuation for non-US names are **v2** (same build
+  as the "European listings" track). The normalisation seam is designed now so
+  those extend trivially and no non-US position falls over.
 
 ## Architecture — follows the existing broker pattern
 
@@ -74,6 +80,8 @@ Built from `GET /equity/positions`:
 | `option_pl`, `dividends`      | `0`                                            |
 | `total_credits`, `total_debits` | `0` (no trade history in v1)                  |
 | `trades`, `wheels`            | `[]`                                            |
+| `currency`                    | instrument currency (resolved — see below)      |
+| `exchange`                    | instrument exchange (resolved — see below)      |
 
 `account_id` from `GET /equity/account/info`.
 
@@ -81,12 +89,27 @@ Built from `GET /equity/positions`:
 balances dict (cash / invested / total value), matching the field names the
 portfolio view already consumes from TT/IBKR.
 
-### Ticker normalisation (gotcha)
-T212 positions use instrument codes (e.g. `AAPL_US_EQ`), not bare tickers. Map to
-a clean symbol (`AAPL`) by stripping the `_<EXCHANGE>_EQ` suffix. Where the suffix
-convention does not yield a usable US symbol, fall back to the instruments
-endpoint (ISIN / shortName) — but keep v1 to suffix-stripping unless a real case
-needs more. This mapping is pinned by tests.
+### Ticker normalisation — exchange-agnostic (seam for non-US)
+T212 positions use instrument codes (e.g. `AAPL_US_EQ`, `ASML_NL_EQ`), not bare
+tickers, and the naive `_<EXCHANGE>_EQ` strip silently assumes a US symbol — it
+breaks or mislabels non-US names. Since non-US names are coming (see Non-goals),
+the seam is built exchange-agnostic now:
+
+- Resolve each instrument code to `{symbol, isin, exchange, currency}` via the
+  T212 **instruments metadata endpoint** (`GET /equity/metadata/instruments`),
+  cached in-process for the session. This works for any exchange, not just US.
+- Suffix-stripping is only a last-resort fallback when metadata is unavailable.
+- Each normalised position carries `currency` and `exchange` so a non-US holding
+  displays with the correct symbol and currency in v1. This is also the hook the
+  later non-US work needs: it ties into the app's missing `currency` field (the
+  `$`-hardcode / label issue) and the European-fundamentals gap documented in the
+  European-listings research.
+- v1 does **not** map `exchange` → Yahoo suffix or fetch non-US prices/valuations
+  (that is v2). A non-US position shows position + cost + currency, but its live
+  price / DCF stay blank until v2.
+
+This resolution (including `ASML_NL_EQ` → symbol `ASML`, currency `EUR`,
+exchange populated) is pinned by tests.
 
 ## Gap handling (equity-only broker)
 
@@ -126,7 +149,10 @@ New `test_t212_api.py` in the style of `test_ibkr_api.py` / `test_tastytrade_api
 
 - Basic-auth header construction from key+secret.
 - Throttle + 429 retry using `x-ratelimit-*` / retry hint headers.
-- `positions` → normalised `cost_basis` dict, including `AAPL_US_EQ` → `AAPL`.
+- Instrument-code resolution via mocked metadata: `AAPL_US_EQ` → `AAPL`/USD and a
+  non-US case `ASML_NL_EQ` → `ASML`/EUR (symbol, currency, exchange populated).
+- Metadata-unavailable fallback path (suffix strip) still yields a sane symbol.
+- `positions` → normalised `cost_basis` dict carrying `currency` / `exchange`.
 - `account/summary` → balances dict.
 - Adapter `"t212"` branch returns the correct neutral empties for the gap
   functions.
@@ -138,8 +164,12 @@ Must pass (CLAUDE.md rule 2) and lint clean (`ruff`, rule 1).
 - **Beta instability**: T212's auth schema changed recently (old beta = single
   token header; now key+secret). Community libs may target the old schema — do
   not rely on them blindly; implement against the current docs.
-- Confirm the exact JSON field names on `positions` / `summary` against the live
-  API during implementation (docs are the source of truth).
+- Confirm the exact JSON field names on `positions` / `summary` / `metadata`
+  against the live API during implementation (docs are the source of truth),
+  including how currency/exchange are reported per instrument.
+- v2 (non-US pricing/valuation) is out of scope here but the seam is set: it will
+  reuse this `currency`/`exchange` and connect to the European-listings track
+  (currency field in the data model + non-EDGAR fundamentals source).
 - Deploy path: Streamlit Cloud from GitHub `main` — this lands via a normal
   merge to `main` once implemented and verified.
 
