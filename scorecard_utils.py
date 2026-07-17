@@ -12,6 +12,31 @@ import re
 # buyback-thin names sit well above this and stay on ROCE.
 FLOAT_CE_TA_THRESHOLD = 0.25
 
+ROCE_CEILING = 100.0  # per-year ROCE cap (%) for CE≤0 / capital-light names
+
+
+def _at(fund, key, i):
+    """Series element at year i, or 0.0 when the series or element is absent/None."""
+    seq = fund.get(key) or []
+    v = seq[i] if i < len(seq) else None
+    return v if v is not None else 0.0
+
+
+def excess_liquidity(fund, i):
+    """Non-operating liquidity at year i: max(0, marketables − debt).
+
+    marketables = cash + short_term_investments + long_term_investments
+    debt        = total_debt + operating_lease_liabilities + finance_lease_liabilities
+    Floored at 0 (net-debt names have no excess to strip).
+    """
+    liquid = (_at(fund, "cash", i)
+              + _at(fund, "short_term_investments", i)
+              + _at(fund, "long_term_investments", i))
+    debt = (_at(fund, "total_debt", i)
+            + _at(fund, "operating_lease_liabilities", i)
+            + _at(fund, "finance_lease_liabilities", i))
+    return max(0.0, liquid - debt)
+
 
 def compute_roce_metric(fund, cfg=None):
     """Single source of truth for the watchlist/detail/MCP quality metric.

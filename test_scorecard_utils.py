@@ -82,3 +82,41 @@ def test_manual_override_forces_roce_on_float():
     metric, val = compute_roce_metric(f, {"roce_metric_override": "ROCE"})
     assert metric == "ROCE"
     assert round(val, 1) == 50.0  # 10 / (100−80)
+
+
+from scorecard_utils import excess_liquidity
+
+
+def _fund_liq(cash=0, sti=0, lti=0, debt=0, opl=0, fnl=0, ta=0, cl=0, oi=0):
+    """Single-year fund for liquidity/CE helper tests."""
+    return {
+        "years": [2023],
+        "cash": [cash], "short_term_investments": [sti], "long_term_investments": [lti],
+        "total_debt": [debt], "operating_lease_liabilities": [opl],
+        "finance_lease_liabilities": [fnl],
+        "total_assets": [ta], "current_liabilities": [cl], "operating_income": [oi],
+    }
+
+
+def test_excess_liquidity_net_cash_counts_all_marketables():
+    # liquid = 100+50+30 = 180; debt = 20+10+5 = 35; excess = 145
+    f = _fund_liq(cash=100, sti=50, lti=30, debt=20, opl=10, fnl=5)
+    assert excess_liquidity(f, 0) == 145
+
+
+def test_excess_liquidity_floors_at_zero_when_net_debt():
+    # liquid = 30; debt = 100 → negative → floored to 0
+    f = _fund_liq(cash=30, debt=100)
+    assert excess_liquidity(f, 0) == 0
+
+
+def test_excess_liquidity_lt_investments_included():
+    # regression: LT investments are the bulk of the surplus (VEEV/PANW-like)
+    f = _fund_liq(cash=10, sti=0, lti=200, debt=0)
+    assert excess_liquidity(f, 0) == 210
+
+
+def test_excess_liquidity_missing_series_default_zero():
+    f = {"years": [2023], "cash": [40], "total_assets": [100],
+         "current_liabilities": [20], "operating_income": [10]}  # no investments/debt keys
+    assert excess_liquidity(f, 0) == 40
