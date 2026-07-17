@@ -73,8 +73,12 @@ def compute_roce_metric(fund, cfg=None):
     """Single source of truth for the watchlist/detail/MCP quality metric.
 
     Returns ``(metric, avg_value)`` where ``metric`` is ``'ROCE'`` or ``'ROE'``:
-      • ROCE = avg of EBIT / (Total Assets − Current Liabilities). Goodwill and
-        cash are NOT subtracted (vault methodology 2026-06-12).
+      • ROCE = avg of EBIT / (Total Assets − Current Liabilities − excess
+        liquidity), per roce_for_year. Goodwill is NOT subtracted (vault
+        methodology 2026-06-12); excess liquidity (net cash/investments) IS
+        stripped from the ROCE value, capped at ROCE_CEILING. The float-test
+        denominator (ce_ta_ratios, used for auto ROE fallback) still uses the
+        ORIGINAL CE = TA − CL, unadjusted for excess liquidity.
       • ROE  = avg of Net Income / Total Equity.
 
     Metric selection:
@@ -94,14 +98,16 @@ def compute_roce_metric(fund, cfg=None):
 
     roce_pcts, ce_ta_ratios = [], []
     for i in range(n):
-        oi_v = oi_w[i] if i < len(oi_w) else None
         ta_v = ta_w[i] if i < len(ta_w) else None
         cl_v = cl_w[i] if i < len(cl_w) else None
-        if oi_v is not None and ta_v and ta_v > 0 and cl_v is not None:
-            ce = ta_v - cl_v
-            ce_ta_ratios.append(max(ce, 0) / ta_v)
-            if ce > 0:
-                roce_pcts.append(oi_v / ce * 100)
+        # Float test uses the ORIGINAL CE = TA − CL (unchanged).
+        if ta_v and ta_v > 0 and cl_v is not None:
+            ce_orig = ta_v - cl_v
+            ce_ta_ratios.append(max(ce_orig, 0) / ta_v)
+        # ROCE value uses the excess-liquidity-adjusted CE, with ceiling cap.
+        pct, _capped = roce_for_year(fund, i)
+        if pct is not None:
+            roce_pcts.append(pct)
 
     roe_pcts = []
     for i in range(n):

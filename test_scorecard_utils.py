@@ -152,3 +152,54 @@ def test_roce_for_year_clamps_above_ceiling():
 def test_roce_for_year_missing_inputs_returns_none():
     f = {"years": [2023], "total_assets": [100], "current_liabilities": [20]}  # no oi
     assert roce_for_year(f, 0) == (None, False)
+
+
+def test_compute_roce_strips_excess_liquidity_raises_roce():
+    # Two-year cash-rich name. Old: EBIT/(TA−CL). New: EBIT/(TA−CL−excess).
+    # y: TA 200, CL 40 → TA−CL 160. excess = cash 100 (net cash, no debt).
+    # New CE = 60. EBIT 30 → 50% (old was 30/160 = 18.75%).
+    f = {
+        "years": [2022, 2023],
+        "operating_income": [30.0, 30.0],
+        "total_assets": [200.0, 200.0],
+        "current_liabilities": [40.0, 40.0],
+        "cash": [100.0, 100.0],
+        "short_term_investments": [0.0, 0.0], "long_term_investments": [0.0, 0.0],
+        "total_debt": [0.0, 0.0],
+        "operating_lease_liabilities": [0.0, 0.0], "finance_lease_liabilities": [0.0, 0.0],
+    }
+    metric, val = compute_roce_metric(f)
+    assert metric == "ROCE"
+    assert round(val, 1) == 50.0
+
+
+def test_compute_roce_cash_rich_name_does_not_flip_to_roe():
+    # Float-test denominator stays (TA−CL)/TA = 160/200 = 0.80 ≥ 0.25 → ROCE,
+    # even though the excess strip makes the ROCE-value CE small.
+    f = {
+        "years": [2023],
+        "operating_income": [30.0], "total_assets": [200.0], "current_liabilities": [40.0],
+        "cash": [150.0], "short_term_investments": [0.0], "long_term_investments": [0.0],
+        "total_debt": [0.0], "operating_lease_liabilities": [0.0],
+        "finance_lease_liabilities": [0.0],
+        "net_income": [25.0], "total_equity": [50.0],
+    }
+    metric, _ = compute_roce_metric(f)
+    assert metric == "ROCE"  # NOT flipped to ROE
+
+
+def test_compute_roce_keeps_ce_negative_year_at_ceiling():
+    # One capital-light year (CE≤0 → 100%) + one normal year (25%) → mean 62.5%.
+    f = {
+        "years": [2022, 2023],
+        "operating_income": [30.0, 20.0],
+        "total_assets": [50.0, 100.0],
+        "current_liabilities": [10.0, 20.0],
+        "cash": [200.0, 0.0],  # yr0 excess 200 > TA−CL 40 → CE≤0 → 100%
+        "short_term_investments": [0.0, 0.0], "long_term_investments": [0.0, 0.0],
+        "total_debt": [0.0, 100.0],  # yr1 net debt → no strip → 20/80 = 25%
+        "operating_lease_liabilities": [0.0, 0.0], "finance_lease_liabilities": [0.0, 0.0],
+    }
+    metric, val = compute_roce_metric(f)
+    assert metric == "ROCE"
+    assert round(val, 1) == 62.5
