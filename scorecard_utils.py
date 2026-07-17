@@ -38,6 +38,37 @@ def excess_liquidity(fund, i):
     return max(0.0, liquid - debt)
 
 
+def capital_employed(fund, i):
+    """TA − CL − excess_liquidity at year i. May be ≤ 0 for capital-light names
+    (handled by roce_for_year's ceiling)."""
+    return (_at(fund, "total_assets", i)
+            - _at(fund, "current_liabilities", i)
+            - excess_liquidity(fund, i))
+
+
+def roce_for_year(fund, i):
+    """Per-year ROCE = EBIT / (excess-liquidity-adjusted CE), with a ceiling cap.
+
+    Returns (pct, capped). (None, False) when EBIT/TA/CL are unavailable.
+    CE ≤ 0 → maximally capital-efficient → ceiling (a pass), year retained.
+    """
+    oi_seq = fund.get("operating_income") or []
+    ta_seq = fund.get("total_assets") or []
+    cl_seq = fund.get("current_liabilities") or []
+    oi_v = oi_seq[i] if i < len(oi_seq) else None
+    ta_v = ta_seq[i] if i < len(ta_seq) else None
+    cl_v = cl_seq[i] if i < len(cl_seq) else None
+    if oi_v is None or ta_v is None or cl_v is None:
+        return (None, False)
+    ce = capital_employed(fund, i)
+    if ce <= 0:
+        return (ROCE_CEILING, True)
+    pct = oi_v / ce * 100
+    if pct > ROCE_CEILING:
+        return (ROCE_CEILING, True)
+    return (pct, False)
+
+
 def compute_roce_metric(fund, cfg=None):
     """Single source of truth for the watchlist/detail/MCP quality metric.
 

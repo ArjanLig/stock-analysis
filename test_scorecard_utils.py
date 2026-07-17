@@ -84,7 +84,7 @@ def test_manual_override_forces_roce_on_float():
     assert round(val, 1) == 50.0  # 10 / (100−80)
 
 
-from scorecard_utils import excess_liquidity
+from scorecard_utils import excess_liquidity, capital_employed, roce_for_year
 
 
 def _fund_liq(cash=0, sti=0, lti=0, debt=0, opl=0, fnl=0, ta=0, cl=0, oi=0):
@@ -120,3 +120,35 @@ def test_excess_liquidity_missing_series_default_zero():
     f = {"years": [2023], "cash": [40], "total_assets": [100],
          "current_liabilities": [20], "operating_income": [10]}  # no investments/debt keys
     assert excess_liquidity(f, 0) == 40
+
+
+def test_capital_employed_strips_excess_liquidity():
+    # TA−CL = 80; excess = 145 (from net cash) → CE = 80−145 = −65
+    f = _fund_liq(cash=100, sti=50, lti=30, debt=20, opl=10, fnl=5, ta=100, cl=20)
+    assert capital_employed(f, 0) == -65
+
+
+def test_roce_for_year_normal():
+    # excess 0 (net debt), CE = 100−20 = 80, oi 20 → 25%
+    f = _fund_liq(cash=0, debt=100, ta=100, cl=20, oi=20)
+    pct, capped = roce_for_year(f, 0)
+    assert round(pct, 1) == 25.0 and capped is False
+
+
+def test_roce_for_year_ce_negative_caps_and_passes():
+    # capital-light: CE ≤ 0 → ceiling, capped True, year kept
+    f = _fund_liq(cash=100, lti=100, ta=50, cl=10, oi=30)  # excess 200 > TA−CL 40
+    pct, capped = roce_for_year(f, 0)
+    assert pct == 100.0 and capped is True
+
+
+def test_roce_for_year_clamps_above_ceiling():
+    # tiny positive CE → huge ROCE → clamped to ceiling
+    f = _fund_liq(cash=0, debt=100, ta=41, cl=40, oi=50)  # CE = 1, oi/ce = 5000%
+    pct, capped = roce_for_year(f, 0)
+    assert pct == 100.0 and capped is True
+
+
+def test_roce_for_year_missing_inputs_returns_none():
+    f = {"years": [2023], "total_assets": [100], "current_liabilities": [20]}  # no oi
+    assert roce_for_year(f, 0) == (None, False)
