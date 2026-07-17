@@ -53,7 +53,7 @@ from broker_adapter import (
     fetch_benchmark_monthly_returns,
 )
 import plotly.graph_objects as go
-from scorecard_utils import compute_roce_metric
+from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
 
@@ -6253,13 +6253,15 @@ def _dcf_editor(ticker):
                     _num = _num_tbl[i] if i < len(_num_tbl) else None
                     if _fund_metric == 'ROE':
                         _den = _den_src[i] if i < len(_den_src) else None
+                        _rv = _num / _den * 100 if _num is not None and _den and _den > 0 else None
                     else:
-                        ta = fund['total_assets'][i]
-                        cl = fund['current_liabilities'][i]
-                        _den = (ta - cl) if ta is not None and cl is not None else None
+                        # Excess-liquidity-adjusted CE + ceiling cap — same basis
+                        # as compute_roce_metric / the hero pill / watchlist.
+                        _den = capital_employed(fund, i)
+                        _rv = roce_for_year(fund, i)[0]
                     _ebit_tbl.append(_num)
                     _ce_tbl.append(_den if _den and _den != 0 else None)
-                    roce_vals.append(_num / _den * 100 if _num is not None and _den and _den > 0 else None)
+                    roce_vals.append(_rv)
 
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
