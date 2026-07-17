@@ -83,3 +83,34 @@ def _resolve_instruments(creds: dict) -> dict:
 def _clean(code: str, creds: dict) -> dict:
     """Resolve one instrument code, falling back to suffix-strip if unknown."""
     return _resolve_instruments(creds).get(code) or _suffix_strip(code)
+
+
+def fetch_portfolio_data(creds: dict):
+    """Return (cost_basis_by_symbol, account_id) from T212 positions."""
+    positions = _get("/equity/positions", creds, min_interval=1.0)
+    cost_basis = {}
+    for pos in positions or []:
+        info = _clean(pos.get("ticker", ""), creds)
+        symbol = info["symbol"]
+        shares = pos.get("quantity") or 0
+        avg = pos.get("averagePrice") or 0.0
+        pl = pos.get("ppl") or 0.0
+        cost = shares * avg
+        cost_basis[symbol] = {
+            "total_credits": 0,
+            "total_debits": 0,
+            "dividends": 0,
+            "shares_held": shares,
+            "option_pl": 0,
+            "equity_cost": cost,
+            "total_pl": pl,
+            "adjusted_cost": cost,
+            "cost_per_share": avg,
+            "trades": [],
+            "wheels": [],
+            "currency": info["currency"],
+            "exchange": info["exchange"],
+        }
+    info = _get("/equity/account/info", creds, min_interval=5.0)
+    account_id = str(info.get("id") or "")
+    return cost_basis, account_id

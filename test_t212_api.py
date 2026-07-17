@@ -96,3 +96,37 @@ class TestResolve(unittest.TestCase):
         info = t212_api._clean("TSLA_US_EQ", _CREDS)  # not in _META
         self.assertEqual(info["symbol"], "TSLA")
         self.assertEqual(info["exchange"], "US")
+
+
+class TestPortfolio(unittest.TestCase):
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+
+    @patch("t212_api._get")
+    def test_positions_normalise_to_cost_basis(self, mock_get):
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path == "/equity/positions":
+                return [
+                    {"ticker": "AAPL_US_EQ", "quantity": 10,
+                     "averagePrice": 150.0, "ppl": 200.0},
+                    {"ticker": "ASML_NL_EQ", "quantity": 5,
+                     "averagePrice": 600.0, "ppl": -50.0},
+                ]
+            if path == "/equity/account/info":
+                return {"id": 42, "currencyCode": "EUR"}
+            raise AssertionError(path)
+        mock_get.side_effect = _router
+
+        cb, acct = t212_api.fetch_portfolio_data(_CREDS)
+        self.assertEqual(acct, "42")
+        self.assertEqual(cb["AAPL"]["shares_held"], 10)
+        self.assertEqual(cb["AAPL"]["cost_per_share"], 150.0)
+        self.assertEqual(cb["AAPL"]["adjusted_cost"], 1500.0)
+        self.assertEqual(cb["AAPL"]["total_pl"], 200.0)
+        self.assertEqual(cb["AAPL"]["option_pl"], 0)
+        self.assertEqual(cb["AAPL"]["trades"], [])
+        self.assertEqual(cb["AAPL"]["currency"], "USD")
+        self.assertEqual(cb["ASML"]["currency"], "EUR")
+        self.assertEqual(cb["ASML"]["exchange"], "NL")
