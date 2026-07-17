@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 from error_logger import log_error, log_error_with_trace
 from dcf_calculator import compute_wacc, compute_intrinsic_value, compute_reverse_dcf
 from valuation_lenses import FORWARD_LENSES
-from config_store import save_config, load_config, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, log_page_view
+from config_store import save_config, load_config, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, log_page_view
 import gather_data
 from gather_data import (
     get_cik,
@@ -2398,6 +2398,8 @@ def _get_ibkr_credentials():
     """Get per-user IBKR credentials from session or DB."""
     if "ibkr_credentials" not in st.session_state:
         st.session_state["ibkr_credentials"] = load_ibkr_credentials(_sb_client)
+    if "t212_credentials" not in st.session_state:
+        st.session_state["t212_credentials"] = load_t212_credentials(_sb_client)
     return st.session_state.get("ibkr_credentials")
 
 
@@ -8663,19 +8665,22 @@ with st.sidebar:
         log_page_view(_sb_client, page)
 
     # ── Broker switcher (only if multiple brokers connected) ──
-    _has_tt = bool(st.session_state.get("tt_refresh_token"))
-    _has_ibkr = bool(st.session_state.get("ibkr_credentials"))
-    if _has_tt and _has_ibkr:
-        _broker_options = ["Tastytrade", "Interactive Brokers"]
-        _broker_keys = ["tastytrade", "ibkr"]
+    _connected = []
+    if st.session_state.get("tt_refresh_token"):
+        _connected.append(("Tastytrade", "tastytrade"))
+    if st.session_state.get("ibkr_credentials"):
+        _connected.append(("Interactive Brokers", "ibkr"))
+    if st.session_state.get("t212_credentials"):
+        _connected.append(("Trading 212", "t212"))
+
+    if len(_connected) >= 2:
+        _broker_options = [label for label, _ in _connected]
+        _broker_keys = [key for _, key in _connected]
         _current = get_active_broker()
         _idx = _broker_keys.index(_current) if _current in _broker_keys else 0
         _selected = st.selectbox(
-            "Active Broker",
-            _broker_options,
-            index=_idx,
-            key="_broker_select",
-            label_visibility="collapsed",
+            "Active Broker", _broker_options, index=_idx,
+            key="_broker_select", label_visibility="collapsed",
         )
         _new_broker = _broker_keys[_broker_options.index(_selected)]
         if _new_broker != _current:
@@ -8687,15 +8692,19 @@ with st.sidebar:
             for k in [k for k in st.session_state if k.startswith("net_liq_")]:
                 st.session_state.pop(k, None)
             st.rerun()
-    elif _has_tt:
-        st.session_state["active_broker"] = "tastytrade"
-    elif _has_ibkr:
-        st.session_state["active_broker"] = "ibkr"
+    elif len(_connected) == 1:
+        st.session_state["active_broker"] = _connected[0][1]
 
     st.markdown("---")
 
     if page in ("Portfolio", "Wheel Cost Basis", "Results"):
-        _broker_label = "Interactive Brokers" if get_active_broker() == "ibkr" else "Tastytrade"
+        _active_broker = get_active_broker()
+        if _active_broker == "ibkr":
+            _broker_label = "Interactive Brokers"
+        elif _active_broker == "t212":
+            _broker_label = "Trading 212"
+        else:
+            _broker_label = "Tastytrade"
         st.markdown(f"### {_broker_label}")
         if st.button("Refresh Data", use_container_width=True, type="primary"):
             st.session_state.pop("portfolio_data", None)
@@ -12442,6 +12451,33 @@ elif page == "Connect your Broker":
                 log_page_view(_sb_client, "broker_connect:ibkr:success")
                 st.success("Interactive Brokers connected.")
                 st.rerun()
+
+    # ── Trading 212 connection ──
+    st.markdown("---")
+    st.markdown("#### Trading 212 (read-only)")
+    st.markdown(
+        "1. In the Trading 212 app: **Settings → API (Beta) → Generate API key**\n"
+        "2. Choose a **read-only** key. Copy the **key** and **secret** "
+        "(the secret is shown only once).\n"
+        "3. Paste both below:"
+    )
+    with st.form("t212_creds_form"):
+        _t212_key = st.text_input("API Key", type="password",
+                                  placeholder="Your Trading 212 API key")
+        _t212_secret = st.text_input("API Secret", type="password",
+                                     placeholder="Your Trading 212 API secret")
+        _t212_submitted = st.form_submit_button("Save", type="primary")
+
+    if _t212_submitted and _t212_key and _t212_secret:
+        _t212_creds = {
+            "t212_api_key": _t212_key.strip(),
+            "t212_api_secret": _t212_secret.strip(),
+        }
+        save_t212_credentials(_sb_client, _t212_creds)
+        st.session_state["t212_credentials"] = _t212_creds
+        log_page_view(_sb_client, "broker_connect:t212:success")
+        st.success("Trading 212 connected.")
+        st.rerun()
 
 # ══════════════════════════════════════════════════════
 #  SECURITY & PRIVACY PAGE
