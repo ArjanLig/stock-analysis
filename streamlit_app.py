@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 from error_logger import log_error, log_error_with_trace
 from dcf_calculator import compute_wacc, compute_intrinsic_value, compute_reverse_dcf
 from valuation_lenses import FORWARD_LENSES
-from config_store import save_config, load_config, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, log_page_view
+from config_store import save_config, load_config, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
 import gather_data
 from gather_data import (
     get_cik,
@@ -12455,29 +12455,46 @@ elif page == "Connect your Broker":
     # ── Trading 212 connection ──
     st.markdown("---")
     st.markdown("#### Trading 212 (read-only)")
-    st.markdown(
-        "1. In the Trading 212 app: **Settings → API (Beta) → Generate API key**\n"
-        "2. Choose a **read-only** key. Copy the **key** and **secret** "
-        "(the secret is shown only once).\n"
-        "3. Paste both below:"
-    )
-    with st.form("t212_creds_form"):
-        _t212_key = st.text_input("API Key", type="password",
-                                  placeholder="Your Trading 212 API key")
-        _t212_secret = st.text_input("API Secret", type="password",
-                                     placeholder="Your Trading 212 API secret")
-        _t212_submitted = st.form_submit_button("Save", type="primary")
-
-    if _t212_submitted and _t212_key and _t212_secret:
-        _t212_creds = {
-            "t212_api_key": _t212_key.strip(),
-            "t212_api_secret": _t212_secret.strip(),
-        }
-        save_t212_credentials(_sb_client, _t212_creds)
-        st.session_state["t212_credentials"] = _t212_creds
-        log_page_view(_sb_client, "broker_connect:t212:success")
+    _t212_creds_saved = st.session_state.get("t212_credentials")
+    if _t212_creds_saved:
         st.success("Trading 212 connected.")
-        st.rerun()
+        if st.button("Disconnect Trading 212", type="primary"):
+            delete_t212_credentials(_sb_client)
+            st.session_state.pop("t212_credentials", None)
+            if get_active_broker() == "t212":
+                st.session_state.pop("active_broker", None)
+            for k in ["portfolio_data", "portfolio_account", "portfolio_prices",
+                       "net_liq_all", "yearly_transfers", "benchmark_returns",
+                       "portfolio_fetched_at"]:
+                st.session_state.pop(k, None)
+            for k in [k for k in st.session_state if k.startswith("net_liq_")]:
+                st.session_state.pop(k, None)
+            log_page_view(_sb_client, "broker_connect:t212:disconnect")
+            st.rerun()
+    else:
+        st.markdown(
+            "1. In the Trading 212 app: **Settings → API (Beta) → Generate API key**\n"
+            "2. Choose a **read-only** key. Copy the **key** and **secret** "
+            "(the secret is shown only once).\n"
+            "3. Paste both below:"
+        )
+        with st.form("t212_creds_form"):
+            _t212_key = st.text_input("API Key", type="password",
+                                      placeholder="Your Trading 212 API key")
+            _t212_secret = st.text_input("API Secret", type="password",
+                                         placeholder="Your Trading 212 API secret")
+            _t212_submitted = st.form_submit_button("Save", type="primary")
+
+        if _t212_submitted and _t212_key and _t212_secret:
+            _t212_creds = {
+                "t212_api_key": _t212_key.strip(),
+                "t212_api_secret": _t212_secret.strip(),
+            }
+            save_t212_credentials(_sb_client, _t212_creds)
+            st.session_state["t212_credentials"] = _t212_creds
+            log_page_view(_sb_client, "broker_connect:t212:success")
+            st.success("Trading 212 connected.")
+            st.rerun()
 
 # ══════════════════════════════════════════════════════
 #  SECURITY & PRIVACY PAGE
