@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+import broker_adapter
 import t212_api
 
 
@@ -149,3 +150,102 @@ class TestBalances(unittest.TestCase):
                   "maintenance_excess", "used_derivative_buying_power",
                   "reg_t_margin_requirement"):
             self.assertIn(k, b)
+
+
+class TestAdapterT212(unittest.TestCase):
+    """broker_adapter routing to t212_api + neutral empties for options-only gaps.
+
+    Empty-return shapes below are verified against the real TT/IBKR
+    implementations (not just the brief's illustrative examples):
+      - fetch_margin_requirements: {} (both TT and IBKR return {} when empty)
+      - fetch_margin_for_position: None (both TT docstring and IBKR return None)
+      - fetch_net_liq_history: [] (both return a list of {time, close} dicts)
+      - fetch_portfolio_greeks: {"positions": [], "totals": {delta/theta/gamma/vega: 0}}
+        — NOT bare {}; both TT and IBKR always return this structured dict.
+      - fetch_beta_weighted_delta: {"positions": [], "portfolio_bwd": 0,
+        "spy_price": 0, "dollar_per_1pct": 0} — NOT bare {}, same reasoning.
+      - fetch_greeks_and_bwd: tuple of the two empties above (TT/IBKR both
+        return a (greeks, bwd) tuple, never a dict).
+      - fetch_yearly_transfers: {} (both return a plain dict keyed by year)
+      - fetch_margin_interest: {"current_month": 0, "ytd": 0, "total": 0,
+        "monthly": {}} — NOT bare {}; both TT and IBKR always return this shape.
+      - fetch_option_chain: {"underlying_price": fallback_price, "expirations": []}
+        — NOT [], both TT and IBKR return this dict shape on empty/error.
+      - fetch_earnings_dates: {ticker: None for ticker in tickers} — NOT bare
+        {}; both TT and IBKR return a dict keyed by every requested ticker.
+    """
+
+    def _patch_active(self, broker):
+        return patch("broker_adapter.get_active_broker", return_value=broker)
+
+    @patch("broker_adapter._get_t212_creds", return_value=_CREDS)
+    @patch("broker_adapter.t212_api")
+    def test_portfolio_routes_to_t212(self, mock_t212, _creds):
+        mock_t212.fetch_portfolio_data.return_value = ({"AAPL": {}}, "42")
+        with self._patch_active("t212"):
+            out = broker_adapter.fetch_portfolio_data()
+        self.assertEqual(out, ({"AAPL": {}}, "42"))
+        mock_t212.fetch_portfolio_data.assert_called_once_with(_CREDS)
+
+    @patch("broker_adapter._get_t212_creds", return_value=_CREDS)
+    @patch("broker_adapter.t212_api")
+    def test_balances_routes_to_t212(self, mock_t212, _creds):
+        mock_t212.fetch_account_balances.return_value = {"net_liquidating_value": 1.0}
+        with self._patch_active("t212"):
+            out = broker_adapter.fetch_account_balances()
+        self.assertEqual(out, {"net_liquidating_value": 1.0})
+        mock_t212.fetch_account_balances.assert_called_once_with(_CREDS)
+
+    def test_gap_functions_return_empty_for_t212(self):
+        with self._patch_active("t212"):
+            self.assertEqual(broker_adapter.fetch_margin_requirements(), {})
+            self.assertIsNone(broker_adapter.fetch_margin_for_position("AAPL", 1))
+            self.assertEqual(broker_adapter.fetch_net_liq_history(), [])
+            self.assertEqual(
+                broker_adapter.fetch_portfolio_greeks(),
+                {"positions": [], "totals": {"delta": 0, "theta": 0, "gamma": 0, "vega": 0}},
+            )
+            self.assertEqual(
+                broker_adapter.fetch_beta_weighted_delta(),
+                {"positions": [], "portfolio_bwd": 0, "spy_price": 0, "dollar_per_1pct": 0},
+            )
+            greeks, bwd = broker_adapter.fetch_greeks_and_bwd()
+            self.assertEqual(
+                greeks,
+                {"positions": [], "totals": {"delta": 0, "theta": 0, "gamma": 0, "vega": 0}},
+            )
+            self.assertEqual(
+                bwd,
+                {"positions": [], "portfolio_bwd": 0, "spy_price": 0, "dollar_per_1pct": 0},
+            )
+            self.assertEqual(broker_adapter.fetch_yearly_transfers(), {})
+            self.assertEqual(
+                broker_adapter.fetch_margin_interest(),
+                {"current_month": 0, "ytd": 0, "total": 0, "monthly": {}},
+            )
+            self.assertEqual(
+                broker_adapter.fetch_option_chain("AAPL"),
+                {"underlying_price": 0.0, "expirations": []},
+            )
+            self.assertEqual(
+                broker_adapter.fetch_option_chain("AAPL", fallback_price=123.0),
+                {"underlying_price": 123.0, "expirations": []},
+            )
+            self.assertEqual(
+                broker_adapter.fetch_earnings_dates(["AAPL", "MSFT"]),
+                {"AAPL": None, "MSFT": None},
+            )
+
+    def test_get_active_broker_detects_t212_alone(self):
+        with patch.object(
+            broker_adapter.st, "session_state",
+            {"t212_credentials": _CREDS},
+        ):
+            self.assertEqual(broker_adapter.get_active_broker(), "t212")
+
+    def test_has_active_broker_true_for_t212_only(self):
+        with patch.object(
+            broker_adapter.st, "session_state",
+            {"t212_credentials": _CREDS},
+        ):
+            self.assertTrue(broker_adapter.has_active_broker())
