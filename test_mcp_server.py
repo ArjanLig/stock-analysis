@@ -1161,6 +1161,39 @@ def test_apply_fundamentals_overrides_ignores_unmatched_year():
     assert out["operating_income"] == [100.0, 110.0]
 
 
+def test_apply_fundamentals_overrides_synthesizes_timeline_for_empty_base():
+    """No EDGAR base (non-US filer) → build the timeline from override years so
+    manually-authored fundamentals still populate."""
+    import gather_data
+    empty_base = {"years": []}
+    out = gather_data.apply_fundamentals_overrides(
+        empty_base,
+        {
+            "operating_income": {2024: 786.8, 2025: 924.2},
+            "cfo": {2024: 708.6, 2025: 812.1},
+            "capex": {2024: -87.2, 2025: -129.8},
+        },
+    )
+    assert out["years"] == [2024, 2025]
+    assert out["operating_income"] == [786.8, 924.2]
+    # derived fcf recomputes from synthesized cfo + capex
+    assert out["fcf"] == [621.4, 682.3]
+    # a field with no override is created as an all-None aligned list
+    assert out["revenue"] == [None, None]
+
+
+def test_apply_fundamentals_overrides_empty_base_no_overrides_is_noop():
+    """Empty base with no usable override years returns the fund unchanged."""
+    import gather_data
+    empty_base = {"years": []}
+    assert gather_data.apply_fundamentals_overrides(empty_base, {}) == empty_base
+    # unknown-only fields yield no synthesizable years → unchanged
+    out = gather_data.apply_fundamentals_overrides(
+        empty_base, {"not_a_field": {2025: 1.0}}
+    )
+    assert out["years"] == []
+
+
 # ---------------------------------------------------------------------------
 # _get_fundamentals_impl + _update_fundamentals_impl
 # ---------------------------------------------------------------------------

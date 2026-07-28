@@ -2656,7 +2656,26 @@ def apply_fundamentals_overrides(fund, overrides):
         return fund
     years = list(fund.get("years") or [])
     if not years:
-        return fund
+        # No EDGAR base (e.g. a non-US filer with no SEC CIK): synthesize the
+        # timeline from the override years so manually-authored fundamentals
+        # still populate downstream (headline ROCE, watchlist, robustness).
+        # Only overridable component fields are created; the override loop
+        # below fills them and derived fields recompute.
+        override_years = set()
+        for field, year_map in overrides.items():
+            if field in OVERRIDABLE_FUNDAMENTALS_FIELDS and isinstance(year_map, dict):
+                for yr in year_map:
+                    try:
+                        override_years.add(int(yr))
+                    except (TypeError, ValueError):
+                        continue
+        if not override_years:
+            return fund
+        years = sorted(override_years)
+        fund = dict(fund)
+        fund["years"] = list(years)
+        for field in OVERRIDABLE_FUNDAMENTALS_FIELDS:
+            fund[field] = [None] * len(years)
 
     result = dict(fund)
     # Copy lists we might mutate so callers can't observe partial state
