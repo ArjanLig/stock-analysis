@@ -109,6 +109,32 @@ def test_compute_cost_of_equity_opportunity_cost_ignores_beta():
         {**cfg, "sector_betas": [("X", 0.3, 1.0)]}) == pytest.approx(ke, abs=1e-12)
 
 
+def test_wacc_opportunity_cost_equals_ke_ignoring_debt():
+    """Opportunity-cost mode (default): the discount rate = ke = rf + ERP even
+    with debt on the balance sheet — no debt blend, no tax shield. Regression
+    guard for the 'WACC is only rf+ERP' portfolio-wide decision."""
+    import dcf_calculator
+    cfg = {
+        # discount_mode omitted → opportunity_cost
+        "equity_market_value": 15686.9,
+        "debt_market_value": 3401.1,       # material debt: must NOT lower WACC
+        "sector_betas": [("Brokerage & Investment Banking", 0.58, 1.0)],
+        "tax_rate": 0.27,
+        "risk_free_rate": 0.0465,
+        "erp": 0.047,
+        "credit_spread": 0.004,            # must NOT enter the discount rate
+    }
+    wacc = dcf_calculator.compute_wacc(cfg)
+    assert wacc == pytest.approx(0.0465 + 0.047, abs=1e-12)   # 9.35%, not 8.34%
+    # WACC and ke are now identical in opportunity_cost mode.
+    assert wacc == pytest.approx(dcf_calculator.compute_cost_of_equity(cfg), abs=1e-12)
+    # Explicit opportunity_cost matches the default.
+    assert dcf_calculator.compute_wacc(
+        {**cfg, "discount_mode": "opportunity_cost"}) == pytest.approx(wacc, abs=1e-12)
+    # capm mode still blends debt in → strictly below ke.
+    assert dcf_calculator.compute_wacc({**cfg, "discount_mode": "capm"}) < wacc
+
+
 def test_compute_cost_of_equity_matches_wacc_internals():
     """Cost of equity from the new helper must equal the ke that compute_wacc
     computes internally — they share the same formula and inputs.

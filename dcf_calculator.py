@@ -57,8 +57,8 @@ def compute_cost_of_equity(cfg):
 
     effective_beta follows cfg['discount_mode'] (see _effective_beta): the
     Hamada-relevered sector beta under "capm", or 1.0 under "opportunity_cost".
-    Kept consistent with compute_wacc so that when debt = 0 this function
-    returns exactly compute_wacc(cfg) in either mode.
+    Under "opportunity_cost" this equals compute_wacc(cfg) exactly (the WACC
+    IS ke there); under "capm" they coincide only when debt = 0.
 
     Returns the cost of equity as a float (e.g. 0.087 for 8.7%).
     """
@@ -66,15 +66,28 @@ def compute_cost_of_equity(cfg):
 
 
 def compute_wacc(cfg):
-    """Compute Weighted Average Cost of Capital from config dict.
+    """Compute the discount rate from the config dict.
 
-    Returns the WACC as a float (e.g. 0.08 for 8%).
+    Two philosophies, selected by cfg['discount_mode']:
+
+    - "opportunity_cost" (default): the discount rate IS the cost of equity,
+      ke = rf + ERP — one market-wide opportunity-cost hurdle. Capital
+      structure is deliberately ignored: cheap debt and its tax shield must
+      not lower the hurdle (that would reintroduce the capital-structure
+      sensitivity the opportunity-cost view exists to remove).
+
+    - "capm" (legacy): the classic equity/debt-weighted WACC blend, with the
+      after-tax cost of debt pulling the rate below ke.
+
+    Returns the rate as a float (e.g. 0.08 for 8%).
     """
+    ke = cfg['risk_free_rate'] + _effective_beta(cfg) * cfg['erp']
+    if cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE) != "capm":
+        return ke
     eq_val = _equity_market_value(cfg)
     debt_val = cfg['debt_market_value']
     eq_wt = eq_val / (eq_val + debt_val)
     debt_wt = debt_val / (eq_val + debt_val)
-    ke = cfg['risk_free_rate'] + _effective_beta(cfg) * cfg['erp']
     kd = (cfg['risk_free_rate'] + cfg['credit_spread']) * (1 - cfg['tax_rate'])
     return eq_wt * ke + debt_wt * kd
 
