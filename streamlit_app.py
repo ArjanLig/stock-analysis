@@ -4867,7 +4867,7 @@ def _dcf_editor(ticker):
             _ww_val = f'<div style="display:flex;justify-content:space-between;padding:6px 0;color:{T["text"]}"><span style="color:{T["text"]};{{extra}}">{{label}}</span><span style="color:{T["text"]};{{extra}}">{{value}}</span></div>'
             _ww_sep = f'<div style="border-top:1px solid {T["separator"]};margin:2px 0"></div>'
 
-            with st.expander("### WACC", expanded=False):
+            with st.expander("### Discount rate", expanded=False):
               with st.container(border=True):
                 _rf_label = "Risk-Free Rate % (TIPS — Real)" if cfg.get('valuation_basis') == 'real' else "Risk-Free Rate %"
                 cfg['risk_free_rate'] = st.number_input(
@@ -5025,12 +5025,21 @@ def _dcf_editor(ticker):
 
                 st.markdown(_ww_sep, unsafe_allow_html=True)
 
-                if _total_cap > 0:
+                # Discount rate actually fed to the engine: ke under
+                # opportunity_cost (no debt blend), the WACC blend under capm —
+                # mirrors dcf_calculator.compute_wacc.
+                if cfg.get('discount_mode', 'opportunity_cost') != 'capm':
+                    st.markdown(_ww_val.format(label="Discount rate", value=f"{_ke:.2%}",
+                                               extra=f"font-weight:700;font-size:1.15rem;color:{T['accent']};"), unsafe_allow_html=True)
+                    if _total_cap > 0:
+                        _wacc_blend = _eq_wt * _ke + _debt_wt * _kd
+                        st.markdown(_ww_val.format(label="Blended WACC (unused)", value=f"{_wacc_blend:.2%}", extra=f"color:{T['text_muted']};font-size:0.82rem;"), unsafe_allow_html=True)
+                elif _total_cap > 0:
                     _wacc_computed = _eq_wt * _ke + _debt_wt * _kd
-                    st.markdown(_ww_val.format(label="WACC", value=f"{_wacc_computed:.2%}",
+                    st.markdown(_ww_val.format(label="Discount rate (WACC)", value=f"{_wacc_computed:.2%}",
                                                extra=f"font-weight:700;font-size:1.15rem;color:{T['accent']};"), unsafe_allow_html=True)
                 else:
-                    st.warning("Equity + Debt market value must be > 0 to compute WACC")
+                    st.warning("Equity + Debt market value must be > 0 to compute the discount rate")
 
             _s2c_val = f'<div style="display:flex;justify-content:space-between;padding:6px 0;color:{T["text"]}"><span style="color:{T["text"]};{{extra}}">{{label}}</span><span style="color:{T["text"]};{{extra}}">{{value}}</span></div>'
             _s2c_sep = f'<div style="border-top:1px solid {T["separator"]};margin:2px 0"></div>'
@@ -5339,7 +5348,7 @@ def _dcf_editor(ticker):
 
                 # ── WACC (editable) ──
                 wr = st.columns(_cw)
-                _dcf_row_label(wr, "WACC", bold=True)
+                _dcf_row_label(wr, "Discount rate", bold=True)
                 _dcf_row_val(wr, 1, "")
                 for i in range(_n):
                     _wacc_list[i] = _dcf_row_input(wr, i + 2, f"ed_w_{i}", _wacc_list[i], 0.1, "%.2f")
@@ -5439,9 +5448,9 @@ def _dcf_editor(ticker):
                     if _rm_step > 0 and _rm_max > _rm_min:
                         _rdcf_m_range = (_rm_min, _rm_max, _rm_step)
                 with _rc3:
-                    st.markdown("**WACC**")
+                    st.markdown("**Discount rate**")
                     _rdcf_wacc = st.number_input(
-                        "WACC %", value=val['wacc'] * 100,
+                        "Discount rate %", value=val['wacc'] * 100,
                         step=0.1, format="%.2f", key="rdcf_wacc",
                     ) / 100
 
@@ -5496,7 +5505,7 @@ def _dcf_editor(ticker):
             )
 
             # ── Sensitivity matrix ──
-            st.markdown(f"**Sensitivity Matrix** — WACC: {_rdcf['wacc']:.2%} | Market: ${_rdcf['market_price']:.2f}")
+            st.markdown(f"**Sensitivity Matrix** — Discount rate: {_rdcf['wacc']:.2%} | Market: ${_rdcf['market_price']:.2f}")
 
             _g_tests = _rdcf['growth_tests']
             _m_tests = _rdcf['margin_tests']
@@ -6034,7 +6043,7 @@ def _dcf_editor(ticker):
                 step=1000.0,
                 key=f"sotp_corp_adj_{ticker}",
                 help="Manual adjustment for unallocated corporate overhead. "
-                     "Negative to subtract (capitalized overhead × (1-tax) / WACC).",
+                     "Negative to subtract (capitalized overhead × (1-tax) / discount rate).",
             )
             cfg["sotp"]["corporate_overhead_ev_adjustment"] = _sotp_corp_adj
 
@@ -6188,9 +6197,9 @@ def _dcf_editor(ticker):
             else:
                 _roce_tip = (
                     'EBIT / Capital Employed — pre-tax return on capital tied up in the operating business.<br><br>'
-                    '<b>&gt;WACC</b> creates value<br>'
+                    '<b>&gt;Discount rate</b> creates value<br>'
                     '<b>&gt;20%</b> Prasad/PE-screen quality bar — sustained 5+ jaar duidt op moat<br>'
-                    '<b>&lt;WACC</b> destroys value<br><br>'
+                    '<b>&lt;Discount rate</b> destroys value<br><br>'
                     'Capital Employed = Total Assets − Current Liabilities.<br>'
                     'Goodwill en cash worden niet afgetrokken — zo blijven acquisitie-zware en cash-rijke namen vergelijkbaar en triggert de float/ROE-fallback alleen bij echte float-bedrijven.<br>'
                     'PE-conventie zoals Nalanda Capital, gebruikt EBIT (pre-tax) ipv NOPAT.'
@@ -6274,7 +6283,7 @@ def _dcf_editor(ticker):
                     fig.add_hline(
                         y=wacc_pct, line_dash="dash",
                         line_color=_COLORS['secondary'],
-                        annotation_text=f"WACC {wacc_pct:.1f}%",
+                        annotation_text=f"Discount rate {wacc_pct:.1f}%",
                         annotation_position="top right",
                     )
                 # Prasad/PE screen bar at 20% — sustained 20%+ ROCE over 5+
@@ -7212,9 +7221,9 @@ def _dcf_editor(ticker):
                 f'font-weight:400;width:240px;z-index:999;box-shadow:{T["shadow_hover"]};'
                 f'pointer-events:none;transition:opacity 0.15s ease">'
                 f'NOPAT / Invested Capital — measures how well a company generates returns on its capital.<br><br>'
-                f'<b>&gt;WACC</b> creates value<br>'
+                f'<b>&gt;Discount rate</b> creates value<br>'
                 f'<b>&gt;20%</b> excellent<br>'
-                f'<b>&lt;WACC</b> destroys value'
+                f'<b>&lt;Discount rate</b> destroys value'
                 f'</span></span></div>'
                 f'<style>.roic-tip:hover span{{visibility:visible!important;opacity:1!important}}</style>',
                 unsafe_allow_html=True,
@@ -7248,7 +7257,7 @@ def _dcf_editor(ticker):
                     fig.add_hline(
                         y=wacc_pct, line_dash="dash",
                         line_color=_COLORS['secondary'],
-                        annotation_text=f"WACC {wacc_pct:.1f}%",
+                        annotation_text=f"Discount rate {wacc_pct:.1f}%",
                         annotation_position="top right",
                     )
                 # Historic average — same convention as ROCE chart
