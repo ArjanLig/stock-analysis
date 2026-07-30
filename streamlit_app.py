@@ -114,9 +114,9 @@ def _range_bar_marker_position(price: float, low: float, high: float) -> tuple[f
 def _render_lens_dots(lenses: dict, theme: dict) -> str:
     """Render N dots showing which forward-looking lenses are active + a count label.
 
-    Order from FORWARD_LENSES: dcf · multiples · historical · dividend · sotp.
-    Reverse DCF intentionally not rendered — it anchors at current price by
-    definition (see 2026-05-07-reverse-dcf-demote-from-watchlist-design.md).
+    Order from FORWARD_LENSES: dcf · dividend · sotp. Reverse DCF anchors at
+    price by definition; multiples + historical demoted off the watchlist
+    2026-07-30 (shown in the ticker-page "Multiples" tab) — all excluded here.
 
     Each lens key maps to a non-None lens dict (active, green dot) or None
     (skipped, grey dot). Hover-tooltip via native `title` attribute shows the
@@ -4869,7 +4869,7 @@ def _dcf_editor(ticker):
     margins = list(cfg.get('op_margins', []))
 
     # ── Tabs: DCF / Reverse DCF / Peer Comparison / Dividend / SOTP / Fundamentals ──
-    _tab_notes, _tab_fundamentals, _tab_dcf, _tab_rdcf, _tab_peers, _tab_dividend, _tab_sotp = st.tabs(["Pre-Scan", "Fundamentals", "DCF", "Reverse DCF", "Peer Comparison", "Dividend", "SOTP"])
+    _tab_notes, _tab_fundamentals, _tab_dcf, _tab_rdcf, _tab_multiples, _tab_peers, _tab_dividend, _tab_sotp = st.tabs(["Pre-Scan", "Fundamentals", "DCF", "Reverse DCF", "Multiples", "Peer Comparison", "Dividend", "SOTP"])
 
     with _tab_dcf:
         with st.container(key="tabcard_dcf_1"):
@@ -5570,6 +5570,86 @@ def _dcf_editor(ticker):
                 '</div>',
                 unsafe_allow_html=True,
             )
+
+    with _tab_multiples:
+        with st.container(key="tabcard_multiples"):
+            import valuation_lenses as _vl
+            st.markdown("#### Multiples")
+            st.caption(
+                "Relative-value cross-checks. **Excluded from the blended fair "
+                "value and the watchlist** (2026-07-30) — the peer and "
+                "own-history multiple anchors proved too inaccurate to rely on. "
+                "Shown here for reference only."
+            )
+            _price_m = float(cfg.get("stock_price", 0) or 0)
+
+            def _delta_vs_price(fv):
+                if not _price_m or not fv:
+                    return None
+                return f"{(fv - _price_m) / _price_m * 100:+.1f}% vs price"
+
+            _mult = _vl.compute_multiples_lens(cfg)
+            _hist = _vl.compute_historical_lens(cfg)
+
+            # ── Peer multiples ──
+            st.markdown("##### Peer multiples")
+            if _mult:
+                _d = _mult.get("details", {})
+                _mc1, _mc2, _mc3 = st.columns(3)
+                _mc1.metric("Fair value (mid)", f"${_mult['fv_mid']:,.0f}",
+                            delta=_delta_vs_price(_mult["fv_mid"]))
+                _pe_fv = _mult.get("fv_mid_pe")
+                _mc2.metric(f"P/E anchor ({_d.get('pe_basis') or '—'})",
+                            f"${_pe_fv:,.0f}" if _pe_fv else "—",
+                            delta=_delta_vs_price(_pe_fv))
+                _ev_fv = _mult.get("fv_mid_ev")
+                _mc3.metric(f"EV/EBIT anchor ({_d.get('ev_basis') or '—'})",
+                            f"${_ev_fv:,.0f}" if _ev_fv else "—",
+                            delta=_delta_vs_price(_ev_fv))
+                _closest = _d.get("closest_peer") or "—"
+                st.markdown(
+                    f'<div style="font-size:0.82rem;color:{T["text_muted"]}">'
+                    f'Range ${_mult["fv_low"]:,.0f} – ${_mult["fv_high"]:,.0f} '
+                    f'· closest peer: {_closest}</div>',
+                    unsafe_allow_html=True,
+                )
+                _out_pe = _d.get("peer_fwd_pe_outliers_removed") or []
+                _out_ev = _d.get("peer_ev_ebitda_outliers_removed") or []
+                if _out_pe or _out_ev:
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:{T["text_muted"]}">'
+                        f'Outliers removed — P/E: {", ".join(_out_pe) or "none"} · '
+                        f'EV: {", ".join(_out_ev) or "none"}</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.info("Peer multiples unavailable — no peers with computable "
+                        "trailing_pe/ev_ebit (or missing ttm_eps/ttm_ebit).")
+
+            st.markdown("---")
+
+            # ── Own history ──
+            st.markdown("##### Own history")
+            if _hist:
+                _dh = _hist.get("details", {})
+                _hc1, _hc2, _hc3 = st.columns(3)
+                _hc1.metric("Fair value (mid)", f"${_hist['fv_mid']:,.0f}",
+                            delta=_delta_vs_price(_hist["fv_mid"]))
+                _tpe = _dh.get("historical_trailing_pe_fv")
+                _hc2.metric("Own trailing P/E", f"${_tpe:,.0f}" if _tpe else "—",
+                            delta=_delta_vs_price(_tpe))
+                _hev = _dh.get("historical_ev_ebitda_fv")
+                _hc3.metric(f"Own EV multiple ({_dh.get('ev_basis') or '—'})",
+                            f"${_hev:,.0f}" if _hev else "—",
+                            delta=_delta_vs_price(_hev))
+                st.markdown(
+                    f'<div style="font-size:0.82rem;color:{T["text_muted"]}">'
+                    f'Range ${_hist["fv_low"]:,.0f} – ${_hist["fv_high"]:,.0f}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("Own-history multiples unavailable — no historical "
+                        "trailing P/E or EV multiple on file for this ticker.")
 
     with _tab_peers:
         with st.container(key="tabcard_peers"):

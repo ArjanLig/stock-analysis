@@ -97,41 +97,46 @@ def test_range_bar_marker_invalid_inputs_return_50():
 
 
 def test_render_lens_dots_all_active():
-    """All five forward-looking lenses active → 5 filled dots, '5 lenses' label.
-    (reverse_dcf intentionally not rendered — it anchors at price.)"""
+    """All three surfaced forward lenses active → 3 filled dots, '3 lenses'.
+    (multiples + historical demoted off the watchlist 2026-07-30; reverse_dcf
+    anchors at price and is not rendered.)"""
     lenses = {
-        "dcf": {}, "multiples": {}, "historical": {}, "dividend": {}, "sotp": {},
-        "reverse_dcf": {}, "dividend_stub": None,
+        "dcf": {}, "dividend": {}, "sotp": {},
+        "multiples": {}, "historical": {}, "reverse_dcf": {},  # not surfaced
     }
     html = streamlit_app._render_lens_dots(lenses, theme={"text_muted": "#888"})
-    assert html.count('class="ld-on"') == 5
+    assert html.count('class="ld-on"') == 3
     assert 'class="ld-off"' not in html
-    assert "5 lenses" in html
+    assert "3 lenses" in html
 
 
 def test_render_lens_dots_dcf_only():
-    """Only DCF active → 1 filled dot, 4 grey dots, '1 lens' label."""
-    lenses = {"dcf": {}, "multiples": None, "historical": None, "dividend": None, "sotp": None, "reverse_dcf": None}
+    """Only DCF active → 1 filled dot, 2 grey dots, '1 lens' label."""
+    lenses = {"dcf": {}, "dividend": None, "sotp": None,
+              "multiples": None, "historical": None, "reverse_dcf": None}
     html = streamlit_app._render_lens_dots(lenses, theme={"text_muted": "#888"})
     assert html.count('class="ld-on"') == 1
-    assert html.count('class="ld-off"') == 4
+    assert html.count('class="ld-off"') == 2
     assert "1 lens" in html
 
 
-def test_render_lens_dots_dcf_plus_historical():
-    """DCF + Historical active → 2 filled dots, '2 lenses' label.
-    (Replaces test_render_lens_dots_dcf_plus_reverse — reverse_dcf no longer renders.)"""
-    lenses = {"dcf": {}, "multiples": None, "historical": {}, "reverse_dcf": None, "dividend": None}
+def test_render_lens_dots_multiples_historical_never_render():
+    """Peers + Historical are no longer surfaced on the watchlist even when the
+    lenses are present — they live in the ticker-page 'Multiples' tab now."""
+    lenses = {"dcf": {}, "multiples": {}, "historical": {},
+              "dividend": None, "sotp": None, "reverse_dcf": None}
     html = streamlit_app._render_lens_dots(lenses, theme={"text_muted": "#888"})
-    assert html.count('class="ld-on"') == 2
-    assert "2 lenses" in html
+    assert html.count('class="ld-on"') == 1   # only DCF
+    assert "Peers" not in html
+    assert "Historical" not in html
+    assert "1 lens" in html
 
 
 def test_render_lens_dots_empty_dict():
-    """No lenses at all → 'no lenses' label, all 5 dots grey."""
+    """No lenses at all → 'no lenses' label, all 3 dots grey."""
     html = streamlit_app._render_lens_dots({}, theme={"text_muted": "#888"})
     assert 'class="ld-on"' not in html
-    assert html.count('class="ld-off"') == 5
+    assert html.count('class="ld-off"') == 3
     assert "no lenses" in html
 
 
@@ -307,15 +312,16 @@ def test_render_lens_dots_empty_dict_is_active_not_inactive():
 
 
 def test_render_lens_dots_dividend_skipped_for_non_payer():
-    """Non-payer with 3 forward lenses active + dividend & sotp skipped → 3 dots on, 2 off."""
+    """Non-payer → dividend dot greyed out. With DCF + SOTP active and dividend
+    skipped: 2 dots on, 1 off (of the 3 surfaced lenses)."""
     lenses = {
-        "dcf": {}, "multiples": {}, "historical": {},
-        "dividend": None, "reverse_dcf": {},
+        "dcf": {}, "sotp": {}, "dividend": None,
+        "multiples": {}, "historical": {}, "reverse_dcf": {},  # not surfaced
     }
     html = streamlit_app._render_lens_dots(lenses, theme={"text_muted": "#888"})
-    assert html.count('class="ld-on"') == 3
-    assert html.count('class="ld-off"') == 2
-    assert "3 lenses" in html
+    assert html.count('class="ld-on"') == 2
+    assert html.count('class="ld-off"') == 1
+    assert "2 lenses" in html
 
 
 def test_render_lens_dots_zero_active():
@@ -330,22 +336,23 @@ def test_render_lens_dots_zero_active():
 
 
 def test_render_lens_dots_includes_dividend_when_active():
-    """Dividend lens is now a first-class forward lens (Phase 2-C) — when
-    non-None it renders its own dot alongside DCF/Peers/Historical."""
+    """Dividend is a first-class surfaced forward lens — when non-None it
+    renders its own dot alongside DCF (and SOTP)."""
     lenses = {
-        "dcf": {}, "multiples": None, "historical": None, "reverse_dcf": None,
+        "dcf": {}, "sotp": None, "reverse_dcf": None,
         "dividend": {"fv_mid": 50.0},
     }
     html = streamlit_app._render_lens_dots(lenses, theme={"text_muted": "#888"})
-    # DCF + dividend → 2 ld-on dots, 3 ld-off (multiples + historical + sotp)
+    # DCF + dividend → 2 ld-on dots, 1 ld-off (sotp)
     assert html.count('class="ld-on"') == 2
-    assert html.count('class="ld-off"') == 3
+    assert html.count('class="ld-off"') == 1
     assert "2 lenses" in html
 
 
 def test_render_football_field_renders_all_active_lenses():
-    """Full summary → HTML contains 5 forward-lens bars (DCF, Peers,
-    Historical, Dividend, SOTP) + price marker. Reverse DCF intentionally absent."""
+    """Full summary → HTML contains the 3 surfaced forward-lens bars (DCF,
+    Dividend, SOTP) + price marker. Reverse DCF, Peers and Historical are
+    intentionally absent (multiples + historical demoted 2026-07-30)."""
     summary = {
         "stock_price": 100.0,
         "weighted_fv_low": 80.0,
@@ -363,13 +370,13 @@ def test_render_football_field_renders_all_active_lenses():
     }
     html = streamlit_app._render_football_field(summary, theme=_theme_stub())
     assert "DCF" in html
-    assert "Peers" in html
-    assert "Historical" in html
     assert "Dividend" in html
     assert "SOTP" in html
+    assert "Peers" not in html
+    assert "Historical" not in html
     assert "Reverse DCF" not in html
     assert "$100" in html or "100.00" in html
-    assert html.count('class="ff-bar"') == 5
+    assert html.count('class="ff-bar"') == 3
 
 
 def test_render_football_field_handles_missing_lens():
@@ -414,8 +421,9 @@ def test_render_football_field_dcf_renders_as_point_not_range():
     html = streamlit_app._render_football_field(summary, theme=_theme_stub())
     # Exactly one point marker — the DCF row.
     assert html.count('class="ff-point"') == 1
-    # The four non-DCF lenses still render range fills.
-    assert html.count('class="ff-range"') == 4
+    # The two other surfaced lenses (Dividend, SOTP) still render range fills;
+    # Peers + Historical are no longer surfaced.
+    assert html.count('class="ff-range"') == 2
     # DCF labelled as the index break-even, showing its mid ($100), not a range.
     assert "index break-even" in html
     assert "$100" in html

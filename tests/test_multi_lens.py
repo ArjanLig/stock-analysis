@@ -1122,7 +1122,10 @@ def test_list_watchlist_enriched_shape():
     assert with_row["fv_high"] == 100.0
     assert with_row["buy_price"] == 64.0
     assert with_row["current_vs_mid"] == 0.10
-    assert with_row["lens_count"] == 4  # dcf + multiples + historical + dividend (reverse_dcf excluded)
+    # Counted lenses = FORWARD_LENS_KEYS (dcf, dividend, sotp). multiples +
+    # historical demoted 2026-07-30; reverse_dcf never counted. Here dcf +
+    # dividend are present, sotp absent → 2.
+    assert with_row["lens_count"] == 2
     assert with_row["verdict"] == "deep_dive"
     assert with_row["phase"] == 3
 
@@ -1345,14 +1348,40 @@ def test_orchestrator_includes_historical_lens():
 
 
 def test_default_lens_weights_post_split():
+    # 2026-07-30: multiples + historical demoted to weight 0 (ticker-page
+    # "Multiples" tab only) — too inaccurate to drive the blended fair value.
     assert valuation_lenses.DEFAULT_LENS_WEIGHTS == {
         "dcf":         0.50,
-        "multiples":   0.25,
-        "historical":  0.25,
+        "multiples":   0.00,
+        "historical":  0.00,
         "reverse_dcf": 0.0,
         "dividend":    0.00,
         "sotp":        0.00,
     }
+
+
+def test_multiples_and_historical_excluded_from_forward_lenses():
+    """Peers + Historical are no longer surfaced on the watchlist (lens-dots,
+    football field, {N}-lens count) — only DCF/Dividend/SOTP remain."""
+    keys = valuation_lenses.FORWARD_LENS_KEYS
+    assert "multiples" not in keys
+    assert "historical" not in keys
+    assert "dcf" in keys
+
+
+def test_zero_weight_lens_computed_but_not_blended():
+    """A weight-0 lens (multiples) is still computed and returned in the summary
+    so the ticker-page tab can show it, but contributes 0 to the weighted FV."""
+    peers = [make_peer(ticker="P1", trailing_pe=18.0, ev_ebit=12.0),
+             make_peer(ticker="P2", trailing_pe=20.0, ev_ebit=14.0),
+             make_peer(ticker="P3", trailing_pe=22.0, ev_ebit=16.0)]
+    cfg = make_cfg(peers=peers,
+                   valuation_inputs={"ttm_eps": 10.0, "ttm_ebit": 12_000.0})
+    summary = valuation_lenses.calculate_multi_lens_valuation(cfg)
+    assert summary["lenses"]["multiples"] is not None          # still computed
+    assert summary["lenses"]["multiples"]["weight_normalized"] == 0.0  # not blended
+    # DCF carries the full normalized weight.
+    assert summary["lenses"]["dcf"]["weight_normalized"] == pytest.approx(1.0)
 
 
 def test_resolve_verdict_prefers_robustness():

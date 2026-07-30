@@ -15,8 +15,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LENS_WEIGHTS = {
     "dcf":         0.50,    # primary anchor — intrinsic value via cash flows (Damodaran-style)
-    "multiples":   0.25,    # peer-relative cross-check
-    "historical":  0.25,    # own-history cross-check
+    # multiples + historical demoted to weight 0 on 2026-07-30: the peer/own-
+    # history multiple anchors proved too inaccurate to drive the watchlist fair
+    # value. They are still COMPUTED (shown in the ticker-page "Multiples" tab)
+    # but no longer weighted into the blended fair value, and are dropped from
+    # the watchlist lens-dots / football-field / lens-count (see FORWARD_LENSES).
+    "multiples":   0.00,    # peer-relative cross-check — ticker-page tab only
+    "historical":  0.00,    # own-history cross-check — ticker-page tab only
     "reverse_dcf": 0.0,     # anchors at current price by definition; not a true valuation
     "dividend":    0.00,
     "sotp":        0.00,    # opt-in per ticker — only relevant for multi-segment businesses
@@ -38,8 +43,10 @@ DEFAULT_LENS_WEIGHTS = {
 # lockstep updates.
 FORWARD_LENSES: tuple[tuple[str, str], ...] = (
     ("dcf",        "DCF"),
-    ("multiples",  "Peers"),
-    ("historical", "Historical"),
+    # multiples ("Peers") + historical demoted off the watchlist 2026-07-30 —
+    # too inaccurate to surface there. Still computed and shown in the
+    # ticker-page "Multiples" tab, just not in the lens-dots / football-field /
+    # "{N} lenses" count. Re-add here to bring them back to the watchlist.
     ("dividend",   "Dividend"),
     ("sotp",       "SOTP"),
 )
