@@ -362,10 +362,20 @@ def compute_historical_lens(cfg):
 
 
 def compute_multiples_lens(cfg):
-    """Peer-relative multiples lens. Two sub-anchors:
+    """Peer-relative multiples lens. Two sub-anchors, each preferring the
+    verifiable trailing multiple (from SEC filings) and falling back to the
+    legacy forward/EV-EBITDA fields for configs not yet migrated:
 
-    B) peer-set forward P/E (median, min, max, Tukey-filtered) × forward_eps
-    C) peer-set EV/EBITDA (median, min, max, Tukey-filtered) × ttm_ebitda - net_debt → /shares
+    B) peer P/E  — trailing P/E × ttm_eps   (legacy: forward P/E × forward_eps)
+    C) peer EV   — EV/EBIT × ttm_ebit − net_debt → /shares
+                                            (legacy: EV/EBITDA × ttm_ebitda)
+
+    Trailing runs when the config carries ttm_eps/ttm_ebit AND at least one peer
+    has trailing_pe/ev_ebit; otherwise the forward/EV-EBITDA path runs.
+    details['pe_basis']/['ev_basis'] record which ran ('trailing'|'forward' /
+    'ev_ebit'|'ev_ebitda'). Trailing multiples are filing-grounded and current;
+    forward P/E and EV/EBITDA have no clean source and were the source of stale/
+    estimated peer data (see 2026-07 peer-lens rework).
 
     Own-history sub-anchors (A, A.2, D) live in compute_historical_lens.
     Sub-anchors silently skipped when their inputs are missing. Lens returns
@@ -374,61 +384,82 @@ def compute_multiples_lens(cfg):
     inputs = cfg.get("valuation_inputs") or {}
     peers = cfg.get("peers") or []
 
-    forward_eps = inputs.get("forward_eps")
-    ttm_ebitda = inputs.get("ttm_ebitda")
-
     fv_anchors = []
     details = {
         "fwd_pe_peer_median": None,
         "ev_ebitda_peer_median": None,
+        "pe_basis": None,
+        "ev_basis": None,
+        "peer_fwd_pe_outliers_removed": [],
+        "peer_ev_ebitda_outliers_removed": [],
         "closest_peer": None,
         "skipped": [],
     }
 
-    # B) peer fwd P/E
-    peer_fwd_pe_pairs = [(p["ticker"], p["fwd_pe"]) for p in peers if p.get("fwd_pe")]
-    peer_fwd_pes_raw = [v for _, v in peer_fwd_pe_pairs]
-    peer_fwd_pes, removed_idx = _tukey_filter(peer_fwd_pes_raw)
-    details["peer_fwd_pe_outliers_removed"] = [peer_fwd_pe_pairs[i][0] for i in removed_idx]
-    if peer_fwd_pes and forward_eps:
-        median_pe = statistics.median(peer_fwd_pes)
-        fv_low_p = min(peer_fwd_pes) * forward_eps
-        fv_mid_p = median_pe * forward_eps
-        fv_high_p = max(peer_fwd_pes) * forward_eps
-        fv_anchors.extend([fv_low_p, fv_mid_p, fv_high_p])
-        details["fwd_pe_peer_median"] = fv_mid_p
-        avg_growth = sum(cfg.get("revenue_growth", [0.0])) / max(
-            len(cfg.get("revenue_growth", [0.0])), 1
-        )
-        avg_margin = sum(cfg.get("op_margins", [0.0])) / max(
-            len(cfg.get("op_margins", [0.0])), 1
-        )
-        details["closest_peer"] = _closest_peer_ticker(peers, avg_margin, avg_growth)
+    # ── B) peer P/E — prefer verifiable trailing P/E, fall back to forward ──
+    peer_tpe_pairs = [(p["ticker"], p["trailing_pe"]) for p in peers if p.get("trailing_pe")]
+    peer_fpe_pairs = [(p["ticker"], p["fwd_pe"]) for p in peers if p.get("fwd_pe")]
+    ttm_eps = inputs.get("ttm_eps")
+    forward_eps = inputs.get("forward_eps")
+    if peer_tpe_pairs and ttm_eps:
+        pe_pairs, pe_eps, details["pe_basis"] = peer_tpe_pairs, ttm_eps, "trailing"
+    elif peer_fpe_pairs and forward_eps:
+        pe_pairs, pe_eps, details["pe_basis"] = peer_fpe_pairs, forward_eps, "forward"
     else:
-        reason = "fwd_pe_peer (no peers with fwd_pe or no forward_eps)"
+        pe_pairs, pe_eps = None, None
+
+    if pe_pairs:
+        peer_pes_raw = [v for _, v in pe_pairs]
+        peer_pes, removed_idx = _tukey_filter(peer_pes_raw)
+        details["peer_fwd_pe_outliers_removed"] = [pe_pairs[i][0] for i in removed_idx]
+        if peer_pes:
+            median_pe = statistics.median(peer_pes)
+            fv_anchors.extend([min(peer_pes) * pe_eps, median_pe * pe_eps, max(peer_pes) * pe_eps])
+            details["fwd_pe_peer_median"] = median_pe * pe_eps
+            avg_growth = sum(cfg.get("revenue_growth", [0.0])) / max(
+                len(cfg.get("revenue_growth", [0.0])), 1
+            )
+            avg_margin = sum(cfg.get("op_margins", [0.0])) / max(
+                len(cfg.get("op_margins", [0.0])), 1
+            )
+            details["closest_peer"] = _closest_peer_ticker(peers, avg_margin, avg_growth)
+    else:
+        reason = "pe_peer (no trailing_pe+ttm_eps or fwd_pe+forward_eps)"
         details["skipped"].append(reason)
         logger.info("Multiples lens: skipping %s", reason)
 
-    # C) peer EV/EBITDA
-    peer_ev_ebitda_pairs = [(p["ticker"], p["ev_ebitda"]) for p in peers if p.get("ev_ebitda")]
-    peer_ev_ebitdas_raw = [v for _, v in peer_ev_ebitda_pairs]
-    peer_ev_ebitdas, removed_idx_ev = _tukey_filter(peer_ev_ebitdas_raw)
-    details["peer_ev_ebitda_outliers_removed"] = [peer_ev_ebitda_pairs[i][0] for i in removed_idx_ev]
-    if peer_ev_ebitdas and ttm_ebitda:
-        net_debt = (
-            cfg.get("debt_market_value", 0.0)
-            - cfg.get("cash_bridge", 0.0)
-            - cfg.get("securities", 0.0)
-        )
-        shares = cfg.get("shares_outstanding") or 1.0
-        median_ev = statistics.median(peer_ev_ebitdas)
-        fv_low_e = (min(peer_ev_ebitdas) * ttm_ebitda - net_debt) / shares
-        fv_mid_e = (median_ev * ttm_ebitda - net_debt) / shares
-        fv_high_e = (max(peer_ev_ebitdas) * ttm_ebitda - net_debt) / shares
-        fv_anchors.extend([fv_low_e, fv_mid_e, fv_high_e])
-        details["ev_ebitda_peer_median"] = fv_mid_e
+    # ── C) peer EV — prefer verifiable EV/EBIT, fall back to EV/EBITDA ──
+    peer_evebit_pairs = [(p["ticker"], p["ev_ebit"]) for p in peers if p.get("ev_ebit")]
+    peer_evebitda_pairs = [(p["ticker"], p["ev_ebitda"]) for p in peers if p.get("ev_ebitda")]
+    ttm_ebit = inputs.get("ttm_ebit")
+    ttm_ebitda = inputs.get("ttm_ebitda")
+    if peer_evebit_pairs and ttm_ebit:
+        ev_pairs, ev_denom, details["ev_basis"] = peer_evebit_pairs, ttm_ebit, "ev_ebit"
+    elif peer_evebitda_pairs and ttm_ebitda:
+        ev_pairs, ev_denom, details["ev_basis"] = peer_evebitda_pairs, ttm_ebitda, "ev_ebitda"
     else:
-        reason = "ev_ebitda_peer (no peers with ev_ebitda or no ttm_ebitda)"
+        ev_pairs, ev_denom = None, None
+
+    if ev_pairs:
+        peer_evs_raw = [v for _, v in ev_pairs]
+        peer_evs, removed_idx_ev = _tukey_filter(peer_evs_raw)
+        details["peer_ev_ebitda_outliers_removed"] = [ev_pairs[i][0] for i in removed_idx_ev]
+        if peer_evs:
+            net_debt = (
+                cfg.get("debt_market_value", 0.0)
+                - cfg.get("cash_bridge", 0.0)
+                - cfg.get("securities", 0.0)
+            )
+            shares = cfg.get("shares_outstanding") or 1.0
+            median_ev = statistics.median(peer_evs)
+            fv_anchors.extend([
+                (min(peer_evs) * ev_denom - net_debt) / shares,
+                (median_ev * ev_denom - net_debt) / shares,
+                (max(peer_evs) * ev_denom - net_debt) / shares,
+            ])
+            details["ev_ebitda_peer_median"] = (median_ev * ev_denom - net_debt) / shares
+    else:
+        reason = "ev_peer (no ev_ebit+ttm_ebit or ev_ebitda+ttm_ebitda)"
         details["skipped"].append(reason)
         logger.info("Multiples lens: skipping %s", reason)
 

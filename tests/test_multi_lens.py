@@ -854,6 +854,60 @@ def test_multiples_lens_partial_inputs_skips_components():
     assert lens["details"]["ev_ebitda_peer_median"] is not None
 
 
+def test_multiples_lens_prefers_trailing_when_present():
+    """When peers carry trailing_pe/ev_ebit and inputs carry ttm_eps/ttm_ebit,
+    the lens uses the verifiable trailing basis — not the forward/EV-EBITDA
+    fields, even when those are also present (2026-07 peer-lens rework)."""
+    peers = [
+        make_peer(ticker="P1", trailing_pe=16.0, ev_ebit=22.0,
+                  fwd_pe=30.0, ev_ebitda=99.0, op_margin=0.18, rev_growth=0.04),
+        make_peer(ticker="P2", trailing_pe=20.0, ev_ebit=26.0,
+                  fwd_pe=31.0, ev_ebitda=99.0, op_margin=0.20, rev_growth=0.05),
+        make_peer(ticker="P3", trailing_pe=24.0, ev_ebit=30.0,
+                  fwd_pe=32.0, ev_ebitda=99.0, op_margin=0.22, rev_growth=0.06),
+    ]
+    cfg = make_cfg(peers=peers, valuation_inputs={
+        "ttm_eps": 10.0, "ttm_ebit": 12_000.0,
+        "forward_eps": 5.0, "ttm_ebitda": 12_000.0,  # must be ignored
+    })
+    lens = valuation_lenses.compute_multiples_lens(cfg)
+    assert lens is not None
+    assert lens["details"]["pe_basis"] == "trailing"
+    assert lens["details"]["ev_basis"] == "ev_ebit"
+    # median trailing_pe 20.0 × ttm_eps 10.0 = 200 (not forward 31×5=155)
+    assert lens["details"]["fwd_pe_peer_median"] == pytest.approx(20.0 * 10.0)
+    # median ev_ebit 26.0 × ttm_ebit 12000 − net_debt(10000−5000)=5000, /1000
+    assert lens["details"]["ev_ebitda_peer_median"] == pytest.approx(
+        (26.0 * 12_000.0 - 5_000) / 1_000)
+
+
+def test_multiples_lens_falls_back_to_forward_without_ttm_eps():
+    """trailing_pe present but ttm_eps missing → the P/E anchor uses the
+    legacy forward basis rather than skipping."""
+    peers = [
+        make_peer(ticker="P1", trailing_pe=16.0, fwd_pe=18.0, ev_ebitda=10.0),
+        make_peer(ticker="P2", trailing_pe=20.0, fwd_pe=20.0, ev_ebitda=12.0),
+        make_peer(ticker="P3", trailing_pe=24.0, fwd_pe=22.0, ev_ebitda=14.0),
+    ]
+    cfg = make_cfg(peers=peers, valuation_inputs={"forward_eps": 5.0})  # no ttm_eps
+    lens = valuation_lenses.compute_multiples_lens(cfg)
+    assert lens is not None
+    assert lens["details"]["pe_basis"] == "forward"
+    assert lens["details"]["fwd_pe_peer_median"] == pytest.approx(20.0 * 5.0)
+
+
+def test_multiples_lens_legacy_forward_basis_recorded():
+    """A config with only forward/EV-EBITDA fields runs the legacy path and
+    records the basis explicitly."""
+    peers = [make_peer(ticker="P1", fwd_pe=18.0, ev_ebitda=10.0),
+             make_peer(ticker="P2", fwd_pe=20.0, ev_ebitda=12.0),
+             make_peer(ticker="P3", fwd_pe=22.0, ev_ebitda=14.0)]
+    cfg = make_cfg(peers=peers, valuation_inputs=dict(SAMPLE_VALUATION_INPUTS))
+    lens = valuation_lenses.compute_multiples_lens(cfg)
+    assert lens["details"]["pe_basis"] == "forward"
+    assert lens["details"]["ev_basis"] == "ev_ebitda"
+
+
 # ---------------------------------------------------------------- Tukey filter
 
 def test_tukey_filter_drops_extreme_outlier():
