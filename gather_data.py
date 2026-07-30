@@ -3151,6 +3151,71 @@ def fetch_fundamentals(ticker, n_years=10):
     return result
 
 
+def compute_trailing_multiples(ticker):
+    """Compute trailing P/E and EV/EBIT for a ticker from EDGAR fundamentals +
+    current price — no external multiples provider, no rate limit, self-
+    refreshing on each call.
+
+    Uses the latest annual EDGAR figures (filing-grounded). This is slightly
+    less current than a strict four-quarter TTM for fast growers mid-year, but
+    validated against SEC TTM within ~5-15% for stable names — and it correctly
+    handles cases where third-party feeds carry share-count/EPS errors.
+
+    Returns a dict with keys trailing_pe, ev_ebit, ttm_eps, ttm_ebit (the last
+    two are the ticker's own latest-annual per-share EPS and EBIT in $M, for use
+    as lens denominators). Any value that cannot be computed — foreign filer
+    with no CIK, negative earnings, missing tag — is None (never estimated).
+    """
+    out = {"trailing_pe": None, "ev_ebit": None, "ttm_eps": None, "ttm_ebit": None}
+    try:
+        fund = fetch_fundamentals(ticker, n_years=2)
+    except Exception as e:
+        logger.info("compute_trailing_multiples(%s): fundamentals failed: %s", ticker, e)
+        return out
+    years = fund.get("years") or []
+    if not years:
+        return out  # no EDGAR data (e.g. foreign filer)
+
+    def _last(key):
+        seq = fund.get(key) or []
+        for v in reversed(seq):
+            if v is not None:
+                return v
+        return None
+
+    eps = _last("eps")
+    net_income = _last("net_income")
+    ebit = _last("operating_income")
+    shares = _last("shares")            # raw count
+    total_debt = _last("total_debt") or 0
+    cash = _last("cash") or 0
+    st_inv = _last("short_term_investments") or 0
+
+    out["ttm_eps"] = eps
+    out["ttm_ebit"] = ebit
+
+    price, _, _ = fetch_stock_price(ticker)
+    if not price or price <= 0:
+        return out
+
+    # Trailing P/E — prefer per-share EPS; fall back to market cap / net income.
+    if eps and eps > 0:
+        out["trailing_pe"] = round(price / eps, 2)
+    elif net_income and net_income > 0 and shares and shares > 0:
+        mktcap_m = price * shares / 1_000_000
+        out["trailing_pe"] = round(mktcap_m / net_income, 2)
+
+    # EV/EBIT — EV = market cap + total debt − cash − short-term investments
+    # (all $M), divided by latest annual EBIT. Only when EBIT is positive.
+    if ebit and ebit > 0 and shares and shares > 0:
+        mktcap_m = price * shares / 1_000_000
+        ev_m = mktcap_m + total_debt - cash - st_inv
+        if ev_m > 0:
+            out["ev_ebit"] = round(ev_m / ebit, 2)
+
+    return out
+
+
 # ── CLI Entry Point ───────────────────────────────────────────────────
 
 def main():

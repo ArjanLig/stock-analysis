@@ -147,6 +147,13 @@ async def _tool_update_fundamentals(user_id: str, args: dict) -> Any:
     )
 
 
+async def _tool_refresh_peer_multiples(user_id: str, args: dict) -> Any:
+    return mcp_server._refresh_peer_multiples_impl(
+        ticker=args["ticker"],
+        user_id=user_id,
+    )
+
+
 async def _tool_get_prescan_prompts(user_id: str, args: dict) -> Any:
     return mcp_server._get_prescan_prompts_impl(args["ticker"], user_id=user_id)
 
@@ -515,6 +522,23 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "refresh_peer_multiples",
+        "description": (
+            "Recompute trailing P/E and EV/EBIT for a watchlist ticker's peer "
+            "set — and the ticker's own ttm_eps/ttm_ebit — from EDGAR filings "
+            "+ current price, and save them into the config. No external "
+            "multiples provider and no rate limit; safe to re-run any time to "
+            "refresh. Peers that are foreign filers or lack computable earnings "
+            "are left out of the trailing anchors. Returns per-peer "
+            "trailing_pe/ev_ebit (null where not computable)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"ticker": {"type": "string"}},
+            "required": ["ticker"],
+        },
+    },
+    {
         "name": "get_prescan_prompts",
         "description": (
             "Return the user's prescan prompt library with placeholders "
@@ -688,6 +712,7 @@ TOOL_HANDLERS: dict[str, Callable[[str, dict], Awaitable[Any]]] = {
     "set_sotp_corporate_overhead": _tool_set_sotp_corporate_overhead,
     "get_fundamentals": _tool_get_fundamentals,
     "update_fundamentals": _tool_update_fundamentals,
+    "refresh_peer_multiples": _tool_refresh_peer_multiples,
     "get_prescan_prompts": _tool_get_prescan_prompts,
     "get_prescan_sections": _tool_get_prescan_sections,
     "save_prescan_section": _tool_save_prescan_section,

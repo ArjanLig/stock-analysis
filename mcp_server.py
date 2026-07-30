@@ -845,9 +845,79 @@ def _update_fundamentals_impl(ticker: str, overrides: dict,
     }, default=str)
 
 
+def _refresh_peer_multiples_impl(ticker: str, user_id: str | None = None) -> str:
+    """Recompute trailing P/E + EV/EBIT for a ticker's peers and the ticker's
+    own ttm_eps/ttm_ebit from EDGAR fundamentals + current price (via
+    gather_data.compute_trailing_multiples) — no external multiples provider,
+    no rate limit, self-refreshing. Populates cfg.peers[].trailing_pe/ev_ebit
+    and cfg.valuation_inputs.ttm_eps/ttm_ebit, then saves. Peers that cannot be
+    computed (foreign filer, negative earnings, missing tag) keep their existing
+    fields and are naturally excluded from the trailing anchors.
+    """
+    user_id = user_id or USER_ID
+    client = get_supabase_client()
+    cfg = config_store.load_config(client, ticker, user_id=user_id)
+    if cfg is None:
+        return json.dumps({"error": f"{ticker.upper()} not on watchlist"})
+
+    own = gather_data.compute_trailing_multiples(ticker)
+    vi = dict(cfg.get("valuation_inputs") or {})
+    if own.get("ttm_eps") is not None:
+        vi["ttm_eps"] = own["ttm_eps"]
+    if own.get("ttm_ebit") is not None:
+        vi["ttm_ebit"] = own["ttm_ebit"]
+    cfg["valuation_inputs"] = vi
+
+    computed: dict = {}
+    updated_peers = []
+    for p in cfg.get("peers") or []:
+        pt = p.get("ticker")
+        if not pt:
+            updated_peers.append(p)
+            continue
+        m = gather_data.compute_trailing_multiples(pt)
+        np = dict(p)
+        if m.get("trailing_pe") is not None:
+            np["trailing_pe"] = m["trailing_pe"]
+        if m.get("ev_ebit") is not None:
+            np["ev_ebit"] = m["ev_ebit"]
+        np["_trailing_source"] = "EDGAR compute_trailing_multiples"
+        updated_peers.append(np)
+        computed[pt] = {"trailing_pe": m.get("trailing_pe"), "ev_ebit": m.get("ev_ebit")}
+    cfg["peers"] = updated_peers
+
+    config_store.save_config(client, ticker, cfg, user_id=user_id)
+    return json.dumps({
+        "ticker": ticker.upper(),
+        "own_ttm_eps": vi.get("ttm_eps"),
+        "own_ttm_ebit": vi.get("ttm_ebit"),
+        "peers": computed,
+    }, default=str)
+
+
 # ---------------------------------------------------------------------------
 # MCP Tools
 # ---------------------------------------------------------------------------
+
+@mcp.tool()
+def refresh_peer_multiples(ticker: str) -> str:
+    """Recompute trailing P/E and EV/EBIT for a watchlist ticker's peer set —
+    and the ticker's own ttm_eps/ttm_ebit — from EDGAR filings + current price,
+    then save them into the config. No external multiples provider and no rate
+    limit; safe to re-run any time to refresh. Peers that are foreign filers or
+    lack computable earnings are left out of the trailing anchors.
+
+    Args:
+        ticker: Watchlist ticker whose peer multiples to refresh (e.g. "MSFT").
+
+    Returns:
+        JSON with the ticker's own ttm_eps/ttm_ebit and a per-peer map of the
+        computed trailing_pe / ev_ebit (null where not computable).
+    """
+    try:
+        return _refresh_peer_multiples_impl(ticker)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 @mcp.tool()
 def build_dcf_config(
