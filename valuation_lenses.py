@@ -302,14 +302,17 @@ def compute_historical_lens(cfg):
     historical_fwd_pe = inputs.get("historical_fwd_pe")
     historical_trailing_pe = inputs.get("historical_trailing_pe")
     historical_ev_ebitda = inputs.get("historical_ev_ebitda")
+    historical_ev_ebit = inputs.get("historical_ev_ebit")
     ttm_eps = inputs.get("ttm_eps")
     ttm_ebitda = inputs.get("ttm_ebitda")
+    ttm_ebit = inputs.get("ttm_ebit")
 
     fv_anchors = []
     details = {
         "fwd_pe_own": None,
         "historical_trailing_pe_fv": None,
         "historical_ev_ebitda_fv": None,
+        "ev_basis": None,
         "skipped": [],
     }
 
@@ -333,19 +336,28 @@ def compute_historical_lens(cfg):
         details["skipped"].append(reason)
         logger.info("Historical lens: skipping %s", reason)
 
-    # D) own historical EV/EBITDA × ttm_ebitda - net_debt → /shares
-    if historical_ev_ebitda and ttm_ebitda:
+    # D) own historical EV multiple × EV-denominator − net_debt → /shares.
+    #    Prefer verifiable EV/EBIT × ttm_ebit; fall back to legacy EV/EBITDA ×
+    #    ttm_ebitda for configs not yet migrated (mirrors the peer lens rework).
+    if historical_ev_ebit and ttm_ebit:
+        ev_mult, ev_denom, details["ev_basis"] = historical_ev_ebit, ttm_ebit, "ev_ebit"
+    elif historical_ev_ebitda and ttm_ebitda:
+        ev_mult, ev_denom, details["ev_basis"] = historical_ev_ebitda, ttm_ebitda, "ev_ebitda"
+    else:
+        ev_mult, ev_denom = None, None
+
+    if ev_mult:
         net_debt = (
             cfg.get("debt_market_value", 0.0)
             - cfg.get("cash_bridge", 0.0)
             - cfg.get("securities", 0.0)
         )
         shares = cfg.get("shares_outstanding") or 1.0
-        own_evebitda_fv = (historical_ev_ebitda * ttm_ebitda - net_debt) / shares
-        fv_anchors.append(own_evebitda_fv)
-        details["historical_ev_ebitda_fv"] = own_evebitda_fv
+        own_ev_fv = (ev_mult * ev_denom - net_debt) / shares
+        fv_anchors.append(own_ev_fv)
+        details["historical_ev_ebitda_fv"] = own_ev_fv
     else:
-        reason = "historical_ev_ebitda (no historical_ev_ebitda or ttm_ebitda)"
+        reason = "historical_ev (no historical_ev_ebit+ttm_ebit or historical_ev_ebitda+ttm_ebitda)"
         details["skipped"].append(reason)
         logger.info("Historical lens: skipping %s", reason)
 

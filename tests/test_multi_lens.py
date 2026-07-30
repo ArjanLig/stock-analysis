@@ -854,6 +854,31 @@ def test_multiples_lens_partial_inputs_skips_components():
     assert lens["details"]["ev_ebitda_peer_median"] is not None
 
 
+def test_historical_lens_prefers_ev_ebit_over_ev_ebitda():
+    """Own-history EV anchor prefers verifiable EV/EBIT × ttm_ebit; the legacy
+    EV/EBITDA × ttm_ebitda inputs must be ignored when EV/EBIT is present."""
+    cfg = make_cfg(valuation_inputs={
+        "historical_ev_ebit": 18.0, "ttm_ebit": 10_000.0,
+        "historical_ev_ebitda": 12.0, "ttm_ebitda": 15_000.0,  # must be ignored
+    })
+    lens = valuation_lenses.compute_historical_lens(cfg)
+    assert lens is not None
+    assert lens["details"]["ev_basis"] == "ev_ebit"
+    net_debt = 10_000 - 5_000 - 0  # make_cfg defaults
+    expected = (18.0 * 10_000.0 - net_debt) / 1_000
+    assert lens["details"]["historical_ev_ebitda_fv"] == pytest.approx(expected)
+
+
+def test_historical_lens_falls_back_to_ev_ebitda():
+    """Without EV/EBIT inputs, the legacy EV/EBITDA path still runs."""
+    cfg = make_cfg(valuation_inputs={
+        "historical_ev_ebitda": 12.0, "ttm_ebitda": 15_000.0,
+    })
+    lens = valuation_lenses.compute_historical_lens(cfg)
+    assert lens is not None
+    assert lens["details"]["ev_basis"] == "ev_ebitda"
+
+
 def test_multiples_lens_prefers_trailing_when_present():
     """When peers carry trailing_pe/ev_ebit and inputs carry ttm_eps/ttm_ebit,
     the lens uses the verifiable trailing basis — not the forward/EV-EBITDA
