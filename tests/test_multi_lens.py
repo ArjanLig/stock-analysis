@@ -1122,10 +1122,9 @@ def test_list_watchlist_enriched_shape():
     assert with_row["fv_high"] == 100.0
     assert with_row["buy_price"] == 64.0
     assert with_row["current_vs_mid"] == 0.10
-    # Counted lenses = FORWARD_LENS_KEYS (dcf, dividend, sotp). multiples +
-    # historical demoted 2026-07-30; reverse_dcf never counted. Here dcf +
-    # dividend are present, sotp absent → 2.
-    assert with_row["lens_count"] == 2
+    # Counted lenses = FORWARD_LENS_KEYS, which is DCF-only as of 2026-07-30
+    # (multiples/historical/dividend/sotp all removed from the watchlist).
+    assert with_row["lens_count"] == 1
     assert with_row["verdict"] == "deep_dive"
     assert with_row["phase"] == 3
 

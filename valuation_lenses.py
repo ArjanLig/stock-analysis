@@ -43,12 +43,13 @@ DEFAULT_LENS_WEIGHTS = {
 # lockstep updates.
 FORWARD_LENSES: tuple[tuple[str, str], ...] = (
     ("dcf",        "DCF"),
-    # multiples ("Peers") + historical demoted off the watchlist 2026-07-30 —
-    # too inaccurate to surface there. Still computed and shown in the
-    # ticker-page "Multiples" tab, just not in the lens-dots / football-field /
-    # "{N} lenses" count. Re-add here to bring them back to the watchlist.
-    ("dividend",   "Dividend"),
-    ("sotp",       "SOTP"),
+    # 2026-07-30: the watchlist surfaces ONLY the DCF lens. multiples ("Peers")
+    # and historical proved too inaccurate — moved to the ticker page (peer
+    # multiples on the Peer Comparison tab, own-history on the DCF tab). Dividend
+    # and SOTP were also removed from the watchlist lens-dots / football-field /
+    # "{N} lenses" count per the user's "only the one lens" request; SOTP can
+    # still be weighted per-config (opt-in) but is no longer shown here.
+    # Re-add a (key, label) tuple to bring a lens back to the watchlist.
 )
 
 # Convenience: keys-only tuple for consumers that don't need display labels.

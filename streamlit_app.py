@@ -960,14 +960,14 @@ def _render_scorecard(data: dict, theme: dict, ticker: str, company: str) -> str
     verdict = (data.get("verdict") or "").lower()
     vmap = {"pass": ("PASS", "red"), "revisit": ("REVISIT", "yellow"),
             "deep_dive": ("DEEP DIVE", "green")}
-    vlabel, vk = vmap.get(verdict, ("\u2014", "yellow"))
+    vlabel, vk = vmap.get(verdict, ("—", "yellow"))
     vcolor, vfill = band_color[vk], band_fill[vk]
     pill = (f'<span style="padding:3px 13px;border-radius:980px;background:{vfill};'
             f'border:1px solid {vcolor};color:{text};font-weight:600;'
             f'font-size:0.7rem;letter-spacing:0.06em">{vlabel}</span>')
     phase = data.get("phase", {}) or {}
-    phase_label = _html.escape(f"{company} ({ticker}) \u00b7 Phase "
-                               f"{phase.get('number', '?')} \u00b7 "
+    phase_label = _html.escape(f"{company} ({ticker}) · Phase "
+                               f"{phase.get('number', '?')} · "
                                f"{phase.get('name', '')}")
     header = (f'<div style="display:flex;justify-content:space-between;'
               f'align-items:center;margin-bottom:2px"><span style="color:{muted};'
@@ -4869,7 +4869,7 @@ def _dcf_editor(ticker):
     margins = list(cfg.get('op_margins', []))
 
     # ── Tabs: DCF / Reverse DCF / Peer Comparison / Dividend / SOTP / Fundamentals ──
-    _tab_notes, _tab_fundamentals, _tab_dcf, _tab_rdcf, _tab_multiples, _tab_peers, _tab_dividend, _tab_sotp = st.tabs(["Pre-Scan", "Fundamentals", "DCF", "Reverse DCF", "Multiples", "Peer Comparison", "Dividend", "SOTP"])
+    _tab_notes, _tab_fundamentals, _tab_dcf, _tab_rdcf, _tab_peers, _tab_dividend, _tab_sotp = st.tabs(["Pre-Scan", "Fundamentals", "DCF", "Reverse DCF", "Peer Comparison", "Dividend", "SOTP"])
 
     with _tab_dcf:
         with st.container(key="tabcard_dcf_1"):
@@ -5007,7 +5007,7 @@ def _dcf_editor(ticker):
                 _wu_beta = sum(ub * wt for _, ub, wt in cfg['sector_betas']) if cfg['sector_betas'] else 1.0
                 _de_ratio = _debt_val / _eq_val if _eq_val > 0 else 0
                 _capm_lev_beta = _wu_beta * (1 + (1 - cfg['tax_rate']) * _de_ratio)
-                # Beta that actually feeds the discount rate \u2014 mirrors
+                # Beta that actually feeds the discount rate — mirrors
                 # dcf_calculator._effective_beta so the preview matches the engine.
                 _eff_beta = 1.0 if cfg.get('discount_mode', 'opportunity_cost') == 'opportunity_cost' else _capm_lev_beta
                 st.markdown(_ww_val.format(label="Weighted Unlevered \u03b2", value=f"{_wu_beta:.2f}", extra=f"color:{T['text_muted']};"), unsafe_allow_html=True)
@@ -5433,6 +5433,37 @@ def _dcf_editor(ticker):
             # sits inside the DCF card without changing render order.
             _bridge_slot = st.container()
 
+            # ── Own historical multiples (relative value; not weighted) ──
+            import valuation_lenses as _vl_oh
+            _price_oh = float(cfg.get("stock_price", 0) or 0)
+
+            def _delta_oh(fv):
+                if not _price_oh or not fv:
+                    return None
+                return f"{(fv - _price_oh) / _price_oh * 100:+.1f}% vs price"
+
+            _hist_oh = _vl_oh.compute_historical_lens(cfg)
+            with st.expander("Own historical multiples (reference)"):
+                st.caption("Fair value from this ticker's own historical trailing "
+                           "P/E and EV multiple — excluded from the blended fair "
+                           "value and the watchlist.")
+                if _hist_oh:
+                    _doh = _hist_oh.get("details", {})
+                    _ohc1, _ohc2, _ohc3 = st.columns(3)
+                    _ohc1.metric("Fair value (mid)", f"${_hist_oh['fv_mid']:,.0f}",
+                                 delta=_delta_oh(_hist_oh["fv_mid"]))
+                    _tpe_oh = _doh.get("historical_trailing_pe_fv")
+                    _ohc2.metric("Own trailing P/E",
+                                 f"${_tpe_oh:,.0f}" if _tpe_oh else "—",
+                                 delta=_delta_oh(_tpe_oh))
+                    _hev_oh = _doh.get("historical_ev_ebitda_fv")
+                    _ohc3.metric(f"Own EV multiple ({_doh.get('ev_basis') or '—'})",
+                                 f"${_hev_oh:,.0f}" if _hev_oh else "—",
+                                 delta=_delta_oh(_hev_oh))
+                else:
+                    st.info("Own-history multiples unavailable — no historical "
+                            "trailing P/E or EV multiple on file for this ticker.")
+
     with _tab_rdcf:
         with st.container(key="tabcard_rdcf"):
 
@@ -5571,92 +5602,48 @@ def _dcf_editor(ticker):
                 unsafe_allow_html=True,
             )
 
-    with _tab_multiples:
-        with st.container(key="tabcard_multiples"):
-            import valuation_lenses as _vl
-            st.markdown("#### Multiples")
-            st.caption(
-                "Relative-value cross-checks. **Excluded from the blended fair "
-                "value and the watchlist** (2026-07-30) — the peer and "
-                "own-history multiple anchors proved too inaccurate to rely on. "
-                "Shown here for reference only."
-            )
-            _price_m = float(cfg.get("stock_price", 0) or 0)
-
-            def _delta_vs_price(fv):
-                if not _price_m or not fv:
-                    return None
-                return f"{(fv - _price_m) / _price_m * 100:+.1f}% vs price"
-
-            _mult = _vl.compute_multiples_lens(cfg)
-            _hist = _vl.compute_historical_lens(cfg)
-
-            # ── Peer multiples ──
-            st.markdown("##### Peer multiples")
-            if _mult:
-                _d = _mult.get("details", {})
-                _mc1, _mc2, _mc3 = st.columns(3)
-                _mc1.metric("Fair value (mid)", f"${_mult['fv_mid']:,.0f}",
-                            delta=_delta_vs_price(_mult["fv_mid"]))
-                _pe_fv = _mult.get("fv_mid_pe")
-                _mc2.metric(f"P/E anchor ({_d.get('pe_basis') or '—'})",
-                            f"${_pe_fv:,.0f}" if _pe_fv else "—",
-                            delta=_delta_vs_price(_pe_fv))
-                _ev_fv = _mult.get("fv_mid_ev")
-                _mc3.metric(f"EV/EBIT anchor ({_d.get('ev_basis') or '—'})",
-                            f"${_ev_fv:,.0f}" if _ev_fv else "—",
-                            delta=_delta_vs_price(_ev_fv))
-                _closest = _d.get("closest_peer") or "—"
-                st.markdown(
-                    f'<div style="font-size:0.82rem;color:{T["text_muted"]}">'
-                    f'Range ${_mult["fv_low"]:,.0f} – ${_mult["fv_high"]:,.0f} '
-                    f'· closest peer: {_closest}</div>',
-                    unsafe_allow_html=True,
-                )
-                _out_pe = _d.get("peer_fwd_pe_outliers_removed") or []
-                _out_ev = _d.get("peer_ev_ebitda_outliers_removed") or []
-                if _out_pe or _out_ev:
-                    st.markdown(
-                        f'<div style="font-size:0.78rem;color:{T["text_muted"]}">'
-                        f'Outliers removed — P/E: {", ".join(_out_pe) or "none"} · '
-                        f'EV: {", ".join(_out_ev) or "none"}</div>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.info("Peer multiples unavailable — no peers with computable "
-                        "trailing_pe/ev_ebit (or missing ttm_eps/ttm_ebit).")
-
-            st.markdown("---")
-
-            # ── Own history ──
-            st.markdown("##### Own history")
-            if _hist:
-                _dh = _hist.get("details", {})
-                _hc1, _hc2, _hc3 = st.columns(3)
-                _hc1.metric("Fair value (mid)", f"${_hist['fv_mid']:,.0f}",
-                            delta=_delta_vs_price(_hist["fv_mid"]))
-                _tpe = _dh.get("historical_trailing_pe_fv")
-                _hc2.metric("Own trailing P/E", f"${_tpe:,.0f}" if _tpe else "—",
-                            delta=_delta_vs_price(_tpe))
-                _hev = _dh.get("historical_ev_ebitda_fv")
-                _hc3.metric(f"Own EV multiple ({_dh.get('ev_basis') or '—'})",
-                            f"${_hev:,.0f}" if _hev else "—",
-                            delta=_delta_vs_price(_hev))
-                st.markdown(
-                    f'<div style="font-size:0.82rem;color:{T["text_muted"]}">'
-                    f'Range ${_hist["fv_low"]:,.0f} – ${_hist["fv_high"]:,.0f}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.info("Own-history multiples unavailable — no historical "
-                        "trailing P/E or EV multiple on file for this ticker.")
-
     with _tab_peers:
         with st.container(key="tabcard_peers"):
             _base_margin_p = cfg.get('base_op_margin', 0)
             _rev_growth_p = growth[0] if growth else 0
             _ev_rev_p = _ev / _base_rev if _base_rev else 0
             st.markdown("#### Peer Comparison")
+            # ── Peer-multiples fair value (relative value; not weighted into FV) ──
+            import valuation_lenses as _vl_pm
+            _price_pm = float(cfg.get("stock_price", 0) or 0)
+
+            def _delta_pm(fv):
+                if not _price_pm or not fv:
+                    return None
+                return f"{(fv - _price_pm) / _price_pm * 100:+.1f}% vs price"
+
+            _mult_pm = _vl_pm.compute_multiples_lens(cfg)
+            st.markdown("##### Peer-multiples fair value")
+            st.caption("Relative value from peer trailing P/E and EV/EBIT — "
+                       "excluded from the blended fair value and the watchlist; "
+                       "shown here for reference only.")
+            if _mult_pm:
+                _dpm = _mult_pm.get("details", {})
+                _pmc1, _pmc2, _pmc3 = st.columns(3)
+                _pmc1.metric("Fair value (mid)", f"${_mult_pm['fv_mid']:,.0f}",
+                             delta=_delta_pm(_mult_pm["fv_mid"]))
+                _pe_fv_pm = _mult_pm.get("fv_mid_pe")
+                _pmc2.metric(f"P/E anchor ({_dpm.get('pe_basis') or '—'})",
+                             f"${_pe_fv_pm:,.0f}" if _pe_fv_pm else "—",
+                             delta=_delta_pm(_pe_fv_pm))
+                _ev_fv_pm = _mult_pm.get("fv_mid_ev")
+                _pmc3.metric(f"EV/EBIT anchor ({_dpm.get('ev_basis') or '—'})",
+                             f"${_ev_fv_pm:,.0f}" if _ev_fv_pm else "—",
+                             delta=_delta_pm(_ev_fv_pm))
+                st.markdown(
+                    f'<div style="font-size:0.82rem;color:{T["text_muted"]}">'
+                    f'Range ${_mult_pm["fv_low"]:,.0f} – ${_mult_pm["fv_high"]:,.0f} '
+                    f'· closest peer: {_dpm.get("closest_peer") or "—"}</div>',
+                    unsafe_allow_html=True)
+            else:
+                st.info("Peer-multiples unavailable — no peers with computable "
+                        "trailing_pe/ev_ebit (or missing ttm_eps/ttm_ebit).")
+            st.markdown("---")
 
             # Compute metrics for current ticker
             _mkt_cap_p = cfg.get('equity_market_value', 0)
@@ -8549,7 +8536,7 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
         sic_code = int(submissions.get("sic", 0))
         sic_desc = submissions.get("sicDescription", "")
         pos = _flush_clean(buf, pos, status)
-        status.write(f"\u2705 **{company_name}** \u2014 {sic_desc}")
+        status.write(f"\u2705 **{company_name}** — {sic_desc}")
 
         # ── Step 2: Sector betas ──
         status.write("\u23f3 Determining sector & beta...")
@@ -8592,7 +8579,7 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
         pos = _flush_clean(buf, pos, status)
         years = financials.get("years", [])
         if years:
-            status.write(f"\u2705 {len(years)} years of data ({years[0]}\u2013{years[-1]})")
+            status.write(f"\u2705 {len(years)} years of data ({years[0]}–{years[-1]})")
         else:
             status.write(f"\u2705 Financial data loaded")
 
@@ -8602,7 +8589,7 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
             stock_price, market_cap, shares_yahoo = fetch_stock_price(ticker)
             risk_free_rate = fetch_treasury_yield()
         pos = _flush_clean(buf, pos, status)
-        status.write(f"\u2705 ${stock_price:.2f} per share \u2014 10Y Treasury: {risk_free_rate:.2%}")
+        status.write(f"\u2705 ${stock_price:.2f} per share — 10Y Treasury: {risk_free_rate:.2%}")
 
         # ── Step 5: Credit rating + sector margin + consensus ──
         status.write("\u23f3 Analyzing credit, margins & analyst estimates...")
@@ -8642,7 +8629,7 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
         peers = []
         peer_tickers = []
         if peer_mode == "Auto-discover":
-            # Peer auto-selection removed \u2014 no peers on a fresh analysis.
+            # Peer auto-selection removed — no peers on a fresh analysis.
             pass
         elif peer_mode == "Manual" and manual_peers:
             peer_tickers = [t.strip().upper() for t in manual_peers.split(",") if t.strip()]
@@ -8700,7 +8687,7 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
 
         status.write(f"\u2705 Configuration complete")
 
-        status.update(label=f"Analysis complete \u2014 {company_name} ({ticker})", state="complete", expanded=False)
+        status.update(label=f"Analysis complete — {company_name} ({ticker})", state="complete", expanded=False)
 
     return cfg, _cr
 
@@ -9543,7 +9530,7 @@ def _show_week_detail(year, iso_wk, wk_start, wk_end, cost_basis, nl_all, transf
     prem_rows = ""
     if agg["leaders_premium"]:
         for lp in agg["leaders_premium"]:
-            dte_str = f'{lp["avg_dte"]}d' if lp["avg_dte"] > 0 else "\u2014"
+            dte_str = f'{lp["avg_dte"]}d' if lp["avg_dte"] > 0 else "—"
             prem_rows += (
                 f'<tr><td class="tk">{lp["ticker"]}</td><td>{lp["trades"]}</td>'
                 f'<td>{lp["contracts"]}</td><td>{dte_str}</td>'
@@ -9554,7 +9541,7 @@ def _show_week_detail(year, iso_wk, wk_start, wk_end, cost_basis, nl_all, transf
     # P/L table rows
     def _pl_html(items):
         if not items:
-            return f'<tr><td colspan="5" style="text-align:center;color:{_muted};padding:20px">\u2014</td></tr>'
+            return f'<tr><td colspan="5" style="text-align:center;color:{_muted};padding:20px">—</td></tr>'
         r = ""
         for it in items:
             r += (
@@ -9799,7 +9786,7 @@ def _show_month_detail(year, month, cost_basis, nl_all, transfers, monthly_retur
     prem_rows = ""
     if agg["leaders_premium"]:
         for lp in agg["leaders_premium"]:
-            dte_str = f'{lp["avg_dte"]}d' if lp["avg_dte"] > 0 else "\u2014"
+            dte_str = f'{lp["avg_dte"]}d' if lp["avg_dte"] > 0 else "—"
             prem_rows += (
                 f'<tr><td class="tk">{lp["ticker"]}</td><td>{lp["trades"]}</td>'
                 f'<td>{lp["contracts"]}</td><td>{dte_str}</td>'
@@ -9810,7 +9797,7 @@ def _show_month_detail(year, month, cost_basis, nl_all, transfers, monthly_retur
     # P/L table rows
     def _pl_html(items):
         if not items:
-            return f'<tr><td colspan="5" style="text-align:center;color:{_muted};padding:20px">\u2014</td></tr>'
+            return f'<tr><td colspan="5" style="text-align:center;color:{_muted};padding:20px">—</td></tr>'
         r = ""
         for it in items:
             r += (
@@ -10487,8 +10474,8 @@ elif page == "Portfolio":
                 # Build option sub-cards
                 opt_cards = ''
                 for opt in open_opts:
-                    strike_str = f"${opt['strike']:,.2f}" if opt["strike"] else "\u2014"
-                    exp_str = opt["expiration"] or "\u2014"
+                    strike_str = f"${opt['strike']:,.2f}" if opt["strike"] else "—"
+                    exp_str = opt["expiration"] or "—"
                     prem_cls = " pf-green" if opt["premium"] > 0 else " pf-red" if opt["premium"] < 0 else ""
                     opt_cards += (
                         f'<div class="portfolio-card" style="border-style:dashed;margin-top:6px">'
@@ -10961,7 +10948,7 @@ elif page == "Option Finder":
             st.info(
                 "No option chain data available. This usually means the market is closed "
                 "or the streaming connection timed out. Try again during US market hours "
-                "(9:30 AM \u2013 4:00 PM ET)."
+                "(9:30 AM – 4:00 PM ET)."
             )
         else:
             # Build ALL rows across ALL expirations
@@ -11069,9 +11056,9 @@ elif page == "Option Finder":
                         _hints.append(f"{_n_cost}/{_n_total} strikes filtered by min strike (${_call_cost_basis:.0f}).")
                     if _n_delta > 0:
                         _deltas = [abs(r['delta']) for r in _all_rows if r['delta'] != 0]
-                        _drange = f"{min(_deltas):.2f}\u2013{max(_deltas):.2f}" if _deltas else "n/a"
+                        _drange = f"{min(_deltas):.2f}–{max(_deltas):.2f}" if _deltas else "n/a"
                         _hints.append(f"{_n_delta}/{_n_total} strikes outside delta range "
-                                      f"{_usr_dlo:.2f}\u2013{_usr_dhi:.2f} (available: {_drange}).")
+                                      f"{_usr_dlo:.2f}–{_usr_dhi:.2f} (available: {_drange}).")
                 _hint_text = " ".join(_hints) if _hints else "Try widening your delta or DTE range."
                 st.info(f"No suitable strikes match your filters. {_hint_text}")
             else:
@@ -11129,7 +11116,7 @@ elif page == "Option Finder":
                         f'<div style="background:{T["accent_light"]};border:1px solid {T["accent"]};'
                         f'border-radius:10px;padding:18px 22px;margin-bottom:14px">'
                         f'<div style="display:flex;align-items:center;font-weight:700;font-size:1.15rem;color:{T["text"]}">'
-                        f'Recommended: ${_rec["strike"]:.0f} {_opt_label} \u2014 {datetime.strptime(_rec["exp_date"], "%Y-%m-%d").strftime("%d %b %Y")} ({_rec["dte"]}d){_earn_icon(_rec)}</div>'
+                        f'Recommended: ${_rec["strike"]:.0f} {_opt_label} — {datetime.strptime(_rec["exp_date"], "%Y-%m-%d").strftime("%d %b %Y")} ({_rec["dte"]}d){_earn_icon(_rec)}</div>'
                         f'{_metric_pills(_rec)}'
                         f'<div style="font-size:0.83rem;color:{T["text_muted"]};margin-top:10px">'
                         f'Based on delta targeting and annualized return.</div>'
@@ -11145,7 +11132,7 @@ elif page == "Option Finder":
                         f'<div style="background:{T["card_alt"]};border:1px solid {T["border_medium"]};'
                         f'border-radius:10px;padding:14px 18px">'
                         f'<div style="display:flex;align-items:center;font-weight:700;font-size:0.97rem;color:{T["text"]}">'
-                        f'Conservative: ${_c["strike"]:.0f} {_opt_label} \u2014 {datetime.strptime(_c["exp_date"], "%Y-%m-%d").strftime("%d %b %Y")} ({_c["dte"]}d){_earn_icon(_c)}</div>'
+                        f'Conservative: ${_c["strike"]:.0f} {_opt_label} — {datetime.strptime(_c["exp_date"], "%Y-%m-%d").strftime("%d %b %Y")} ({_c["dte"]}d){_earn_icon(_c)}</div>'
                         f'{_metric_pills(_c)}'
                         f'<div style="font-size:0.8rem;color:{T["text_muted"]};margin-top:8px">'
                         f'Lower delta, more downside buffer, less premium.</div>'
@@ -11157,7 +11144,7 @@ elif page == "Option Finder":
                         f'<div style="background:{T["card_alt"]};border:1px solid {T["border_medium"]};'
                         f'border-radius:10px;padding:14px 18px">'
                         f'<div style="display:flex;align-items:center;font-weight:700;font-size:0.97rem;color:{T["text"]}">'
-                        f'Aggressive: ${_a["strike"]:.0f} {_opt_label} \u2014 {datetime.strptime(_a["exp_date"], "%Y-%m-%d").strftime("%d %b %Y")} ({_a["dte"]}d){_earn_icon(_a)}</div>'
+                        f'Aggressive: ${_a["strike"]:.0f} {_opt_label} — {datetime.strptime(_a["exp_date"], "%Y-%m-%d").strftime("%d %b %Y")} ({_a["dte"]}d){_earn_icon(_a)}</div>'
                         f'{_metric_pills(_a)}'
                         f'<div style="font-size:0.8rem;color:{T["text_muted"]};margin-top:8px">'
                         f'Higher delta, more premium, tighter buffer.</div>'
@@ -11175,7 +11162,7 @@ elif page == "Option Finder":
             with st.expander("Show full chain"):
                 _exp_labels = []
                 for _e in _ch_exps:
-                    _lbl = f"{_e['expiration_date']} \u00b7 {_e['dte']}d"
+                    _lbl = f"{_e['expiration_date']} · {_e['dte']}d"
                     if _e['expiration_type'] != 'Regular':
                         _lbl += " (W)"
                     _exp_labels.append(_lbl)
@@ -11279,7 +11266,7 @@ elif page == "Wheel Cost Basis":
         html = ""
         for t in reversed(trades):
             qty_val = int(t["quantity"]) if t["quantity"] == int(t["quantity"]) else t["quantity"]
-            price_str = f'{t["price"]:,.2f}' if t["price"] else "\u2014"
+            price_str = f'{t["price"]:,.2f}' if t["price"] else "—"
             net = t["net_value"]
             net_color = T['accent'] if net >= 0 else T['red']
             trade_date = t["date"].strftime("%d-%m-%Y") if hasattr(t["date"], "strftime") else t["date"]
@@ -11433,12 +11420,12 @@ elif page == "Wheel Cost Basis":
                     w_start = wheel['start'].strftime("%d-%m-%Y") if hasattr(wheel['start'], 'strftime') else wheel['start']
                     w_end = wheel['end'].strftime("%d-%m-%Y") if hasattr(wheel['end'], 'strftime') else wheel['end']
                     if status == "completed":
-                        label = f"Wheel {i + 1} \u2014 {w_start} \u2192 {w_end}"
+                        label = f"Wheel {i + 1} — {w_start} \u2192 {w_end}"
                     elif status == "active":
-                        label = f"Wheel {i + 1} (active) \u2014 {w_start} \u2192 now"
+                        label = f"Wheel {i + 1} (active) — {w_start} \u2192 now"
                     else:
-                        label = f"CSP Income \u2014 {w_start} \u2192 {w_end}"
-                    with st.expander(f"{label}  \u2014  {w_pl_sign}{abs(w_pl):,.2f}"):
+                        label = f"CSP Income — {w_start} \u2192 {w_end}"
+                    with st.expander(f"{label}  —  {w_pl_sign}{abs(w_pl):,.2f}"):
                         _render_tabs(wheel["trades"], f"{ticker}_w{i}")
             else:
                 n_total = len(all_trades)
@@ -11865,7 +11852,7 @@ elif page == "Results":
                             cells += (
                                 f'<div class="pf-cell">'
                                 f'<span class="pf-label">{bench_name}</span>'
-                                f'<span class="pf-val">\u2014</span>'
+                                f'<span class="pf-val">—</span>'
                                 f'</div>'
                             )
                     # Add info icon after last benchmark cell
@@ -12123,7 +12110,7 @@ elif page == "Results":
                     f'<details class="yr-details" style="background:{T["card"]};border:1px solid {T["border"]};border-left:3px solid {yr_color};'
                     f'border-radius:8px;padding:10px 14px;margin-bottom:6px">'
                     f'<summary style="font-weight:600;color:{T["text"]}">'
-                    f'{yr} \u2014 <span style="color:{yr_color}">{yr_ret:+.1f}%</span></summary>'
+                    f'{yr} — <span style="color:{yr_color}">{yr_ret:+.1f}%</span></summary>'
                     f'<div style="margin-top:8px">{mo_html}</div>'
                     f'</details>',
                     unsafe_allow_html=True)
@@ -12157,7 +12144,7 @@ elif page == "Results":
                         f'<details class="yr-details" style="background:{T["card"]};border:1px solid {T["border"]};border-left:3px solid {dep_color};'
                         f'border-radius:8px;padding:10px 14px;margin-bottom:6px">'
                         f'<summary style="font-weight:600;color:{T["text"]}">'
-                        f'{yr} \u2014 <span style="color:{dep_color}">${amount:+,.0f}</span></summary>'
+                        f'{yr} — <span style="color:{dep_color}">${amount:+,.0f}</span></summary>'
                         f'<div style="margin-top:8px">{mo_html}</div>'
                         f'</details>',
                         unsafe_allow_html=True)
