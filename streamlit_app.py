@@ -4785,6 +4785,18 @@ def _watchlist_overview():
 
 def _dcf_editor(ticker):
     """Full DCF editor page for a single ticker."""
+    # ── Reset editor widget state when switching tickers ──
+    # The DCF-editor number_input widgets use fixed keys (ed_*, rdcf_*) that are
+    # NOT ticker-scoped. Without this, Streamlit keeps the previously-viewed
+    # ticker's values in session_state, so the input cells show stale numbers
+    # (and a save from that view would overwrite the real config). Clearing them
+    # on a ticker change forces each widget to re-init from this ticker's cfg.
+    # Runs before any ed_/rdcf_ widget is instantiated this run, so no rerun.
+    if st.session_state.get("_dcf_editor_ticker") != ticker:
+        for _k in [k for k in st.session_state
+                   if k.startswith("ed_") or k.startswith("rdcf_")]:
+            del st.session_state[_k]
+        st.session_state["_dcf_editor_ticker"] = ticker
     cfg = load_config(_sb_client, ticker)
     if cfg is None:
         st.error(f"No config found for {ticker}")
