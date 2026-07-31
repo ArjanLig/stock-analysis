@@ -228,7 +228,6 @@ def _render_fv_cell(price: float, summary: dict | None,
         low = summary.get("weighted_fv_low")
         mid = summary.get("weighted_fv_mid")
         high = summary.get("weighted_fv_high")
-        lenses = summary.get("lenses") or {}
         if mid is None or low is None or high is None:
             return f'<span style="color:{muted}">—</span>'
 
@@ -236,20 +235,10 @@ def _render_fv_cell(price: float, summary: dict | None,
         marker_color = "#d96a5a" if past_high else "#fff"
         pct_str = f"{pct:.0f}%" if pct == int(pct) else f"{pct:.1f}%"
 
-        # Lens-dots row WITH hover-tooltip "details" trigger that reveals
-        # the football field. Pure CSS — no JS / no Streamlit widget.
-        lens_dots_html = _render_lens_dots(lenses, theme)
-        football_field_html = _render_football_field(summary, theme, live_price=price)
-        details_row = (
-            f'<div class="ff-trigger-row">'
-            f'  {lens_dots_html}'
-            f'  <span class="ff-trigger-wrap">'
-            f'    <span class="ff-trigger">details ›</span>'
-            f'    <div class="ff-tooltip">{football_field_html}</div>'
-            f'  </span>'
-            f'</div>'
-        )
-
+        # Watchlist now surfaces the DCF fair value only (2026-07-31): the
+        # lens-dots row, the "{N} lenses" label and the "details ›" football-
+        # field tooltip were removed — a single lens has nothing to count or
+        # drill into, and the tooltip showed nothing not already in the cell.
         return (
             f'<div>'
             f'<strong style="color:{text}">{_fmt_fv_dollar(mid)}</strong> '
@@ -262,7 +251,6 @@ def _render_fv_cell(price: float, summary: dict | None,
             f'background:{marker_color};box-shadow:0 0 2px rgba(0,0,0,0.6);'
             f'left:{pct_str}"></div>'
             f'</div>'
-            f'{details_row}'
             f'</div>'
         )
 

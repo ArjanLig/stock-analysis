@@ -145,7 +145,9 @@ def _theme_stub():
 
 
 def test_render_fv_cell_full_summary():
-    """With a complete valuation_summary, render mid + range + bar + dots."""
+    """With a complete valuation_summary, render mid + range + bar. The lens-dots
+    row and the 'details ›' football-field tooltip were removed 2026-07-31 (the
+    watchlist surfaces the DCF fair value only)."""
     summary = {
         "weighted_fv_low": 60.0,
         "weighted_fv_mid": 80.0,
@@ -159,7 +161,9 @@ def test_render_fv_cell_full_summary():
     assert "$60" in html              # low
     assert "$100" in html             # high
     assert "range-bar" in html        # bar present
-    assert 'class="ld-on"' in html    # lens dots present
+    assert 'class="ld-on"' not in html   # lens dots removed
+    assert "lens" not in html            # no "{N} lens(es)" label
+    assert "details" not in html         # no details trigger
 
 
 def test_render_fv_cell_legacy_fallback():
@@ -451,17 +455,6 @@ def test_render_football_field_falls_back_to_summary_price_without_live():
             summary, theme=_theme_stub(), live_price=missing
         )
         assert "Price $320.50" in html
-
-
-def test_render_fv_cell_threads_live_price_into_football_field():
-    """The FV cell already receives the live price; it must pass it down so the
-    detail popover's Price marker matches the live row price, not the snapshot."""
-    summary = _ff_summary_stale_price()
-    html = streamlit_app._render_fv_cell(
-        price=348.97, summary=summary, legacy_intrinsic=None, theme=_theme_stub()
-    )
-    assert "Price $348.97" in html
-    assert "Price $320.50" not in html
 
 
 # ── FCF Yield cell ─────────────────────────────────────────────────────────
