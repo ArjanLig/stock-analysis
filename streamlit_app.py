@@ -5421,37 +5421,6 @@ def _dcf_editor(ticker):
             # sits inside the DCF card without changing render order.
             _bridge_slot = st.container()
 
-            # ── Own historical multiples (relative value; not weighted) ──
-            import valuation_lenses as _vl_oh
-            _price_oh = float(cfg.get("stock_price", 0) or 0)
-
-            def _delta_oh(fv):
-                if not _price_oh or not fv:
-                    return None
-                return f"{(fv - _price_oh) / _price_oh * 100:+.1f}% vs price"
-
-            _hist_oh = _vl_oh.compute_historical_lens(cfg)
-            with st.expander("Own historical multiples (reference)"):
-                st.caption("Fair value from this ticker's own historical trailing "
-                           "P/E and EV multiple — excluded from the blended fair "
-                           "value and the watchlist.")
-                if _hist_oh:
-                    _doh = _hist_oh.get("details", {})
-                    _ohc1, _ohc2, _ohc3 = st.columns(3)
-                    _ohc1.metric("Fair value (mid)", f"${_hist_oh['fv_mid']:,.0f}",
-                                 delta=_delta_oh(_hist_oh["fv_mid"]))
-                    _tpe_oh = _doh.get("historical_trailing_pe_fv")
-                    _ohc2.metric("Own trailing P/E",
-                                 f"${_tpe_oh:,.0f}" if _tpe_oh else "—",
-                                 delta=_delta_oh(_tpe_oh))
-                    _hev_oh = _doh.get("historical_ev_ebitda_fv")
-                    _ohc3.metric(f"Own EV multiple ({_doh.get('ev_basis') or '—'})",
-                                 f"${_hev_oh:,.0f}" if _hev_oh else "—",
-                                 delta=_delta_oh(_hev_oh))
-                else:
-                    st.info("Own-history multiples unavailable — no historical "
-                            "trailing P/E or EV multiple on file for this ticker.")
-
     with _tab_rdcf:
         with st.container(key="tabcard_rdcf"):
 
@@ -5631,6 +5600,29 @@ def _dcf_editor(ticker):
             else:
                 st.info("Peer-multiples unavailable — no peers with computable "
                         "trailing_pe/ev_ebit (or missing ttm_eps/ttm_ebit).")
+
+            # ── Own historical multiples (relative value; not weighted) ──
+            st.markdown("##### Own historical multiples")
+            st.caption("Relative value from this ticker's own historical trailing "
+                       "P/E and EV multiple — also excluded from the blended fair "
+                       "value and the watchlist; reference only.")
+            _hist_pm = _vl_pm.compute_historical_lens(cfg)
+            if _hist_pm:
+                _dh_pm = _hist_pm.get("details", {})
+                _hc1, _hc2, _hc3 = st.columns(3)
+                _hc1.metric("Fair value (mid)", f"${_hist_pm['fv_mid']:,.0f}",
+                            delta=_delta_pm(_hist_pm["fv_mid"]))
+                _tpe_h = _dh_pm.get("historical_trailing_pe_fv")
+                _hc2.metric("Own trailing P/E",
+                            f"${_tpe_h:,.0f}" if _tpe_h else "—",
+                            delta=_delta_pm(_tpe_h))
+                _hev_h = _dh_pm.get("historical_ev_ebitda_fv")
+                _hc3.metric(f"Own EV multiple ({_dh_pm.get('ev_basis') or '—'})",
+                            f"${_hev_h:,.0f}" if _hev_h else "—",
+                            delta=_delta_pm(_hev_h))
+            else:
+                st.info("Own-history multiples unavailable — no historical "
+                        "trailing P/E or EV multiple on file for this ticker.")
             st.markdown("---")
 
             # Compute metrics for current ticker
