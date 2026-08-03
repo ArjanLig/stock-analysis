@@ -21,7 +21,7 @@ def _equity_market_value(cfg):
     return (cfg.get("stock_price", 0) or 0) * (cfg.get("shares_outstanding", 0) or 0)
 
 
-DEFAULT_DISCOUNT_MODE = "opportunity_cost"
+DEFAULT_DISCOUNT_MODE = "capm"
 
 
 def _effective_beta(cfg):
@@ -29,11 +29,11 @@ def _effective_beta(cfg):
 
     Two philosophies, selected by cfg['discount_mode']:
 
-    - "capm" (legacy): the weighted unlevered sector beta, Hamada-relevered
+    - "capm" (default): the weighted unlevered sector beta, Hamada-relevered
       for the config's debt/equity. Company risk lives in the discount rate.
 
-    - "opportunity_cost" (default): effective beta = 1.0, so ke = rf + ERP —
-      one market-wide opportunity-cost hurdle for every company. Company-
+    - "opportunity_cost": effective beta = 1.0, so ke = rf + ERP — one
+      market-wide opportunity-cost hurdle for every company. Company-
       specific risk is expressed in the cash-flow assumptions and margin of
       safety instead, not the discount rate.
 
@@ -56,9 +56,10 @@ def compute_cost_of_equity(cfg):
     ke = risk_free_rate + effective_beta × erp
 
     effective_beta follows cfg['discount_mode'] (see _effective_beta): the
-    Hamada-relevered sector beta under "capm", or 1.0 under "opportunity_cost".
-    Under "opportunity_cost" this equals compute_wacc(cfg) exactly (the WACC
-    IS ke there); under "capm" they coincide only when debt = 0.
+    Hamada-relevered sector beta under "capm" (the default), or 1.0 under
+    "opportunity_cost". Under "opportunity_cost" this equals compute_wacc(cfg)
+    exactly (the WACC IS ke there); under "capm" they coincide only when
+    debt = 0.
 
     Returns the cost of equity as a float (e.g. 0.087 for 8.7%).
     """
@@ -70,14 +71,14 @@ def compute_wacc(cfg):
 
     Two philosophies, selected by cfg['discount_mode']:
 
-    - "opportunity_cost" (default): the discount rate IS the cost of equity,
+    - "capm" (default): the classic equity/debt-weighted WACC blend, with the
+      after-tax cost of debt pulling the rate below ke. Company risk enters
+      through the Hamada-relevered sector beta.
+
+    - "opportunity_cost": the discount rate IS the cost of equity,
       ke = rf + ERP — one market-wide opportunity-cost hurdle. Capital
       structure is deliberately ignored: cheap debt and its tax shield must
-      not lower the hurdle (that would reintroduce the capital-structure
-      sensitivity the opportunity-cost view exists to remove).
-
-    - "capm" (legacy): the classic equity/debt-weighted WACC blend, with the
-      after-tax cost of debt pulling the rate below ke.
+      not lower the hurdle. Kept as an opt-in per config.
 
     Returns the rate as a float (e.g. 0.08 for 8%).
     """

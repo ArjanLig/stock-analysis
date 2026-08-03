@@ -20,7 +20,8 @@ import re
 logger = logging.getLogger(__name__)
 
 from error_logger import log_error, log_error_with_trace
-from dcf_calculator import compute_wacc, compute_intrinsic_value, compute_reverse_dcf
+from dcf_calculator import (compute_wacc, compute_intrinsic_value, compute_reverse_dcf,
+                            DEFAULT_DISCOUNT_MODE)
 from valuation_lenses import FORWARD_LENSES
 from config_store import save_config, load_config, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
 import gather_data
@@ -4895,7 +4896,7 @@ def _dcf_editor(ticker):
                 cfg['discount_mode'] = st.selectbox(
                     "Discount mode",
                     _disc_modes,
-                    index=_disc_modes.index(cfg.get('discount_mode', 'opportunity_cost')),
+                    index=_disc_modes.index(cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE)),
                     format_func=lambda m: _disc_labels[m],
                     key="ed_disc_mode",
                     help="Opportunity cost: één marktbrede hurdle voor elk bedrijf; "
@@ -4997,9 +4998,9 @@ def _dcf_editor(ticker):
                 _capm_lev_beta = _wu_beta * (1 + (1 - cfg['tax_rate']) * _de_ratio)
                 # Beta that actually feeds the discount rate — mirrors
                 # dcf_calculator._effective_beta so the preview matches the engine.
-                _eff_beta = 1.0 if cfg.get('discount_mode', 'opportunity_cost') == 'opportunity_cost' else _capm_lev_beta
+                _eff_beta = 1.0 if cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE) == 'opportunity_cost' else _capm_lev_beta
                 st.markdown(_ww_val.format(label="Weighted Unlevered \u03b2", value=f"{_wu_beta:.2f}", extra=f"color:{T['text_muted']};"), unsafe_allow_html=True)
-                if cfg.get('discount_mode', 'opportunity_cost') == 'opportunity_cost':
+                if cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE) == 'opportunity_cost':
                     st.markdown(_ww_val.format(label="Effective \u03b2 (opportunity cost)", value="1.00", extra="font-weight:700;"), unsafe_allow_html=True)
                     st.markdown(_ww_val.format(label="Levered \u03b2 (unused)", value=f"{_capm_lev_beta:.2f}", extra=f"color:{T['text_muted']};font-size:0.82rem;"), unsafe_allow_html=True)
                 else:
@@ -5028,7 +5029,7 @@ def _dcf_editor(ticker):
                 # Discount rate actually fed to the engine: ke under
                 # opportunity_cost (no debt blend), the WACC blend under capm —
                 # mirrors dcf_calculator.compute_wacc.
-                if cfg.get('discount_mode', 'opportunity_cost') != 'capm':
+                if cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE) != 'capm':
                     st.markdown(_ww_val.format(label="Discount rate", value=f"{_ke:.2%}",
                                                extra=f"font-weight:700;font-size:1.15rem;color:{T['accent']};"), unsafe_allow_html=True)
                     if _total_cap > 0:

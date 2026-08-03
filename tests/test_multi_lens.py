@@ -87,11 +87,11 @@ def test_compute_cost_of_equity_capm():
 
 
 def test_compute_cost_of_equity_opportunity_cost_ignores_beta():
-    """Opportunity-cost mode (the default): ke = rf + ERP, effective β = 1.0.
+    """Opportunity-cost mode (opt-in): ke = rf + ERP, effective β = 1.0.
     The sector beta is present but must not affect the discount rate."""
     import dcf_calculator
     cfg = {
-        # discount_mode omitted → defaults to opportunity_cost
+        "discount_mode": "opportunity_cost",
         "equity_market_value": 1000,
         "debt_market_value": 200,
         "sector_betas": [("Software", 1.80, 1.0)],  # deliberately high; must be ignored
@@ -101,21 +101,43 @@ def test_compute_cost_of_equity_opportunity_cost_ignores_beta():
     }
     ke = dcf_calculator.compute_cost_of_equity(cfg)
     assert ke == pytest.approx(0.0449 + 0.0445, abs=1e-9)   # 8.94%
-    # Explicit opportunity_cost is identical to the default.
-    assert dcf_calculator.compute_cost_of_equity(
-        {**cfg, "discount_mode": "opportunity_cost"}) == pytest.approx(ke, abs=1e-12)
-    # And a wildly different beta leaves ke unchanged.
+    # A wildly different beta leaves ke unchanged.
     assert dcf_calculator.compute_cost_of_equity(
         {**cfg, "sector_betas": [("X", 0.3, 1.0)]}) == pytest.approx(ke, abs=1e-12)
 
 
+def test_default_discount_mode_is_capm():
+    """Portfolio-wide default is CAPM: a config that omits discount_mode must
+    discount at the levered-beta WACC, not the flat rf + ERP hurdle.
+    Regression guard for the 2026-08-03 rollback off opportunity_cost."""
+    import dcf_calculator
+    assert dcf_calculator.DEFAULT_DISCOUNT_MODE == "capm"
+    cfg = {
+        # discount_mode omitted → must default to capm
+        "equity_market_value": 1000,
+        "debt_market_value": 200,
+        "sector_betas": [("Software", 1.80, 1.0)],  # high beta must now bite
+        "tax_rate": 0.21,
+        "risk_free_rate": 0.0449,
+        "erp": 0.0445,
+        "credit_spread": 0.01,
+    }
+    assert dcf_calculator.compute_cost_of_equity(cfg) == pytest.approx(
+        dcf_calculator.compute_cost_of_equity({**cfg, "discount_mode": "capm"}), abs=1e-12)
+    assert dcf_calculator.compute_wacc(cfg) == pytest.approx(
+        dcf_calculator.compute_wacc({**cfg, "discount_mode": "capm"}), abs=1e-12)
+    # And it must differ from the flat opportunity-cost hurdle.
+    assert dcf_calculator.compute_wacc(cfg) != pytest.approx(
+        dcf_calculator.compute_wacc({**cfg, "discount_mode": "opportunity_cost"}), abs=1e-6)
+
+
 def test_wacc_opportunity_cost_equals_ke_ignoring_debt():
-    """Opportunity-cost mode (default): the discount rate = ke = rf + ERP even
-    with debt on the balance sheet — no debt blend, no tax shield. Regression
-    guard for the 'WACC is only rf+ERP' portfolio-wide decision."""
+    """Opportunity-cost mode (opt-in): the discount rate = ke = rf + ERP even
+    with debt on the balance sheet — no debt blend, no tax shield. Kept as a
+    guard so the mode still behaves correctly for configs that opt into it."""
     import dcf_calculator
     cfg = {
-        # discount_mode omitted → opportunity_cost
+        "discount_mode": "opportunity_cost",
         "equity_market_value": 15686.9,
         "debt_market_value": 3401.1,       # material debt: must NOT lower WACC
         "sector_betas": [("Brokerage & Investment Banking", 0.58, 1.0)],
@@ -126,11 +148,8 @@ def test_wacc_opportunity_cost_equals_ke_ignoring_debt():
     }
     wacc = dcf_calculator.compute_wacc(cfg)
     assert wacc == pytest.approx(0.0465 + 0.047, abs=1e-12)   # 9.35%, not 8.34%
-    # WACC and ke are now identical in opportunity_cost mode.
+    # WACC and ke are identical in opportunity_cost mode.
     assert wacc == pytest.approx(dcf_calculator.compute_cost_of_equity(cfg), abs=1e-12)
-    # Explicit opportunity_cost matches the default.
-    assert dcf_calculator.compute_wacc(
-        {**cfg, "discount_mode": "opportunity_cost"}) == pytest.approx(wacc, abs=1e-12)
     # capm mode still blends debt in → strictly below ke.
     assert dcf_calculator.compute_wacc({**cfg, "discount_mode": "capm"}) < wacc
 
