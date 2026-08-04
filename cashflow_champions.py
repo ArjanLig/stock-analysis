@@ -57,6 +57,45 @@ _FINANCIAL_SIC_LO, _FINANCIAL_SIC_HI = 6000, 6999
 # bad number can't pollute the ranking, rather than silently trusting it.
 _MIN_PLAUSIBLE_PCF = 2.0
 
+# Sectors below this many ranked names produce no Champions: a percentile over
+# two or three peers says nothing, and a group of one would crown itself (Real
+# Estate held only CSGP in the 2026-06 universe).
+MIN_SECTOR_SIZE = 5
+
+# GICS sectors come from the S&P 500 CSV, which by definition misses Nasdaq-100
+# and Dow members that aren't in the index. These are those gaps as of
+# 2026-08-04. A name in neither source gets sector None, is never flagged, and
+# shows "no_sector" — it fails visibly rather than landing in a silent bucket.
+GICS_OVERRIDES = {
+    "MELI": "Consumer Discretionary",
+    "PDD": "Consumer Discretionary",
+    "SHOP": "Information Technology",
+    "ARM": "Information Technology",
+    "ZS": "Information Technology",
+    "MSTR": "Information Technology",
+    "ASML": "Information Technology",
+    "ALNY": "Health Care",
+    "INSM": "Health Care",
+    "CAG": "Consumer Staples",
+    "CCEP": "Consumer Staples",
+    "FER": "Industrials",
+    "TRI": "Industrials",          # Thomson Reuters — GICS: Professional Services
+}
+
+
+def _gics_lookup(sp_rows: list[dict]) -> dict:
+    """Map normalised ticker → (gics_sector, gics_sub_industry) from the S&P 500
+    CSV rows. The CSV already carries both columns; they were parsed and thrown
+    away before this screen needed them."""
+    out = {}
+    for r in sp_rows:
+        sym = (r.get("Symbol") or "").strip()
+        sector = (r.get("GICS Sector") or "").strip()
+        if not sym or not sector:
+            continue
+        out[_norm(sym)] = (sector, (r.get("GICS Sub-Industry") or "").strip() or None)
+    return out
+
 
 def _norm(ticker: str) -> str:
     """Normalise a ticker for cross-source matching (BRK.B / BRK-B → BRKB)."""
@@ -116,20 +155,45 @@ def refresh_universe(today: str | None = None) -> dict:
     nasdaq100 = _wiki_constituents(NASDAQ100_WIKI_URL)
     dow30 = _wiki_constituents(DOW30_WIKI_URL)
 
+    # A scraped source that silently returns almost nothing must not quietly
+    # shrink the universe: _wiki_constituents falls back to scanning the whole
+    # page, so a restructured article yields a handful of stray tickers rather
+    # than an error. Refuse to write instead of losing constituents.
+    for label, got, floor in (("S&P 500", len(sp500), 400),
+                              ("Nasdaq-100", len(nasdaq100), 50),
+                              ("Dow 30", len(dow30), 20)):
+        if got < floor:
+            raise RuntimeError(
+                f"{label} source returned only {got} constituents (expected "
+                f">= {floor}) — the upstream page layout probably changed. "
+                f"Universe left untouched; fix the parser before refreshing."
+            )
+
     membership: dict[str, set] = {}
     for idx_name, syms in (("sp500", sp500), ("nasdaq100", nasdaq100), ("dow30", dow30)):
         for s in syms:
             membership.setdefault(_norm(s), set()).add(idx_name)
 
+    # GICS sector rides along in the S&P CSV we already downloaded. Names in the
+    # union but outside the S&P 500 fall back to the override table.
+    gics = _gics_lookup(sp_rows)
+
     constituents = []
     unresolved = []
+    no_sector = []
     for nk, indices in sorted(membership.items()):
         meta = by_norm.get(nk)
         if not meta:
             unresolved.append(nk)
             continue
+        sector, sub = gics.get(nk, (None, None))
+        if not sector:
+            sector = GICS_OVERRIDES.get(meta["ticker"].upper())
+        if not sector:
+            no_sector.append(meta["ticker"])
         constituents.append({
             **meta, "indices": sorted(indices),
+            "gics_sector": sector, "gics_sub_industry": sub,
         })
 
     snapshot = {
@@ -141,6 +205,7 @@ def refresh_universe(today: str | None = None) -> dict:
             "sec_exchange": {"url": SEC_EXCHANGE_URL, "as_of": today},
         },
         "unresolved": sorted(unresolved),
+        "no_sector": sorted(no_sector),
         "count": len(constituents),
         "constituents": constituents,
     }
@@ -153,6 +218,37 @@ def refresh_universe(today: str | None = None) -> dict:
 def load_universe() -> dict:
     with open(UNIVERSE_PATH) as f:
         return json.load(f)
+
+
+def backfill_sectors() -> dict:
+    """Add GICS sector / sub-industry to the stored universe without touching
+    membership. Separate from refresh_universe on purpose: sectors change far
+    more often than constituents, and this path does not depend on the scraped
+    index pages. Returns the updated snapshot.
+    """
+    import csv
+    import io
+
+    universe = load_universe()
+    sp_rows = list(csv.DictReader(io.StringIO(
+        gather_data._http_get(SP500_CSV_URL, {"User-Agent": "Mozilla/5.0"})
+        .decode("utf-8", "ignore"))))
+    gics = _gics_lookup(sp_rows)
+
+    missing = []
+    for c in universe["constituents"]:
+        sector, sub = gics.get(_norm(c["ticker"]), (None, None))
+        if not sector:
+            sector = GICS_OVERRIDES.get(c["ticker"].upper())
+        if not sector:
+            missing.append(c["ticker"])
+        c["gics_sector"] = sector
+        c["gics_sub_industry"] = sub
+
+    universe["no_sector"] = sorted(missing)
+    with open(UNIVERSE_PATH, "w") as f:
+        json.dump(universe, f, indent=2)
+    return universe
 
 
 # ── Pure ranking logic (no network — unit-tested on synthetic data) ─────────────
@@ -194,6 +290,8 @@ class ChampRow:
     exchange: str = ""
     indices: list = field(default_factory=list)
     sic: int | None = None
+    sector: str | None = None          # GICS sector; None → not rankable
+    sub_industry: str | None = None
     cfo: float | None = None           # operating cash flow, $M
     total_assets: float | None = None  # $M
     market_cap: float | None = None    # $M
@@ -207,13 +305,21 @@ class ChampRow:
     value_pct: float | None = None
     composite: float | None = None
     rank: int | None = None
+    sector_rank: int | None = None
+    sector_size: int | None = None
     is_champion: bool = False
 
 
 def rank_universe(rows: list[ChampRow], exclude_financials: bool = True,
                   top_pct: float = 0.20) -> dict:
-    """Compute the two ratios, percentile-rank the eligible names, combine into a
-    composite score, and flag the top `top_pct` as Champions.
+    """Compute the two ratios, percentile-rank each name **within its own GICS
+    sector**, and flag the top `top_pct` of every sector as Champions.
+
+    Ranking within sector rather than globally is deliberate: a single year's
+    CFO drives both the quality and the value axis, so a commodity producer at
+    a cycle peak scores high on both at once and crowds out everything else.
+    Comparing a name only against its own sector removes that cross-sector
+    inflation. See docs/superpowers/specs/2026-08-04-champions-sector-ranking.
 
     Mutates and returns the rows (with ranking fields filled) plus a summary.
     Ineligible names stay in the list with status/reason set — never dropped.
@@ -246,27 +352,54 @@ def rank_universe(rows: list[ChampRow], exclude_financials: bool = True,
         r.status, r.reason = "ok", None
         eligible.append(r)
 
-    if eligible:
-        roa_pct = _percentiles([r.cash_roa for r in eligible])
+    # Group by sector. A name whose sector is unknown (a Nasdaq-only listing
+    # absent from the S&P CSV and from GICS_OVERRIDES) is screened and kept in
+    # the output, but cannot be ranked against peers it has none of.
+    by_sector: dict[str, list[ChampRow]] = {}
+    no_sector = 0
+    for r in eligible:
+        if not r.sector:
+            r.reason = "no_sector"
+            no_sector += 1
+            continue
+        by_sector.setdefault(r.sector, []).append(r)
+
+    for sector, group in by_sector.items():
+        roa_pct = _percentiles([r.cash_roa for r in group])
         # value: cheaper (low P/CF) = higher cashflow yield = better → rank yield
-        yield_pct = _percentiles([r.cfo / r.market_cap for r in eligible])
-        for r, rp, vp in zip(eligible, roa_pct, yield_pct, strict=True):
+        yield_pct = _percentiles([r.cfo / r.market_cap for r in group])
+        for r, rp, vp in zip(group, roa_pct, yield_pct, strict=True):
             r.cash_roa_pct = rp
             r.value_pct = vp
             r.composite = (rp + vp) / 2.0
-        eligible.sort(key=lambda r: r.composite, reverse=True)
-        n_champ = max(1, math.ceil(len(eligible) * top_pct))
-        for i, r in enumerate(eligible, start=1):
-            r.rank = i
-            r.is_champion = i <= n_champ
+        group.sort(key=lambda r: r.composite, reverse=True)
+        # Too few peers for a percentile to mean anything — rank them so the
+        # page can still show where they sit, but never crown one.
+        big_enough = len(group) >= MIN_SECTOR_SIZE
+        n_champ = max(1, math.ceil(len(group) * top_pct))
+        for i, r in enumerate(group, start=1):
+            r.sector_rank = i
+            r.sector_size = len(group)
+            r.is_champion = big_enough and i <= n_champ
+            if not big_enough:
+                r.reason = "sector_too_small"
+
+    # A global rank across every ranked name keeps one continuous sort order for
+    # the full-universe table. It orders rows; it no longer decides Champions.
+    ranked = [r for r in eligible if r.sector_rank is not None]
+    ranked.sort(key=lambda r: r.composite, reverse=True)
+    for i, r in enumerate(ranked, start=1):
+        r.rank = i
 
     summary = {
         "requested": len(rows),
-        "ranked": len(eligible),
-        "champions": sum(1 for r in eligible if r.is_champion),
+        "ranked": len(ranked),
+        "champions": sum(1 for r in ranked if r.is_champion),
         "failed": sum(1 for r in rows if r.status == "failed"),
         "excluded": sum(1 for r in rows if r.status == "excluded"),
         "excluded_financials": excluded_financials,
+        "excluded_no_sector": no_sector,
+        "sectors": {s: len(g) for s, g in sorted(by_sector.items())},
         "top_pct": top_pct,
         "failures": [
             {"ticker": r.ticker, "reason": r.reason}
@@ -449,6 +582,9 @@ def compute_champions(tickers: list[str] | None = None, *,
             return ChampRow(
                 ticker=ticker, name=item.get("name", ""),
                 exchange=item.get("exchange", ""), indices=item.get("indices", []),
+                sector=(item.get("gics_sector")
+                        or GICS_OVERRIDES.get(_norm(ticker).upper())),
+                sub_industry=item.get("gics_sub_industry"),
                 sic=blob.get("sic"), cfo=blob.get("cfo"),
                 total_assets=blob.get("total_assets"),
                 market_cap=blob.get("market_cap"),
@@ -532,6 +668,9 @@ if __name__ == "__main__":  # pragma: no cover
     p = argparse.ArgumentParser(description="Cashflow Champions batch")
     p.add_argument("--refresh-universe", action="store_true",
                    help="Re-pull the index constituent lists and rewrite the snapshot")
+    p.add_argument("--backfill-sectors", action="store_true",
+                   help="Add GICS sector/sub-industry to the stored universe "
+                        "without re-pulling the constituent lists")
     p.add_argument("--compute", action="store_true", help="Run the ranking over the universe")
     p.add_argument("--store", action="store_true", help="Write the snapshot to Supabase")
     p.add_argument("--limit", type=int, default=None, help="Only the first N tickers (debug)")
@@ -547,6 +686,16 @@ if __name__ == "__main__":  # pragma: no cover
               f"Dow30 {snap['sources']['dow30']['count']}) as of {snap['as_of']}")
         if snap["unresolved"]:
             print(f"  unresolved (no SEC CIK): {snap['unresolved']}")
+
+    if args.backfill_sectors:
+        snap = backfill_sectors()
+        import collections as _c
+        counts = _c.Counter(c.get("gics_sector") for c in snap["constituents"])
+        print(f"Sectors backfilled over {snap['count']} names:")
+        for sec, n in counts.most_common():
+            print(f"  {sec or '(none)':26} {n}")
+        if snap["no_sector"]:
+            print(f"  no GICS sector: {snap['no_sector']}")
 
     if args.compute:
         uni = load_universe()

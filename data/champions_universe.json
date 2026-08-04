@@ -33,7 +33,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "AAPL",
@@ -44,7 +46,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "ABBV",
@@ -53,7 +57,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "ABNB",
@@ -63,7 +69,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "ABT",
@@ -72,7 +80,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "ACGL",
@@ -81,7 +91,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "ACN",
@@ -90,7 +102,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "IT Consulting & Other Services"
     },
     {
       "ticker": "ADBE",
@@ -100,7 +114,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "ADI",
@@ -110,7 +126,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "ADM",
@@ -119,7 +137,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Agricultural Products & Services"
     },
     {
       "ticker": "ADP",
@@ -129,7 +149,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Human Resource & Employment Services"
     },
     {
       "ticker": "ADSK",
@@ -139,7 +161,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "AEE",
@@ -148,7 +172,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "AEP",
@@ -158,7 +184,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "AES",
@@ -167,7 +195,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Independent Power Producers & Energy Traders"
     },
     {
       "ticker": "AFL",
@@ -176,7 +206,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Life & Health Insurance"
     },
     {
       "ticker": "AIG",
@@ -185,7 +217,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Multi-line Insurance"
     },
     {
       "ticker": "AIZ",
@@ -194,7 +228,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Multi-line Insurance"
     },
     {
       "ticker": "AJG",
@@ -203,7 +239,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Insurance Brokers"
     },
     {
       "ticker": "AKAM",
@@ -212,7 +250,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Internet Services & Infrastructure"
     },
     {
       "ticker": "ALB",
@@ -221,7 +261,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "ALGN",
@@ -230,7 +272,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Supplies"
     },
     {
       "ticker": "ALL",
@@ -239,7 +283,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "ALLE",
@@ -248,7 +294,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "ALNY",
@@ -257,7 +305,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": null
     },
     {
       "ticker": "AMAT",
@@ -267,7 +317,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductor Materials & Equipment"
     },
     {
       "ticker": "AMCR",
@@ -276,7 +328,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Paper & Plastic Packaging Products & Materials"
     },
     {
       "ticker": "AMD",
@@ -286,7 +340,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "AME",
@@ -295,7 +351,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Electrical Components & Equipment"
     },
     {
       "ticker": "AMGN",
@@ -306,7 +364,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "AMP",
@@ -315,7 +375,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "AMT",
@@ -324,7 +386,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Telecom Tower REITs"
     },
     {
       "ticker": "AMZN",
@@ -335,7 +399,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Broadline Retail"
     },
     {
       "ticker": "ANET",
@@ -344,7 +410,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Communications Equipment"
     },
     {
       "ticker": "AON",
@@ -353,7 +421,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Insurance Brokers"
     },
     {
       "ticker": "AOS",
@@ -362,7 +432,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "APA",
@@ -371,7 +443,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "APD",
@@ -380,7 +454,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Industrial Gases"
     },
     {
       "ticker": "APH",
@@ -389,7 +465,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Components"
     },
     {
       "ticker": "APO",
@@ -398,7 +476,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "APP",
@@ -408,7 +488,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "APTV",
@@ -417,7 +499,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automotive Parts & Equipment"
     },
     {
       "ticker": "ARE",
@@ -426,7 +510,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Office REITs"
     },
     {
       "ticker": "ARES",
@@ -435,7 +521,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "ARM",
@@ -444,7 +532,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "ASML",
@@ -453,7 +543,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "ATO",
@@ -462,7 +554,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Gas Utilities"
     },
     {
       "ticker": "AVB",
@@ -471,7 +565,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Multi-Family Residential REITs"
     },
     {
       "ticker": "AVGO",
@@ -481,7 +577,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "AVY",
@@ -490,7 +588,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Paper & Plastic Packaging Products & Materials"
     },
     {
       "ticker": "AWK",
@@ -499,7 +599,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Water Utilities"
     },
     {
       "ticker": "AXON",
@@ -509,7 +611,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "AXP",
@@ -519,7 +623,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Consumer Finance"
     },
     {
       "ticker": "AZO",
@@ -528,7 +634,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automotive Retail"
     },
     {
       "ticker": "BA",
@@ -538,7 +646,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "BAC",
@@ -547,7 +657,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "BALL",
@@ -556,7 +668,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Metal, Glass & Plastic Containers"
     },
     {
       "ticker": "BAX",
@@ -565,7 +679,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "BBY",
@@ -574,7 +690,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Computer & Electronics Retail"
     },
     {
       "ticker": "BDX",
@@ -583,7 +701,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "BEN",
@@ -592,7 +712,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "BF-B",
@@ -601,7 +723,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Distillers & Vintners"
     },
     {
       "ticker": "BG",
@@ -610,7 +734,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Agricultural Products & Services"
     },
     {
       "ticker": "BIIB",
@@ -619,7 +745,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "BKNG",
@@ -629,7 +757,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "BKR",
@@ -639,7 +769,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Equipment & Services"
     },
     {
       "ticker": "BLDR",
@@ -648,7 +780,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "BLK",
@@ -657,7 +791,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "BMY",
@@ -666,7 +802,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     },
     {
       "ticker": "BNY",
@@ -675,7 +813,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "BR",
@@ -684,7 +824,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Data Processing & Outsourced Services"
     },
     {
       "ticker": "BRK-B",
@@ -693,7 +835,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Multi-Sector Holdings"
     },
     {
       "ticker": "BRO",
@@ -702,7 +846,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Insurance Brokers"
     },
     {
       "ticker": "BSX",
@@ -711,7 +857,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "BX",
@@ -720,7 +868,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "BXP",
@@ -729,7 +879,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Office REITs"
     },
     {
       "ticker": "C",
@@ -738,7 +890,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "CAG",
@@ -747,7 +901,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": null
     },
     {
       "ticker": "CAH",
@@ -756,7 +912,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Distributors"
     },
     {
       "ticker": "CARR",
@@ -765,7 +923,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "CASY",
@@ -774,7 +934,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Food Retail"
     },
     {
       "ticker": "CAT",
@@ -784,7 +946,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction Machinery & Heavy Transportation Equipment"
     },
     {
       "ticker": "CB",
@@ -793,7 +957,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "CBOE",
@@ -802,7 +968,9 @@
       "exchange": "CBOE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "CBRE",
@@ -811,7 +979,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Real Estate Services"
     },
     {
       "ticker": "CCEP",
@@ -820,7 +990,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": null
     },
     {
       "ticker": "CCI",
@@ -829,7 +1001,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Telecom Tower REITs"
     },
     {
       "ticker": "CCL",
@@ -838,7 +1012,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "CDNS",
@@ -848,7 +1024,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "CDW",
@@ -857,7 +1035,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Distributors"
     },
     {
       "ticker": "CEG",
@@ -867,7 +1047,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "CF",
@@ -876,7 +1058,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Fertilizers & Agricultural Chemicals"
     },
     {
       "ticker": "CFG",
@@ -885,7 +1069,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Regional Banks"
     },
     {
       "ticker": "CHD",
@@ -894,7 +1080,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Household Products"
     },
     {
       "ticker": "CHRW",
@@ -903,7 +1091,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Air Freight & Logistics"
     },
     {
       "ticker": "CHTR",
@@ -913,7 +1103,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Cable & Satellite"
     },
     {
       "ticker": "CI",
@@ -922,7 +1114,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Services"
     },
     {
       "ticker": "CIEN",
@@ -931,7 +1125,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Communications Equipment"
     },
     {
       "ticker": "CINF",
@@ -940,7 +1136,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "CL",
@@ -949,7 +1147,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Household Products"
     },
     {
       "ticker": "CLX",
@@ -958,7 +1158,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Household Products"
     },
     {
       "ticker": "CMCSA",
@@ -968,7 +1170,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Cable & Satellite"
     },
     {
       "ticker": "CME",
@@ -977,7 +1181,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "CMG",
@@ -986,7 +1192,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Restaurants"
     },
     {
       "ticker": "CMI",
@@ -995,7 +1203,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction Machinery & Heavy Transportation Equipment"
     },
     {
       "ticker": "CMS",
@@ -1004,7 +1214,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "CNC",
@@ -1013,7 +1225,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Managed Health Care"
     },
     {
       "ticker": "CNP",
@@ -1022,7 +1236,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "COF",
@@ -1031,7 +1247,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Consumer Finance"
     },
     {
       "ticker": "COHR",
@@ -1040,7 +1258,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Components"
     },
     {
       "ticker": "COIN",
@@ -1049,7 +1269,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "COO",
@@ -1058,7 +1280,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Supplies"
     },
     {
       "ticker": "COP",
@@ -1067,7 +1291,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "COR",
@@ -1076,7 +1302,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Distributors"
     },
     {
       "ticker": "COST",
@@ -1086,7 +1314,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Consumer Staples Merchandise Retail"
     },
     {
       "ticker": "CPAY",
@@ -1095,7 +1325,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "CPRT",
@@ -1105,7 +1337,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Diversified Support Services"
     },
     {
       "ticker": "CPT",
@@ -1114,7 +1348,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Multi-Family Residential REITs"
     },
     {
       "ticker": "CRH",
@@ -1123,7 +1359,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Construction Materials"
     },
     {
       "ticker": "CRL",
@@ -1132,7 +1370,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "CRM",
@@ -1142,7 +1382,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "CRWD",
@@ -1152,7 +1394,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Systems Software"
     },
     {
       "ticker": "CSCO",
@@ -1163,7 +1407,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Communications Equipment"
     },
     {
       "ticker": "CSGP",
@@ -1172,7 +1418,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Real Estate Services"
     },
     {
       "ticker": "CSX",
@@ -1182,7 +1430,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Rail Transportation"
     },
     {
       "ticker": "CTAS",
@@ -1192,7 +1442,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Diversified Support Services"
     },
     {
       "ticker": "CTSH",
@@ -1202,7 +1454,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "IT Consulting & Other Services"
     },
     {
       "ticker": "CTVA",
@@ -1211,7 +1465,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Fertilizers & Agricultural Chemicals"
     },
     {
       "ticker": "CVNA",
@@ -1220,7 +1476,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automotive Retail"
     },
     {
       "ticker": "CVS",
@@ -1229,7 +1487,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Services"
     },
     {
       "ticker": "CVX",
@@ -1239,7 +1499,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Integrated Oil & Gas"
     },
     {
       "ticker": "D",
@@ -1248,7 +1510,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "DAL",
@@ -1257,7 +1521,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Passenger Airlines"
     },
     {
       "ticker": "DASH",
@@ -1267,7 +1533,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Specialized Consumer Services"
     },
     {
       "ticker": "DD",
@@ -1276,7 +1544,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "DDOG",
@@ -1286,7 +1556,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "DE",
@@ -1295,7 +1567,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Agricultural & Farm Machinery"
     },
     {
       "ticker": "DECK",
@@ -1304,7 +1578,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Footwear"
     },
     {
       "ticker": "DELL",
@@ -1313,7 +1589,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "DG",
@@ -1322,7 +1600,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Consumer Staples Merchandise Retail"
     },
     {
       "ticker": "DGX",
@@ -1331,7 +1611,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Services"
     },
     {
       "ticker": "DHI",
@@ -1340,7 +1622,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Homebuilding"
     },
     {
       "ticker": "DHR",
@@ -1349,7 +1633,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "DIS",
@@ -1359,7 +1645,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Movies & Entertainment"
     },
     {
       "ticker": "DLR",
@@ -1368,7 +1656,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Data Center REITs"
     },
     {
       "ticker": "DLTR",
@@ -1377,7 +1667,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Consumer Staples Merchandise Retail"
     },
     {
       "ticker": "DOC",
@@ -1386,7 +1678,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Health Care REITs"
     },
     {
       "ticker": "DOV",
@@ -1395,7 +1689,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "DOW",
@@ -1404,7 +1700,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Commodity Chemicals"
     },
     {
       "ticker": "DPZ",
@@ -1413,7 +1711,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Restaurants"
     },
     {
       "ticker": "DRI",
@@ -1422,7 +1722,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Restaurants"
     },
     {
       "ticker": "DTE",
@@ -1431,7 +1733,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "DUK",
@@ -1440,7 +1744,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "DVA",
@@ -1449,7 +1755,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Services"
     },
     {
       "ticker": "DVN",
@@ -1458,7 +1766,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "DXCM",
@@ -1468,7 +1778,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "EA",
@@ -1478,7 +1790,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Interactive Home Entertainment"
     },
     {
       "ticker": "EBAY",
@@ -1487,7 +1801,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Broadline Retail"
     },
     {
       "ticker": "ECL",
@@ -1496,7 +1812,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "ED",
@@ -1505,7 +1823,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "EFX",
@@ -1514,7 +1834,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Research & Consulting Services"
     },
     {
       "ticker": "EG",
@@ -1523,7 +1845,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Reinsurance"
     },
     {
       "ticker": "EIX",
@@ -1532,7 +1856,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "EL",
@@ -1541,7 +1867,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Personal Care Products"
     },
     {
       "ticker": "ELV",
@@ -1550,7 +1878,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Managed Health Care"
     },
     {
       "ticker": "EME",
@@ -1559,7 +1889,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction & Engineering"
     },
     {
       "ticker": "EMR",
@@ -1568,7 +1900,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Electrical Components & Equipment"
     },
     {
       "ticker": "EOG",
@@ -1577,7 +1911,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "EQIX",
@@ -1586,7 +1922,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Data Center REITs"
     },
     {
       "ticker": "EQR",
@@ -1595,7 +1933,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Multi-Family Residential REITs"
     },
     {
       "ticker": "EQT",
@@ -1604,7 +1944,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "ERIE",
@@ -1613,7 +1955,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Insurance Brokers"
     },
     {
       "ticker": "ES",
@@ -1622,7 +1966,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "ESS",
@@ -1631,7 +1977,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Multi-Family Residential REITs"
     },
     {
       "ticker": "ETN",
@@ -1640,7 +1988,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Electrical Components & Equipment"
     },
     {
       "ticker": "ETR",
@@ -1649,7 +1999,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "EVRG",
@@ -1658,7 +2010,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "EW",
@@ -1667,7 +2021,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "EXC",
@@ -1677,7 +2033,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "EXE",
@@ -1686,7 +2044,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "EXPD",
@@ -1695,7 +2055,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Air Freight & Logistics"
     },
     {
       "ticker": "EXPE",
@@ -1704,7 +2066,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "EXR",
@@ -1713,7 +2077,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Self-Storage REITs"
     },
     {
       "ticker": "F",
@@ -1722,7 +2088,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automobile Manufacturers"
     },
     {
       "ticker": "FANG",
@@ -1732,7 +2100,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "FAST",
@@ -1742,7 +2112,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Trading Companies & Distributors"
     },
     {
       "ticker": "FCX",
@@ -1751,7 +2123,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Copper"
     },
     {
       "ticker": "FDS",
@@ -1760,7 +2134,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "FDX",
@@ -1769,7 +2145,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Air Freight & Logistics"
     },
     {
       "ticker": "FDXF",
@@ -1778,7 +2156,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Cargo Ground Transportation"
     },
     {
       "ticker": "FE",
@@ -1787,7 +2167,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "FER",
@@ -1796,7 +2178,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": null
     },
     {
       "ticker": "FFIV",
@@ -1805,7 +2189,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Communications Equipment"
     },
     {
       "ticker": "FICO",
@@ -1814,7 +2200,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "FIS",
@@ -1823,7 +2211,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "FISV",
@@ -1832,7 +2222,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "FITB",
@@ -1841,7 +2233,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Regional Banks"
     },
     {
       "ticker": "FIX",
@@ -1850,7 +2244,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction & Engineering"
     },
     {
       "ticker": "FLEX",
@@ -1859,7 +2255,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Manufacturing Services"
     },
     {
       "ticker": "FOX",
@@ -1868,7 +2266,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Broadcasting"
     },
     {
       "ticker": "FOXA",
@@ -1877,7 +2277,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Broadcasting"
     },
     {
       "ticker": "FRT",
@@ -1886,7 +2288,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Retail REITs"
     },
     {
       "ticker": "FSLR",
@@ -1895,7 +2299,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "FTNT",
@@ -1905,7 +2311,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Systems Software"
     },
     {
       "ticker": "FTV",
@@ -1914,7 +2322,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "GD",
@@ -1923,7 +2333,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "GDDY",
@@ -1932,7 +2344,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Internet Services & Infrastructure"
     },
     {
       "ticker": "GE",
@@ -1941,7 +2355,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "GEHC",
@@ -1951,7 +2367,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "GEN",
@@ -1960,7 +2378,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Systems Software"
     },
     {
       "ticker": "GEV",
@@ -1969,7 +2389,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Heavy Electrical Equipment"
     },
     {
       "ticker": "GILD",
@@ -1979,7 +2401,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "GIS",
@@ -1988,7 +2412,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "GL",
@@ -1997,7 +2423,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Life & Health Insurance"
     },
     {
       "ticker": "GLW",
@@ -2006,7 +2434,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Components"
     },
     {
       "ticker": "GM",
@@ -2015,7 +2445,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automobile Manufacturers"
     },
     {
       "ticker": "GNRC",
@@ -2024,7 +2456,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Heavy Electrical Equipment"
     },
     {
       "ticker": "GOOG",
@@ -2034,7 +2468,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Interactive Media & Services"
     },
     {
       "ticker": "GOOGL",
@@ -2044,7 +2480,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Interactive Media & Services"
     },
     {
       "ticker": "GPC",
@@ -2053,7 +2491,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Distributors"
     },
     {
       "ticker": "GPN",
@@ -2062,7 +2502,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "GRMN",
@@ -2071,7 +2513,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Consumer Electronics"
     },
     {
       "ticker": "GS",
@@ -2081,7 +2525,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
       "ticker": "GWW",
@@ -2090,7 +2536,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "HAL",
@@ -2099,7 +2547,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Equipment & Services"
     },
     {
       "ticker": "HAS",
@@ -2108,7 +2558,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Leisure Products"
     },
     {
       "ticker": "HBAN",
@@ -2117,7 +2569,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Regional Banks"
     },
     {
       "ticker": "HCA",
@@ -2126,7 +2580,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Facilities"
     },
     {
       "ticker": "HD",
@@ -2136,7 +2592,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Home Improvement Retail"
     },
     {
       "ticker": "HIG",
@@ -2145,7 +2603,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "HII",
@@ -2154,7 +2614,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "HLT",
@@ -2163,7 +2625,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "HON",
@@ -2174,7 +2638,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Conglomerates"
     },
     {
       "ticker": "HOOD",
@@ -2183,7 +2649,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
       "ticker": "HPE",
@@ -2192,7 +2660,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "HPQ",
@@ -2201,7 +2671,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "HRL",
@@ -2210,7 +2682,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "HSIC",
@@ -2219,7 +2693,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Distributors"
     },
     {
       "ticker": "HST",
@@ -2228,7 +2704,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Hotel & Resort REITs"
     },
     {
       "ticker": "HSY",
@@ -2237,7 +2715,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "HUBB",
@@ -2246,7 +2726,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "HUM",
@@ -2255,7 +2737,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Managed Health Care"
     },
     {
       "ticker": "HWM",
@@ -2264,7 +2748,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "IBKR",
@@ -2273,7 +2759,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
       "ticker": "IBM",
@@ -2283,7 +2771,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "IT Consulting & Other Services"
     },
     {
       "ticker": "ICE",
@@ -2292,7 +2782,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "IDXX",
@@ -2302,7 +2794,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "IEX",
@@ -2311,7 +2805,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "IFF",
@@ -2320,7 +2816,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "INCY",
@@ -2329,7 +2827,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "INSM",
@@ -2338,7 +2838,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": null
     },
     {
       "ticker": "INTC",
@@ -2348,7 +2850,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "INTU",
@@ -2358,7 +2862,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "INVH",
@@ -2367,7 +2873,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Single-Family Residential REITs"
     },
     {
       "ticker": "IP",
@@ -2376,7 +2884,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Paper & Plastic Packaging Products & Materials"
     },
     {
       "ticker": "IQV",
@@ -2385,7 +2895,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "IR",
@@ -2394,7 +2906,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "IRM",
@@ -2403,7 +2917,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Other Specialized REITs"
     },
     {
       "ticker": "ISRG",
@@ -2413,7 +2929,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "IT",
@@ -2422,7 +2940,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "IT Consulting & Other Services"
     },
     {
       "ticker": "ITW",
@@ -2431,7 +2951,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "IVZ",
@@ -2440,7 +2962,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "J",
@@ -2449,7 +2973,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction & Engineering"
     },
     {
       "ticker": "JBHT",
@@ -2458,7 +2984,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Cargo Ground Transportation"
     },
     {
       "ticker": "JBL",
@@ -2467,7 +2995,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Manufacturing Services"
     },
     {
       "ticker": "JCI",
@@ -2476,7 +3006,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "JKHY",
@@ -2485,7 +3017,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "JNJ",
@@ -2495,7 +3029,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     },
     {
       "ticker": "JPM",
@@ -2505,7 +3041,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "KDP",
@@ -2515,7 +3053,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Soft Drinks & Non-alcoholic Beverages"
     },
     {
       "ticker": "KEY",
@@ -2524,7 +3064,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Regional Banks"
     },
     {
       "ticker": "KEYS",
@@ -2533,7 +3075,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Equipment & Instruments"
     },
     {
       "ticker": "KHC",
@@ -2543,7 +3087,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "KIM",
@@ -2552,7 +3098,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Retail REITs"
     },
     {
       "ticker": "KKR",
@@ -2561,7 +3109,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "KLAC",
@@ -2571,7 +3121,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductor Materials & Equipment"
     },
     {
       "ticker": "KMB",
@@ -2580,7 +3132,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Household Products"
     },
     {
       "ticker": "KMI",
@@ -2589,7 +3143,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Storage & Transportation"
     },
     {
       "ticker": "KO",
@@ -2599,7 +3155,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Soft Drinks & Non-alcoholic Beverages"
     },
     {
       "ticker": "KR",
@@ -2608,7 +3166,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Food Retail"
     },
     {
       "ticker": "KVUE",
@@ -2617,7 +3177,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Personal Care Products"
     },
     {
       "ticker": "L",
@@ -2626,7 +3188,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Multi-line Insurance"
     },
     {
       "ticker": "LDOS",
@@ -2635,7 +3199,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Diversified Support Services"
     },
     {
       "ticker": "LEN",
@@ -2644,7 +3210,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Homebuilding"
     },
     {
       "ticker": "LH",
@@ -2653,7 +3221,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Services"
     },
     {
       "ticker": "LHX",
@@ -2662,7 +3232,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "LII",
@@ -2671,7 +3243,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "LIN",
@@ -2681,7 +3255,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Industrial Gases"
     },
     {
       "ticker": "LITE",
@@ -2691,7 +3267,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Communications Equipment"
     },
     {
       "ticker": "LLY",
@@ -2700,7 +3278,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     },
     {
       "ticker": "LMT",
@@ -2709,7 +3289,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "LNT",
@@ -2718,7 +3300,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "LOW",
@@ -2727,7 +3311,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Home Improvement Retail"
     },
     {
       "ticker": "LRCX",
@@ -2737,7 +3323,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductor Materials & Equipment"
     },
     {
       "ticker": "LULU",
@@ -2746,7 +3334,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Apparel, Accessories & Luxury Goods"
     },
     {
       "ticker": "LUV",
@@ -2755,7 +3345,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Passenger Airlines"
     },
     {
       "ticker": "LVS",
@@ -2764,7 +3356,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Casinos & Gaming"
     },
     {
       "ticker": "LYB",
@@ -2773,7 +3367,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "LYV",
@@ -2782,7 +3378,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Movies & Entertainment"
     },
     {
       "ticker": "MA",
@@ -2791,7 +3389,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "MAA",
@@ -2800,7 +3400,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Multi-Family Residential REITs"
     },
     {
       "ticker": "MAR",
@@ -2810,7 +3412,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "MAS",
@@ -2819,7 +3423,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "MCD",
@@ -2829,7 +3435,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Restaurants"
     },
     {
       "ticker": "MCHP",
@@ -2839,7 +3447,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "MCK",
@@ -2848,7 +3458,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Distributors"
     },
     {
       "ticker": "MCO",
@@ -2857,7 +3469,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "MDLZ",
@@ -2867,7 +3481,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "MDT",
@@ -2876,7 +3492,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "MELI",
@@ -2885,7 +3503,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": null
     },
     {
       "ticker": "MET",
@@ -2894,7 +3514,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Life & Health Insurance"
     },
     {
       "ticker": "META",
@@ -2904,7 +3526,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Interactive Media & Services"
     },
     {
       "ticker": "MGM",
@@ -2913,7 +3537,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Casinos & Gaming"
     },
     {
       "ticker": "MKC",
@@ -2922,7 +3548,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "MLM",
@@ -2931,7 +3559,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Construction Materials"
     },
     {
       "ticker": "MMM",
@@ -2941,7 +3571,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Conglomerates"
     },
     {
       "ticker": "MNST",
@@ -2951,7 +3583,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Soft Drinks & Non-alcoholic Beverages"
     },
     {
       "ticker": "MO",
@@ -2960,7 +3594,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Tobacco"
     },
     {
       "ticker": "MOS",
@@ -2969,7 +3605,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Fertilizers & Agricultural Chemicals"
     },
     {
       "ticker": "MPC",
@@ -2978,7 +3616,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Refining & Marketing"
     },
     {
       "ticker": "MPWR",
@@ -2988,7 +3628,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "MRK",
@@ -2998,7 +3640,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     },
     {
       "ticker": "MRNA",
@@ -3007,7 +3651,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "MRSH",
@@ -3016,7 +3662,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Insurance Brokers"
     },
     {
       "ticker": "MRVL",
@@ -3026,7 +3674,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "MS",
@@ -3035,7 +3685,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
       "ticker": "MSCI",
@@ -3044,7 +3696,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "MSFT",
@@ -3055,7 +3709,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Systems Software"
     },
     {
       "ticker": "MSI",
@@ -3064,7 +3720,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Communications Equipment"
     },
     {
       "ticker": "MSTR",
@@ -3073,7 +3731,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "MTB",
@@ -3082,7 +3742,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Regional Banks"
     },
     {
       "ticker": "MTD",
@@ -3091,7 +3753,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "MU",
@@ -3101,7 +3765,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "NCLH",
@@ -3110,7 +3776,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "NDAQ",
@@ -3119,7 +3787,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "NDSN",
@@ -3128,7 +3798,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "NEE",
@@ -3137,7 +3809,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "NEM",
@@ -3146,7 +3820,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Gold"
     },
     {
       "ticker": "NFLX",
@@ -3156,7 +3832,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Movies & Entertainment"
     },
     {
       "ticker": "NI",
@@ -3165,7 +3843,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "NKE",
@@ -3175,7 +3855,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Apparel, Accessories & Luxury Goods"
     },
     {
       "ticker": "NOC",
@@ -3184,7 +3866,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "NOW",
@@ -3193,7 +3877,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Systems Software"
     },
     {
       "ticker": "NRG",
@@ -3202,7 +3888,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Independent Power Producers & Energy Traders"
     },
     {
       "ticker": "NSC",
@@ -3211,7 +3899,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Rail Transportation"
     },
     {
       "ticker": "NTAP",
@@ -3220,7 +3910,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "NTRS",
@@ -3229,7 +3921,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "NUE",
@@ -3238,7 +3932,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Steel"
     },
     {
       "ticker": "NVDA",
@@ -3249,7 +3945,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "NVR",
@@ -3258,7 +3956,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Homebuilding"
     },
     {
       "ticker": "NWS",
@@ -3267,7 +3967,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Publishing"
     },
     {
       "ticker": "NWSA",
@@ -3276,7 +3978,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Publishing"
     },
     {
       "ticker": "NXPI",
@@ -3286,7 +3990,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "O",
@@ -3295,7 +4001,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Retail REITs"
     },
     {
       "ticker": "ODFL",
@@ -3305,7 +4013,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Cargo Ground Transportation"
     },
     {
       "ticker": "OKE",
@@ -3314,7 +4024,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Storage & Transportation"
     },
     {
       "ticker": "OMC",
@@ -3323,7 +4035,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Advertising"
     },
     {
       "ticker": "ON",
@@ -3332,7 +4046,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "ORCL",
@@ -3341,7 +4057,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "ORLY",
@@ -3351,7 +4069,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automotive Retail"
     },
     {
       "ticker": "OTIS",
@@ -3360,7 +4080,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "OXY",
@@ -3369,7 +4091,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "PANW",
@@ -3379,7 +4103,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Systems Software"
     },
     {
       "ticker": "PAYX",
@@ -3389,7 +4115,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Human Resource & Employment Services"
     },
     {
       "ticker": "PCAR",
@@ -3399,7 +4127,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction Machinery & Heavy Transportation Equipment"
     },
     {
       "ticker": "PCG",
@@ -3408,7 +4138,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "PDD",
@@ -3417,7 +4149,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": null
     },
     {
       "ticker": "PEG",
@@ -3426,7 +4160,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "PEP",
@@ -3436,7 +4172,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Soft Drinks & Non-alcoholic Beverages"
     },
     {
       "ticker": "PFE",
@@ -3445,7 +4183,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     },
     {
       "ticker": "PFG",
@@ -3454,7 +4194,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Life & Health Insurance"
     },
     {
       "ticker": "PG",
@@ -3464,7 +4206,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Personal Care Products"
     },
     {
       "ticker": "PGR",
@@ -3473,7 +4217,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "PH",
@@ -3482,7 +4228,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "PHM",
@@ -3491,7 +4239,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Homebuilding"
     },
     {
       "ticker": "PKG",
@@ -3500,7 +4250,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Paper & Plastic Packaging Products & Materials"
     },
     {
       "ticker": "PLD",
@@ -3509,7 +4261,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Industrial REITs"
     },
     {
       "ticker": "PLTR",
@@ -3519,7 +4273,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "PM",
@@ -3528,7 +4284,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Tobacco"
     },
     {
       "ticker": "PNC",
@@ -3537,7 +4295,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "PNR",
@@ -3546,7 +4306,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "PNW",
@@ -3555,7 +4317,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "PODD",
@@ -3564,7 +4328,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "PPG",
@@ -3573,7 +4339,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "PPL",
@@ -3582,7 +4350,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "PRU",
@@ -3591,7 +4361,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Life & Health Insurance"
     },
     {
       "ticker": "PSA",
@@ -3600,7 +4372,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Self-Storage REITs"
     },
     {
       "ticker": "PSKY",
@@ -3609,7 +4383,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Movies & Entertainment"
     },
     {
       "ticker": "PSX",
@@ -3618,7 +4394,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Refining & Marketing"
     },
     {
       "ticker": "PTC",
@@ -3627,7 +4405,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "PWR",
@@ -3636,7 +4416,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction & Engineering"
     },
     {
       "ticker": "PYPL",
@@ -3646,7 +4428,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "Q",
@@ -3655,7 +4439,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductor Materials & Equipment"
     },
     {
       "ticker": "QCOM",
@@ -3665,7 +4451,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "RCL",
@@ -3674,7 +4462,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Hotels, Resorts & Cruise Lines"
     },
     {
       "ticker": "REG",
@@ -3683,7 +4473,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Retail REITs"
     },
     {
       "ticker": "REGN",
@@ -3693,7 +4485,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "RF",
@@ -3702,7 +4496,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Regional Banks"
     },
     {
       "ticker": "RJF",
@@ -3711,7 +4507,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
       "ticker": "RL",
@@ -3720,7 +4518,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Apparel, Accessories & Luxury Goods"
     },
     {
       "ticker": "RMD",
@@ -3729,7 +4529,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "ROK",
@@ -3738,7 +4540,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Electrical Components & Equipment"
     },
     {
       "ticker": "ROL",
@@ -3747,7 +4551,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Environmental & Facilities Services"
     },
     {
       "ticker": "ROP",
@@ -3757,7 +4563,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Equipment & Instruments"
     },
     {
       "ticker": "ROST",
@@ -3767,7 +4575,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Apparel Retail"
     },
     {
       "ticker": "RSG",
@@ -3776,7 +4586,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Environmental & Facilities Services"
     },
     {
       "ticker": "RTX",
@@ -3785,7 +4597,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "RVTY",
@@ -3794,7 +4608,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "SBAC",
@@ -3803,7 +4619,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Telecom Tower REITs"
     },
     {
       "ticker": "SBUX",
@@ -3813,7 +4631,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Restaurants"
     },
     {
       "ticker": "SCHW",
@@ -3822,7 +4642,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
       "ticker": "SHOP",
@@ -3831,7 +4653,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "SHW",
@@ -3841,7 +4665,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Specialty Chemicals"
     },
     {
       "ticker": "SJM",
@@ -3850,7 +4676,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "SLB",
@@ -3859,7 +4687,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Equipment & Services"
     },
     {
       "ticker": "SMCI",
@@ -3868,7 +4698,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "SNA",
@@ -3877,7 +4709,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "SNDK",
@@ -3887,7 +4721,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "SNPS",
@@ -3897,7 +4733,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "SO",
@@ -3906,7 +4744,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "SOLV",
@@ -3915,7 +4755,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Technology"
     },
     {
       "ticker": "SPG",
@@ -3924,7 +4766,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Retail REITs"
     },
     {
       "ticker": "SPGI",
@@ -3933,7 +4777,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Financial Exchanges & Data"
     },
     {
       "ticker": "SRE",
@@ -3942,7 +4788,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "STE",
@@ -3951,7 +4799,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "STLD",
@@ -3960,7 +4810,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Steel"
     },
     {
       "ticker": "STT",
@@ -3969,7 +4821,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "STX",
@@ -3979,7 +4833,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "STZ",
@@ -3988,7 +4844,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Distillers & Vintners"
     },
     {
       "ticker": "SW",
@@ -3997,7 +4855,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Paper & Plastic Packaging Products & Materials"
     },
     {
       "ticker": "SWK",
@@ -4006,7 +4866,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "SWKS",
@@ -4015,7 +4877,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "SYF",
@@ -4024,7 +4888,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Consumer Finance"
     },
     {
       "ticker": "SYK",
@@ -4033,7 +4899,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "SYY",
@@ -4042,7 +4910,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Food Distributors"
     },
     {
       "ticker": "T",
@@ -4051,7 +4921,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Integrated Telecommunication Services"
     },
     {
       "ticker": "TAP",
@@ -4060,7 +4932,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Brewers"
     },
     {
       "ticker": "TDG",
@@ -4069,7 +4943,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "TDY",
@@ -4078,7 +4954,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Equipment & Instruments"
     },
     {
       "ticker": "TECH",
@@ -4087,7 +4965,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "TEL",
@@ -4096,7 +4976,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Manufacturing Services"
     },
     {
       "ticker": "TER",
@@ -4105,7 +4987,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductor Materials & Equipment"
     },
     {
       "ticker": "TFC",
@@ -4114,7 +4998,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "TGT",
@@ -4123,7 +5009,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Consumer Staples Merchandise Retail"
     },
     {
       "ticker": "TJX",
@@ -4132,7 +5020,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Apparel Retail"
     },
     {
       "ticker": "TKO",
@@ -4141,7 +5031,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Movies & Entertainment"
     },
     {
       "ticker": "TMO",
@@ -4150,7 +5042,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "TMUS",
@@ -4160,7 +5054,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Wireless Telecommunication Services"
     },
     {
       "ticker": "TPL",
@@ -4169,7 +5065,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Exploration & Production"
     },
     {
       "ticker": "TPR",
@@ -4178,7 +5076,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Apparel, Accessories & Luxury Goods"
     },
     {
       "ticker": "TRGP",
@@ -4187,7 +5087,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Storage & Transportation"
     },
     {
       "ticker": "TRI",
@@ -4196,7 +5098,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": null
     },
     {
       "ticker": "TRMB",
@@ -4205,7 +5109,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "TROW",
@@ -4214,7 +5120,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Asset Management & Custody Banks"
     },
     {
       "ticker": "TRV",
@@ -4224,7 +5132,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "TSCO",
@@ -4233,7 +5143,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Other Specialty Retail"
     },
     {
       "ticker": "TSLA",
@@ -4243,7 +5155,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Automobile Manufacturers"
     },
     {
       "ticker": "TSN",
@@ -4252,7 +5166,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Packaged Foods & Meats"
     },
     {
       "ticker": "TT",
@@ -4261,7 +5177,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Building Products"
     },
     {
       "ticker": "TTD",
@@ -4270,7 +5188,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Advertising"
     },
     {
       "ticker": "TTWO",
@@ -4280,7 +5200,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Interactive Home Entertainment"
     },
     {
       "ticker": "TXN",
@@ -4290,7 +5212,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Semiconductors"
     },
     {
       "ticker": "TXT",
@@ -4299,7 +5223,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "TYL",
@@ -4308,7 +5234,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "UAL",
@@ -4317,7 +5245,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Passenger Airlines"
     },
     {
       "ticker": "UBER",
@@ -4326,7 +5256,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Passenger Ground Transportation"
     },
     {
       "ticker": "UDR",
@@ -4335,7 +5267,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Multi-Family Residential REITs"
     },
     {
       "ticker": "UHS",
@@ -4344,7 +5278,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Facilities"
     },
     {
       "ticker": "ULTA",
@@ -4353,7 +5289,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Other Specialty Retail"
     },
     {
       "ticker": "UNH",
@@ -4363,7 +5301,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Managed Health Care"
     },
     {
       "ticker": "UNP",
@@ -4372,7 +5312,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Rail Transportation"
     },
     {
       "ticker": "UPS",
@@ -4381,7 +5323,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Air Freight & Logistics"
     },
     {
       "ticker": "URI",
@@ -4390,7 +5334,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Trading Companies & Distributors"
     },
     {
       "ticker": "USB",
@@ -4399,7 +5345,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "V",
@@ -4409,7 +5357,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "VEEV",
@@ -4418,7 +5368,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Technology"
     },
     {
       "ticker": "VICI",
@@ -4427,7 +5379,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Hotel & Resort REITs"
     },
     {
       "ticker": "VLO",
@@ -4436,7 +5390,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Refining & Marketing"
     },
     {
       "ticker": "VLTO",
@@ -4445,7 +5401,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Environmental & Facilities Services"
     },
     {
       "ticker": "VMC",
@@ -4454,7 +5412,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Materials",
+      "gics_sub_industry": "Construction Materials"
     },
     {
       "ticker": "VRSK",
@@ -4464,7 +5424,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Research & Consulting Services"
     },
     {
       "ticker": "VRSN",
@@ -4473,7 +5435,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Internet Services & Infrastructure"
     },
     {
       "ticker": "VRT",
@@ -4482,7 +5446,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Electrical Components & Equipment"
     },
     {
       "ticker": "VRTX",
@@ -4492,7 +5458,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Biotechnology"
     },
     {
       "ticker": "VST",
@@ -4501,7 +5469,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "VTR",
@@ -4510,7 +5480,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Health Care REITs"
     },
     {
       "ticker": "VTRS",
@@ -4519,7 +5491,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     },
     {
       "ticker": "VZ",
@@ -4529,7 +5503,9 @@
       "indices": [
         "dow30",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Integrated Telecommunication Services"
     },
     {
       "ticker": "WAB",
@@ -4538,7 +5514,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Construction Machinery & Heavy Transportation Equipment"
     },
     {
       "ticker": "WAT",
@@ -4547,7 +5525,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Life Sciences Tools & Services"
     },
     {
       "ticker": "WBD",
@@ -4557,7 +5537,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Broadcasting"
     },
     {
       "ticker": "WDAY",
@@ -4567,7 +5549,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Application Software"
     },
     {
       "ticker": "WDC",
@@ -4577,7 +5561,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Technology Hardware, Storage & Peripherals"
     },
     {
       "ticker": "WEC",
@@ -4586,7 +5572,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Electric Utilities"
     },
     {
       "ticker": "WELL",
@@ -4595,7 +5583,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Health Care REITs"
     },
     {
       "ticker": "WFC",
@@ -4604,7 +5594,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Diversified Banks"
     },
     {
       "ticker": "WM",
@@ -4613,7 +5605,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Environmental & Facilities Services"
     },
     {
       "ticker": "WMB",
@@ -4622,7 +5616,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Oil & Gas Storage & Transportation"
     },
     {
       "ticker": "WMT",
@@ -4633,7 +5629,9 @@
         "dow30",
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Staples",
+      "gics_sub_industry": "Consumer Staples Merchandise Retail"
     },
     {
       "ticker": "WRB",
@@ -4642,7 +5640,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Property & Casualty Insurance"
     },
     {
       "ticker": "WSM",
@@ -4651,7 +5651,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Homefurnishing Retail"
     },
     {
       "ticker": "WST",
@@ -4660,7 +5662,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Supplies"
     },
     {
       "ticker": "WTW",
@@ -4669,7 +5673,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Insurance Brokers"
     },
     {
       "ticker": "WY",
@@ -4678,7 +5684,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Real Estate",
+      "gics_sub_industry": "Timber REITs"
     },
     {
       "ticker": "WYNN",
@@ -4687,7 +5695,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Casinos & Gaming"
     },
     {
       "ticker": "XEL",
@@ -4697,7 +5707,9 @@
       "indices": [
         "nasdaq100",
         "sp500"
-      ]
+      ],
+      "gics_sector": "Utilities",
+      "gics_sub_industry": "Multi-Utilities"
     },
     {
       "ticker": "XOM",
@@ -4706,7 +5718,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Energy",
+      "gics_sub_industry": "Integrated Oil & Gas"
     },
     {
       "ticker": "XYL",
@@ -4715,7 +5729,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Industrial Machinery & Supplies & Components"
     },
     {
       "ticker": "XYZ",
@@ -4724,7 +5740,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Financials",
+      "gics_sub_industry": "Transaction & Payment Processing Services"
     },
     {
       "ticker": "YUM",
@@ -4733,7 +5751,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Consumer Discretionary",
+      "gics_sub_industry": "Restaurants"
     },
     {
       "ticker": "ZBH",
@@ -4742,7 +5762,9 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Health Care Equipment"
     },
     {
       "ticker": "ZBRA",
@@ -4751,7 +5773,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": "Electronic Equipment & Instruments"
     },
     {
       "ticker": "ZS",
@@ -4760,7 +5784,9 @@
       "exchange": "Nasdaq",
       "indices": [
         "nasdaq100"
-      ]
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "ZTS",
@@ -4769,7 +5795,10 @@
       "exchange": "NYSE",
       "indices": [
         "sp500"
-      ]
+      ],
+      "gics_sector": "Health Care",
+      "gics_sub_industry": "Pharmaceuticals"
     }
-  ]
+  ],
+  "no_sector": []
 }

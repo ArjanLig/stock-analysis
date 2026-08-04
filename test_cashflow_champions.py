@@ -24,8 +24,12 @@ def test_percentiles_monotonic_and_ties():
     assert p[2] == 1.0
 
 
-def _row(t, cfo, ta, mc, sic=None):
-    return ChampRow(ticker=t, cfo=cfo, total_assets=ta, market_cap=mc, sic=sic)
+def _row(t, cfo, ta, mc, sic=None, sector="Test Sector"):
+    """Default every row into one sector: within-sector ranking over a single
+    group is arithmetically identical to the old global ranking, so the maths
+    tests below keep asserting exactly what they always did."""
+    return ChampRow(ticker=t, cfo=cfo, total_assets=ta, market_cap=mc, sic=sic,
+                    sector=sector)
 
 
 def test_rank_synthetic_universe_orders_and_cuts_top_20pct():
@@ -103,14 +107,101 @@ def test_financials_excluded_and_counted():
     assert out2["summary"]["ranked"] == 1
 
 
+# ── Sector-relative ranking ────────────────────────────────────────────────────
+
+def test_percentiles_are_computed_within_sector_not_globally():
+    """The whole point of the change: a name is measured against its own sector.
+    ENERGY_TOP has the best absolute ratios in the universe but is only
+    mid-pack among its peers, so it must not outrank the best software name."""
+    energy = [_row(f"E{i}", cfo=100 - i, ta=200, mc=400 + i * 10, sector="Energy")
+              for i in range(5)]
+    software = [_row(f"S{i}", cfo=20 - i, ta=400, mc=2000 + i * 100,
+                     sector="Information Technology") for i in range(5)]
+    out = cc.rank_universe(energy + software, top_pct=0.20)
+    by_t = {r.ticker: r for r in out["rows"]}
+
+    # Best of each sector ranks 1 *within its sector*
+    assert by_t["E0"].sector_rank == 1
+    assert by_t["S0"].sector_rank == 1
+    assert by_t["E0"].sector_size == 5
+    assert by_t["S0"].sector_size == 5
+    # Each sector gets its own champion, even though every energy name has
+    # better absolute ratios than every software name.
+    assert by_t["E0"].is_champion is True
+    assert by_t["S0"].is_champion is True
+    assert out["summary"]["champions"] == 2
+
+
+def test_champion_flag_is_top_pct_of_each_sector():
+    big = [_row(f"B{i}", cfo=100 - i, ta=200, mc=500, sector="Industrials")
+           for i in range(10)]
+    small = [_row(f"S{i}", cfo=100 - i, ta=200, mc=500, sector="Utilities")
+             for i in range(5)]
+    out = cc.rank_universe(big + small, top_pct=0.20)
+    champs = [r for r in out["rows"] if r.is_champion]
+    # ceil(10 * .2) = 2 from Industrials, ceil(5 * .2) = 1 from Utilities
+    assert sorted(r.ticker for r in champs) == ["B0", "B1", "S0"]
+    assert out["summary"]["champions"] == 3
+
+
+def test_sector_below_minimum_size_yields_no_champions():
+    """Real Estate held a single name (CSGP) in the live universe — a group of
+    one would otherwise crown itself. Ranked, but never flagged."""
+    big = [_row(f"B{i}", cfo=100 - i, ta=200, mc=500, sector="Industrials")
+           for i in range(10)]
+    tiny = [_row("LONE", cfo=100, ta=150, mc=400, sector="Real Estate")]
+    out = cc.rank_universe(big + tiny, top_pct=0.20)
+    by_t = {r.ticker: r for r in out["rows"]}
+
+    assert by_t["LONE"].status == "ok"          # still screened and ranked
+    assert by_t["LONE"].sector_rank == 1
+    assert by_t["LONE"].sector_size == 1
+    assert by_t["LONE"].is_champion is False    # but never a champion
+    assert by_t["LONE"].reason == "sector_too_small"
+    assert all(r.ticker.startswith("B") for r in out["rows"] if r.is_champion)
+
+
+def test_unknown_sector_is_ranked_nowhere_and_never_flagged():
+    """A Nasdaq-only name with no GICS row and no override must fail visibly."""
+    known = [_row(f"K{i}", cfo=100 - i, ta=200, mc=500, sector="Industrials")
+             for i in range(5)]
+    orphan = [_row("ORPH", cfo=100, ta=150, mc=400, sector=None)]
+    out = cc.rank_universe(known + orphan, top_pct=0.20)
+    by_t = {r.ticker: r for r in out["rows"]}
+
+    assert by_t["ORPH"].is_champion is False
+    assert by_t["ORPH"].reason == "no_sector"
+    assert by_t["ORPH"].sector_rank is None
+    assert out["summary"]["excluded_no_sector"] == 1
+
+
+def test_gics_lookup_prefers_csv_then_overrides():
+    sp_rows = [
+        {"Symbol": "AOS", "GICS Sector": "Industrials",
+         "GICS Sub-Industry": "Building Products"},
+        {"Symbol": "BRK.B", "GICS Sector": "Financials",
+         "GICS Sub-Industry": "Multi-Sector Holdings"},
+    ]
+    lookup = cc._gics_lookup(sp_rows)
+    assert lookup["AOS"] == ("Industrials", "Building Products")
+    # dotted class shares are normalised the same way the universe keys are
+    assert lookup[cc._norm("BRK.B")][0] == "Financials"
+    # Nasdaq-only names are not in the CSV but are covered by the override table
+    assert "MELI" in cc.GICS_OVERRIDES
+    assert cc.GICS_OVERRIDES["MELI"] == "Consumer Discretionary"
+
+
 # ── Batch pipeline robustness ───────────────────────────────────────────────────
 
 _SYNTH_UNIVERSE = {
     "as_of": "2026-06-26",
     "constituents": [
-        {"ticker": "AAA", "name": "Alpha", "cik": 111, "exchange": "NYSE", "indices": ["sp500"]},
-        {"ticker": "BBB", "name": "Beta", "cik": 222, "exchange": "Nasdaq", "indices": ["sp500"]},
-        {"ticker": "CCC", "name": "Gamma", "cik": 333, "exchange": "NYSE", "indices": ["dow30"]},
+        {"ticker": "AAA", "name": "Alpha", "cik": 111, "exchange": "NYSE",
+         "indices": ["sp500"], "gics_sector": "Industrials"},
+        {"ticker": "BBB", "name": "Beta", "cik": 222, "exchange": "Nasdaq",
+         "indices": ["sp500"], "gics_sector": "Industrials"},
+        {"ticker": "CCC", "name": "Gamma", "cik": 333, "exchange": "NYSE",
+         "indices": ["dow30"], "gics_sector": "Industrials"},
     ],
 }
 

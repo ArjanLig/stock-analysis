@@ -12260,12 +12260,14 @@ elif page == "Cashflow Champions":
                 f'<span style="font-weight:700;color:{T["text"]};font-size:0.8rem">{pct}</span></div>'
             )
 
-        def _table(rows, title, subtitle, with_status=False, scroll=False):
+        def _table(rows, title, subtitle, with_status=False, scroll=False,
+                   rank_key="rank"):
             _th = (f'padding:10px 14px;color:{T["text_muted"]};font-size:0.68rem;'
                    f'text-transform:uppercase;letter-spacing:0.05em;font-weight:600;'
                    f'position:sticky;top:0;background:{T["card"]};z-index:1;'
                    f'border-bottom:1px solid {T["border_medium"]}')
             heads = [("#", "left"), ("Ticker", "left"), ("Company", "left"),
+                     ("Sector", "left"),
                      ("Cash ROA", "right"), ("P/CF", "right"),
                      ("Score", "left"), ("Index", "left")]
             if with_status:
@@ -12280,7 +12282,7 @@ elif page == "Cashflow Champions":
                       f'font-size:0.85rem;vertical-align:middle;'
                       f'color:{T["text"] if ok else T["text_muted"]}')
                 lb = f'border-left:3px solid {T["accent"] if champ else "transparent"}'
-                rank_txt = str(r["rank"]) if r.get("rank") else "·"
+                rank_txt = str(r.get(rank_key)) if r.get(rank_key) else "·"
                 logo = (f'<img src="https://assets.parqet.com/logos/symbol/{r["ticker"]}" '
                         f'style="width:20px;height:20px;border-radius:50%;object-fit:cover;'
                         f'vertical-align:middle;margin-right:6px" '
@@ -12290,6 +12292,8 @@ elif page == "Cashflow Champions":
                     f'<td style="{td};white-space:nowrap">{logo}</td>',
                     f'<td style="{td};max-width:230px;overflow:hidden;text-overflow:ellipsis;'
                     f'white-space:nowrap">{_html.escape(r.get("name") or "")}</td>',
+                    f'<td style="{td};color:{T["text_muted"]};font-size:0.78rem;'
+                    f'white-space:nowrap">{_html.escape(r.get("sector") or "—")}</td>',
                 ]
                 if ok:
                     cells += [
@@ -12331,17 +12335,42 @@ elif page == "Cashflow Champions":
                     f'overflow:hidden;margin-bottom:22px">{header}'
                     f'<div style="{scroll_css}">{inner}</div></div>')
 
-        # ── Champions (top 20%) ──
-        _champ = sorted((r for r in _rows if r.get("is_champion")), key=lambda r: r["rank"])
+        # ── Champions (top 20% of each sector) ──
+        # A snapshot computed before sector ranking has no sector fields; say so
+        # rather than rendering a table full of em-dashes.
+        if _rows and not any(r.get("sector") for r in _rows):
+            st.info(
+                "This snapshot predates sector ranking, so the Sector column is "
+                "empty and Champions are still the old universe-wide top 20%. "
+                "Re-run `python cashflow_champions.py --backfill-sectors` then "
+                "`--compute --store` to rebuild it."
+            )
+
+        _champ = [r for r in _rows if r.get("is_champion")]
+        _sectors = sorted({r.get("sector") for r in _champ if r.get("sector")})
+        if _sectors:
+            _picked = st.multiselect(
+                "Sectors", _sectors, default=_sectors, key="champ_sectors",
+                help="Ranking is per sector, so each sector contributes its own "
+                     "top 20%. Uncheck the ones you don't want to look at today.",
+            )
+            _champ = [r for r in _champ if r.get("sector") in _picked]
+
+        _champ.sort(key=lambda r: (r.get("sector") or "", r.get("sector_rank") or 0))
         if _champ:
             st.markdown(
                 _table(
                     _champ,
-                    f"Champions — top 20% ({len(_champ)})",
-                    "Your shortlist — highest combined rank on quality (Cash ROA) and value (P/CF).",
+                    f"Champions — top 20% per sector ({len(_champ)})",
+                    "Each name is ranked against its own sector, not the whole "
+                    "market — so a commodity producer at a cycle peak can no "
+                    "longer crowd out everything else. # is the rank within the sector.",
+                    rank_key="sector_rank",
                 ),
                 unsafe_allow_html=True,
             )
+        elif _sectors:
+            st.caption("No sectors selected.")
 
         # ── Full universe ──
         _ranked = sorted((r for r in _rows if r.get("status") == "ok"), key=lambda r: r["rank"])
