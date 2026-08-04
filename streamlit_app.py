@@ -39,7 +39,7 @@ from gather_data import (
     fetch_sector_s2c,
     fetch_peer_data,
     build_config,
-    SIC_TO_SECTOR,
+    resolve_sector_betas,
     TERMINAL_GROWTH_DEFAULT,
     MARGIN_OF_SAFETY_DEFAULT,
     fetch_fundamentals,
@@ -4936,26 +4936,8 @@ def _dcf_editor(ticker):
                 betas = list(cfg.get('sector_betas', []))
                 # Auto-detect sector from SIC code if no betas configured yet
                 if not betas:
-                    _sic = cfg.get('sic_code', 0)
-                    if _sic and _sic in SIC_TO_SECTOR:
-                        _auto_name, _auto_beta = SIC_TO_SECTOR[_sic]
-                        betas = [(_auto_name, _auto_beta, 1.0)]
-                    elif dam_betas:
-                        _sic_desc = cfg.get('sic_description', '')
-                        if _sic_desc:
-                            _sic_words = set(_sic_desc.lower().split())
-                            _best, _best_score = None, 0
-                            for _s, _b in dam_betas.items():
-                                _overlap = len(_sic_words & set(_s.lower().split()))
-                                if _overlap > _best_score:
-                                    _best_score = _overlap
-                                    _best = (_s, _b)
-                            if _best and _best_score > 0:
-                                betas = [(_best[0], _best[1], 1.0)]
-                        if not betas:
-                            betas = [("Market", dam_betas.get("Market", 1.0), 1.0)]
-                    else:
-                        betas = [("Market", 1.0, 1.0)]
+                    betas = resolve_sector_betas(cfg.get('sic_code', 0),
+                                                 cfg.get('sic_description', ''))
                 st.markdown("**Sector Betas**")
                 updated_betas = []
                 for i, (name, beta, weight) in enumerate(betas):
@@ -8522,27 +8504,7 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
         # ── Step 2: Sector betas ──
         status.write("\u23f3 Determining sector & beta...")
         with contextlib.redirect_stdout(buf):
-            if sic_code in SIC_TO_SECTOR:
-                sector_name, sector_beta = SIC_TO_SECTOR[sic_code]
-                sector_betas = [(sector_name, sector_beta, 1.0)]
-            else:
-                dam_betas = fetch_sector_betas()
-                if dam_betas:
-                    best_match, best_score = None, 0
-                    sic_words = set(sic_desc.lower().split())
-                    for sector, beta in dam_betas.items():
-                        sector_words = set(sector.lower().split())
-                        overlap = len(sic_words & sector_words)
-                        if overlap > best_score:
-                            best_score = overlap
-                            best_match = (sector, beta)
-                    if best_match and best_score > 0:
-                        sector_name, sector_beta = best_match
-                        sector_betas = [(sector_name, sector_beta, 1.0)]
-                    else:
-                        sector_betas = [("Market", 1.0, 1.0)]
-                else:
-                    sector_betas = [("Market", 1.0, 1.0)]
+            sector_betas = resolve_sector_betas(sic_code, sic_desc)
         pos = _flush_clean(buf, pos, status)
         status.write(f"\u2705 Sector: {sector_betas[0][0]} (beta {sector_betas[0][1]:.2f})")
 

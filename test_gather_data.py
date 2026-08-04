@@ -82,3 +82,58 @@ def test_parse_financials_raises_when_no_revenue_and_no_fallback(monkeypatch):
         raise AssertionError("expected ValueError")
     except ValueError as e:
         assert "revenue" in str(e).lower()
+
+
+# ── resolve_sector_betas: live Damodaran beta wins over the hardcoded snapshot ──
+
+def test_resolve_sector_betas_prefers_live_damodaran_beta(monkeypatch):
+    """SIC_TO_SECTOR is a point-in-time snapshot whose betas drift badly
+    (Oil/Gas (Integrated) sat at 0.95 against a live 0.27). The SIC → sector
+    NAME mapping is still useful, but the beta must come from the live table
+    whenever Damodaran still publishes that sector."""
+    monkeypatch.setattr(g, "SIC_TO_SECTOR", {1311: ("Oil/Gas (Production and Exploration)", 1.10)})
+    monkeypatch.setattr(g, "fetch_sector_betas",
+                        lambda: {"Oil/Gas (Production and Exploration)": 0.56})
+
+    out = g.resolve_sector_betas(1311)
+    assert out == [("Oil/Gas (Production and Exploration)", 0.56, 1.0)]
+
+
+def test_resolve_sector_betas_falls_back_when_name_retired(monkeypatch):
+    """Some hardcoded names ('Pharma & Drugs', 'Retail (Online)') no longer
+    exist in Damodaran's table — keep the hardcoded beta rather than dropping
+    to a meaningless market beta."""
+    monkeypatch.setattr(g, "SIC_TO_SECTOR", {2834: ("Pharma & Drugs", 0.95)})
+    monkeypatch.setattr(g, "fetch_sector_betas", lambda: {"Drugs (Pharmaceutical)": 0.89})
+
+    assert g.resolve_sector_betas(2834) == [("Pharma & Drugs", 0.95, 1.0)]
+
+
+def test_resolve_sector_betas_falls_back_when_fetch_fails(monkeypatch):
+    """A failed Damodaran fetch must not lose the sector — the hardcoded beta
+    is the safety net (the deployed host's outbound network is flaky)."""
+    monkeypatch.setattr(g, "SIC_TO_SECTOR", {7372: ("Software (System & Application)", 1.23)})
+    monkeypatch.setattr(g, "fetch_sector_betas", lambda: {})
+
+    assert g.resolve_sector_betas(7372) == [("Software (System & Application)", 1.23, 1.0)]
+
+    monkeypatch.setattr(g, "fetch_sector_betas", lambda: None)
+    assert g.resolve_sector_betas(7372) == [("Software (System & Application)", 1.23, 1.0)]
+
+
+def test_resolve_sector_betas_fuzzy_matches_description(monkeypatch):
+    """SIC not in the table → fall back to a word-overlap match on the SIC
+    description against the live table."""
+    monkeypatch.setattr(g, "SIC_TO_SECTOR", {})
+    monkeypatch.setattr(g, "fetch_sector_betas",
+                        lambda: {"Precious Metals": 0.79, "Semiconductor": 1.49})
+
+    assert g.resolve_sector_betas(9999, "Precious Metals Mining") == [("Precious Metals", 0.79, 1.0)]
+
+
+def test_resolve_sector_betas_last_resort_is_market(monkeypatch):
+    """Nothing matches at all → an explicit market placeholder."""
+    monkeypatch.setattr(g, "SIC_TO_SECTOR", {})
+    monkeypatch.setattr(g, "fetch_sector_betas", lambda: {"Semiconductor": 1.49})
+
+    assert g.resolve_sector_betas(9999, "zzz qqq") == [("Market", 1.0, 1.0)]

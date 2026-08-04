@@ -99,18 +99,18 @@ SIC_TO_SECTOR = {
     4812: ("Telecom (Wireless)", 0.70),
     4899: ("Telecom. Equipment", 0.95),
     # Pharmaceuticals & Biotech
-    2836: ("Pharma & Drugs", 0.95),
-    2834: ("Pharma & Drugs", 0.95),
-    2835: ("Pharma & Drugs", 0.95),
-    2833: ("Pharma & Drugs", 0.95),
-    2830: ("Pharma & Drugs", 0.95),
-    8731: ("Biotechnology", 1.40),
+    2836: ("Drugs (Biotechnology)", 1.03),
+    2834: ("Drugs (Pharmaceutical)", 0.89),
+    2835: ("Healthcare Products", 0.83),
+    2833: ("Drugs (Pharmaceutical)", 0.89),
+    2830: ("Drugs (Pharmaceutical)", 0.89),
+    8731: ("Drugs (Biotechnology)", 1.03),
     # Retail
     5411: ("Retail (Grocery and Food)", 0.55),
     5912: ("Retail (Grocery and Food)", 0.55),
     5331: ("Retail (General)", 0.75),
     5311: ("Retail (General)", 0.75),
-    5961: ("Retail (Online)", 1.10),
+    5961: ("Retail (Special Lines)", 0.95),
     5944: ("Retail (Special Lines)", 0.85),
     # Financial
     6022: ("Banks (Regional)", 0.45),
@@ -128,7 +128,7 @@ SIC_TO_SECTOR = {
     # Energy
     1311: ("Oil/Gas (Production and Exploration)", 1.10),
     2911: ("Oil/Gas (Integrated)", 0.95),
-    1381: ("Oilfield Svcs/Equip", 1.20),
+    1381: ("Oilfield Svcs/Equip.", 0.74),
     # Utilities
     4911: ("Utility (General)", 0.35),
     4931: ("Utility (General)", 0.35),
@@ -156,7 +156,7 @@ SIC_TO_SECTOR = {
     6798: ("R.E.I.T.", 0.55),
     # Transportation
     4512: ("Air Transport", 0.90),
-    4011: ("Railroad", 0.65),
+    4011: ("Transportation (Railroads)", 0.81),
     4213: ("Trucking", 0.75),
     # Machinery / Industrial
     3559: ("Machinery", 0.90),
@@ -1492,6 +1492,53 @@ def fetch_sector_betas():
     except Exception as e:
         print(f"  WARNING: Damodaran fetch failed: {e}")
         return {}
+
+
+def resolve_sector_betas(sic_code, sic_description=""):
+    """Resolve a SIC code to a sector_betas list of (name, beta, weight) tuples.
+
+    SIC_TO_SECTOR maps SIC → sector NAME reliably, but its betas are a
+    point-in-time snapshot that drifts every year — 34 of its 42 sectors had
+    diverged from Damodaran's live table, some grossly (Oil/Gas (Integrated)
+    at 0.95 against a live 0.27). Since the CAPM rollback that beta feeds the
+    discount rate directly, so the live value has to win.
+
+    Resolution order:
+      1. SIC in SIC_TO_SECTOR → that sector name, with the LIVE beta for that
+         name; the hardcoded beta is used only when Damodaran no longer
+         publishes it (e.g. the retired "Pharma & Drugs", "Retail (Online)")
+         or when the fetch fails.
+      2. Otherwise → best word-overlap match of sic_description against the
+         live table.
+      3. Otherwise → ("Market", 1.0, 1.0) as an explicit placeholder.
+    """
+    try:
+        sic_int = int(sic_code) if sic_code else 0
+    except (TypeError, ValueError):
+        sic_int = 0
+
+    dam_betas = fetch_sector_betas() or {}
+
+    if sic_int in SIC_TO_SECTOR:
+        sector_name, hardcoded_beta = SIC_TO_SECTOR[sic_int]
+        beta = dam_betas.get(sector_name, hardcoded_beta)
+        if sector_name in dam_betas and abs(beta - hardcoded_beta) > 0.005:
+            print(f"  Sector '{sector_name}': using live beta {beta:.2f} "
+                  f"(hardcoded snapshot was {hardcoded_beta:.2f})")
+        return [(sector_name, beta, 1.0)]
+
+    if dam_betas and sic_description:
+        sic_words = set(sic_description.lower().split())
+        best_match, best_score = None, 0
+        for sector, beta in dam_betas.items():
+            overlap = len(sic_words & set(sector.lower().split()))
+            if overlap > best_score:
+                best_score = overlap
+                best_match = (sector, beta)
+        if best_match and best_score > 0:
+            return [(best_match[0], best_match[1], 1.0)]
+
+    return [("Market", 1.0, 1.0)]
 
 
 def fetch_sector_margins():
@@ -3292,37 +3339,9 @@ Examples:
             print("  ERROR: No valid sectors parsed. Use format: 'Name:beta:weight'")
             sys.exit(1)
     else:
-        # Auto-detect from SIC code
-        if sic_code in SIC_TO_SECTOR:
-            sector_name, sector_beta = SIC_TO_SECTOR[sic_code]
-            print(f"\n  SIC {sic_code} → Suggested: {sector_name}, beta {sector_beta}")
-            sector_betas = [(sector_name, sector_beta, 1.0)]
-        else:
-            # Try to fetch from Damodaran
-            print(f"\n  SIC {sic_code} not in lookup table, trying Damodaran...")
-            dam_betas = fetch_sector_betas()
-            if dam_betas:
-                # Try fuzzy match on SIC description
-                best_match = None
-                best_score = 0
-                sic_words = set(sic_desc.lower().split())
-                for sector, beta in dam_betas.items():
-                    sector_words = set(sector.lower().split())
-                    overlap = len(sic_words & sector_words)
-                    if overlap > best_score:
-                        best_score = overlap
-                        best_match = (sector, beta)
-
-                if best_match and best_score > 0:
-                    sector_name, sector_beta = best_match
-                    print(f"  Best match: {sector_name}, beta {sector_beta}")
-                    sector_betas = [(sector_name, sector_beta, 1.0)]
-                else:
-                    print("  No sector match found, using market beta 1.0")
-                    sector_betas = [("Market", 1.0, 1.0)]
-            else:
-                print("  Using market beta 1.0")
-                sector_betas = [("Market", 1.0, 1.0)]
+        # Auto-detect from SIC code (live Damodaran beta wins — see
+        # resolve_sector_betas)
+        sector_betas = resolve_sector_betas(sic_code, sic_desc)
 
     print(f"\n  Sector betas: {sector_betas}")
 

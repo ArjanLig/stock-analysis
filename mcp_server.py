@@ -74,27 +74,12 @@ import notifications
 # ---------------------------------------------------------------------------
 
 def _resolve_sector_betas(sic_code, sic_description=""):
-    """Convert SIC code to sector_betas list of (name, beta, weight) tuples."""
-    sic_int = int(sic_code) if sic_code else 0
+    """Convert SIC code to sector_betas list of (name, beta, weight) tuples.
 
-    if sic_int in gather_data.SIC_TO_SECTOR:
-        sector_name, sector_beta = gather_data.SIC_TO_SECTOR[sic_int]
-        return [(sector_name, sector_beta, 1.0)]
-
-    dam_betas = gather_data.fetch_sector_betas()
-    if dam_betas and sic_description:
-        sic_words = set(sic_description.lower().split())
-        best_match, best_score = None, 0
-        for sector, beta in dam_betas.items():
-            sector_words = set(sector.lower().split())
-            overlap = len(sic_words & sector_words)
-            if overlap > best_score:
-                best_score = overlap
-                best_match = (sector, beta)
-        if best_match and best_score > 0:
-            return [(best_match[0], best_match[1], 1.0)]
-
-    return [("Market", 1.0, 1.0)]
+    Thin wrapper over gather_data.resolve_sector_betas, which prefers the live
+    Damodaran beta over the hardcoded SIC_TO_SECTOR snapshot.
+    """
+    return gather_data.resolve_sector_betas(sic_code, sic_description)
 
 
 # ---------------------------------------------------------------------------

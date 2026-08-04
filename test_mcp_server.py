@@ -101,7 +101,10 @@ def test_build_dcf_config_tool():
         mock_gd.fetch_stock_price.return_value = (150.0, 0, 0)
         mock_gd.fetch_treasury_yield.return_value = 0.04
         mock_gd.synthetic_credit_rating.return_value = ("A+", 0.01)
-        mock_gd.SIC_TO_SECTOR = {7372: ("Software (System & Application)", 1.23)}
+        # Sector resolution lives in gather_data.resolve_sector_betas, which
+        # prefers the live Damodaran beta over the SIC_TO_SECTOR snapshot.
+        mock_gd.resolve_sector_betas.return_value = [
+            ("Software (System & Application)", 1.23, 1.0)]
         mock_gd.fetch_sector_margins.return_value = {"Software (System & Application)": 0.25}
         # Peer auto-selection removed — build_dcf_config no longer selects peers.
         mock_gd.build_config.return_value = {"company": "Test Corp", "ticker": "TEST"}
