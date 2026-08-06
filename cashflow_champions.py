@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -44,7 +45,10 @@ SP500_CSV_URL = (
     "https://raw.githubusercontent.com/datasets/"
     "s-and-p-500-companies/main/data/constituents.csv"
 )
-NASDAQ100_WIKI_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
+# Wikipedia dropped the Nasdaq-100 constituent table in 2026 — the article now
+# only links out to nasdaq.com — so the list comes from stockanalysis.com,
+# which still publishes it as a plain HTML table.
+NASDAQ100_URL = "https://stockanalysis.com/list/nasdaq-100-stocks/"
 DOW30_WIKI_URL = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
 
 # SIC codes 6000–6999 are finance/insurance/real-estate. Their asset bases
@@ -80,7 +84,40 @@ GICS_OVERRIDES = {
     "CCEP": "Consumer Staples",
     "FER": "Industrials",
     "TRI": "Industrials",          # Thomson Reuters — GICS: Professional Services
+    # Added to the Nasdaq-100 after the S&P 500 CSV's cut, 2026-08:
+    "ALAB": "Information Technology",   # Astera Labs
+    "CRWV": "Information Technology",   # CoreWeave
+    "NBIS": "Information Technology",   # Nebius Group
+    "RKLB": "Industrials",              # Rocket Lab — Aerospace & Defense
+    "SPCX": "Industrials",              # Space Exploration Technologies
 }
+
+
+def _parse_index_tickers(html: str, valid: set) -> list[str]:
+    """Pull index constituents out of an HTML page.
+
+    Scans every ``<table>`` and keeps whichever yields the most symbols the SEC
+    ticker file recognises, so a page full of performance and milestone tables
+    still resolves to its constituent list. Attributes on table/tr/td are
+    tolerated: the original parser required a bare ``<tr>``, matched nothing
+    once the markup gained classes, and silently fell back to scanning the
+    whole page — which is how the universe quietly lost 14 names.
+
+    Validating against the SEC ticker set is what keeps prose, footnote markers
+    and index levels out of the result.
+    """
+    best: list[str] = []
+    for table in re.findall(r"<table[^>]*>(.*?)</table>", html, re.S | re.I):
+        found = []
+        for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S | re.I):
+            for cell in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S | re.I):
+                text = re.sub(r"<[^>]+>", "", cell).strip().replace("&amp;", "&")
+                if re.fullmatch(r"[A-Z]{1,5}(\.[A-Z])?", text) and _norm(text) in valid:
+                    found.append(text.upper())
+                    break          # one symbol per row
+        if len(found) > len(best):
+            best = found
+    return sorted(set(best))
 
 
 def _gics_lookup(sp_rows: list[dict]) -> dict:
@@ -110,7 +147,6 @@ def refresh_universe(today: str | None = None) -> dict:
     date. Free sources, no API key. Returns the snapshot dict."""
     import csv
     import io
-    import re
 
     today = today or date.today().isoformat()
 
@@ -139,21 +175,11 @@ def refresh_universe(today: str | None = None) -> dict:
     # against the SEC ticker set so junk rows can't slip in)
     valid = set(by_norm)
 
-    def _wiki_constituents(url):
-        html = _get(url).decode("utf-8", "ignore")
-        m = re.search(r'id="constituents".*?>(.*?)</table>', html, re.S)
-        body = m.group(1) if m else html
-        out = []
-        for tr in re.findall(r"<tr>(.*?)</tr>", body, re.S):
-            for cell in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S):
-                text = re.sub(r"<[^>]+>", "", cell).strip().replace("&amp;", "&")
-                if re.fullmatch(r"[A-Z]{1,5}(\.[A-Z])?", text) and _norm(text) in valid:
-                    out.append(text.upper())
-                    break
-        return sorted(set(out))
+    def _constituents(url):
+        return _parse_index_tickers(_get(url).decode("utf-8", "ignore"), valid)
 
-    nasdaq100 = _wiki_constituents(NASDAQ100_WIKI_URL)
-    dow30 = _wiki_constituents(DOW30_WIKI_URL)
+    nasdaq100 = _constituents(NASDAQ100_URL)
+    dow30 = _constituents(DOW30_WIKI_URL)
 
     # A scraped source that silently returns almost nothing must not quietly
     # shrink the universe: _wiki_constituents falls back to scanning the whole
@@ -200,7 +226,7 @@ def refresh_universe(today: str | None = None) -> dict:
         "as_of": today,
         "sources": {
             "sp500": {"url": SP500_CSV_URL, "as_of": today, "count": len(sp500)},
-            "nasdaq100": {"url": NASDAQ100_WIKI_URL, "as_of": today, "count": len(nasdaq100)},
+            "nasdaq100": {"url": NASDAQ100_URL, "as_of": today, "count": len(nasdaq100)},
             "dow30": {"url": DOW30_WIKI_URL, "as_of": today, "count": len(dow30)},
             "sec_exchange": {"url": SEC_EXCHANGE_URL, "as_of": today},
         },

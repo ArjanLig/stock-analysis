@@ -1,30 +1,31 @@
 {
-  "as_of": "2026-06-26",
+  "as_of": "2026-08-06",
   "sources": {
     "sp500": {
       "url": "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv",
-      "as_of": "2026-06-26",
-      "count": 503
+      "as_of": "2026-08-06",
+      "count": 502
     },
     "nasdaq100": {
-      "url": "https://en.wikipedia.org/wiki/Nasdaq-100",
-      "as_of": "2026-06-26",
+      "url": "https://stockanalysis.com/list/nasdaq-100-stocks/",
+      "as_of": "2026-08-06",
       "count": 101
     },
     "dow30": {
       "url": "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average",
-      "as_of": "2026-06-26",
+      "as_of": "2026-08-06",
       "count": 30
     },
     "sec_exchange": {
       "url": "https://www.sec.gov/files/company_tickers_exchange.json",
-      "as_of": "2026-06-26"
+      "as_of": "2026-08-06"
     }
   },
   "unresolved": [
-    "ECHO"
+    "AEP"
   ],
-  "count": 514,
+  "no_sector": [],
+  "count": 516,
   "constituents": [
     {
       "ticker": "A",
@@ -177,18 +178,6 @@
       "gics_sub_industry": "Multi-Utilities"
     },
     {
-      "ticker": "AEP",
-      "name": "AMERICAN ELECTRIC POWER CO INC",
-      "cik": 4904,
-      "exchange": "Nasdaq",
-      "indices": [
-        "nasdaq100",
-        "sp500"
-      ],
-      "gics_sector": "Utilities",
-      "gics_sub_industry": "Electric Utilities"
-    },
-    {
       "ticker": "AES",
       "name": "AES CORP",
       "cik": 874761,
@@ -253,6 +242,17 @@
       ],
       "gics_sector": "Information Technology",
       "gics_sub_industry": "Internet Services & Infrastructure"
+    },
+    {
+      "ticker": "ALAB",
+      "name": "Astera Labs, Inc.",
+      "cik": 1736297,
+      "exchange": "Nasdaq",
+      "indices": [
+        "nasdaq100"
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "ALB",
@@ -895,17 +895,6 @@
       "gics_sub_industry": "Diversified Banks"
     },
     {
-      "ticker": "CAG",
-      "name": "CONAGRA BRANDS INC.",
-      "cik": 23217,
-      "exchange": "NYSE",
-      "indices": [
-        "sp500"
-      ],
-      "gics_sector": "Consumer Staples",
-      "gics_sub_industry": null
-    },
-    {
       "ticker": "CAH",
       "name": "CARDINAL HEALTH INC",
       "cik": 721371,
@@ -1101,7 +1090,6 @@
       "cik": 1091667,
       "exchange": "Nasdaq",
       "indices": [
-        "nasdaq100",
         "sp500"
       ],
       "gics_sector": "Communication Services",
@@ -1399,6 +1387,17 @@
       "gics_sub_industry": "Systems Software"
     },
     {
+      "ticker": "CRWV",
+      "name": "CoreWeave, Inc.",
+      "cik": 1769628,
+      "exchange": "Nasdaq",
+      "indices": [
+        "nasdaq100"
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
+    },
+    {
       "ticker": "CSCO",
       "name": "CISCO SYSTEMS, INC.",
       "cik": 858877,
@@ -1452,7 +1451,6 @@
       "cik": 1058290,
       "exchange": "Nasdaq",
       "indices": [
-        "nasdaq100",
         "sp500"
       ],
       "gics_sector": "Information Technology",
@@ -1783,18 +1781,6 @@
       "gics_sub_industry": "Health Care Equipment"
     },
     {
-      "ticker": "EA",
-      "name": "ELECTRONIC ARTS INC.",
-      "cik": 712515,
-      "exchange": "Nasdaq",
-      "indices": [
-        "nasdaq100",
-        "sp500"
-      ],
-      "gics_sector": "Communication Services",
-      "gics_sub_industry": "Interactive Home Entertainment"
-    },
-    {
       "ticker": "EBAY",
       "name": "EBAY INC",
       "cik": 1065088,
@@ -1804,6 +1790,17 @@
       ],
       "gics_sector": "Consumer Discretionary",
       "gics_sub_industry": "Broadline Retail"
+    },
+    {
+      "ticker": "ECHO",
+      "name": "EchoStar CORP",
+      "cik": 1415404,
+      "exchange": "Nasdaq",
+      "indices": [
+        "sp500"
+      ],
+      "gics_sector": "Communication Services",
+      "gics_sub_industry": "Wireless Telecommunication Services"
     },
     {
       "ticker": "ECL",
@@ -2478,6 +2475,7 @@
       "cik": 1652044,
       "exchange": "Nasdaq",
       "indices": [
+        "dow30",
         "nasdaq100",
         "sp500"
       ],
@@ -2641,6 +2639,18 @@
       ],
       "gics_sector": "Industrials",
       "gics_sub_industry": "Industrial Conglomerates"
+    },
+    {
+      "ticker": "HONA",
+      "name": "Honeywell Aerospace Inc.",
+      "cik": 2089271,
+      "exchange": "Nasdaq",
+      "indices": [
+        "nasdaq100",
+        "sp500"
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": "Aerospace & Defense"
     },
     {
       "ticker": "HOOD",
@@ -2830,17 +2840,6 @@
       ],
       "gics_sector": "Health Care",
       "gics_sub_industry": "Biotechnology"
-    },
-    {
-      "ticker": "INSM",
-      "name": "INSMED Inc",
-      "cik": 1104506,
-      "exchange": "Nasdaq",
-      "indices": [
-        "nasdaq100"
-      ],
-      "gics_sector": "Health Care",
-      "gics_sub_industry": null
     },
     {
       "ticker": "INTC",
@@ -3622,7 +3621,7 @@
     },
     {
       "ticker": "MPWR",
-      "name": "MONOLITHIC POWER SYSTEMS INC",
+      "name": "MONOLITHIC POWER SYSTEMS, INC.",
       "cik": 1280452,
       "exchange": "Nasdaq",
       "indices": [
@@ -3768,6 +3767,17 @@
       ],
       "gics_sector": "Information Technology",
       "gics_sub_industry": "Semiconductors"
+    },
+    {
+      "ticker": "NBIS",
+      "name": "Nebius Group N.V.",
+      "cik": 1513845,
+      "exchange": "Nasdaq",
+      "indices": [
+        "nasdaq100"
+      ],
+      "gics_sector": "Information Technology",
+      "gics_sub_industry": null
     },
     {
       "ticker": "NCLH",
@@ -4512,6 +4522,17 @@
       "gics_sub_industry": "Investment Banking & Brokerage"
     },
     {
+      "ticker": "RKLB",
+      "name": "Rocket Lab Corp",
+      "cik": 1819994,
+      "exchange": "Nasdaq",
+      "indices": [
+        "nasdaq100"
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": null
+    },
+    {
       "ticker": "RL",
       "name": "RALPH LAUREN CORP",
       "cik": 1037038,
@@ -4760,6 +4781,17 @@
       "gics_sub_industry": "Health Care Technology"
     },
     {
+      "ticker": "SPCX",
+      "name": "SPACE EXPLORATION TECHNOLOGIES CORP",
+      "cik": 1181412,
+      "exchange": "Nasdaq",
+      "indices": [
+        "nasdaq100"
+      ],
+      "gics_sector": "Industrials",
+      "gics_sub_industry": null
+    },
+    {
       "ticker": "SPG",
       "name": "SIMON PROPERTY GROUP INC.",
       "cik": 1063761,
@@ -4986,6 +5018,7 @@
       "cik": 97210,
       "exchange": "Nasdaq",
       "indices": [
+        "nasdaq100",
         "sp500"
       ],
       "gics_sector": "Information Technology",
@@ -5422,7 +5455,6 @@
       "cik": 1442145,
       "exchange": "Nasdaq",
       "indices": [
-        "nasdaq100",
         "sp500"
       ],
       "gics_sector": "Industrials",
@@ -5501,7 +5533,6 @@
       "cik": 732712,
       "exchange": "NYSE",
       "indices": [
-        "dow30",
         "sp500"
       ],
       "gics_sector": "Communication Services",
@@ -5713,8 +5744,8 @@
     },
     {
       "ticker": "XOM",
-      "name": "EXXON MOBIL CORP",
-      "cik": 34088,
+      "name": "ExxonMobil Holdings Corp",
+      "cik": 2115436,
       "exchange": "NYSE",
       "indices": [
         "sp500"
@@ -5778,17 +5809,6 @@
       "gics_sub_industry": "Electronic Equipment & Instruments"
     },
     {
-      "ticker": "ZS",
-      "name": "Zscaler, Inc.",
-      "cik": 1713683,
-      "exchange": "Nasdaq",
-      "indices": [
-        "nasdaq100"
-      ],
-      "gics_sector": "Information Technology",
-      "gics_sub_industry": null
-    },
-    {
       "ticker": "ZTS",
       "name": "Zoetis Inc.",
       "cik": 1555280,
@@ -5799,6 +5819,5 @@
       "gics_sector": "Health Care",
       "gics_sub_industry": "Pharmaceuticals"
     }
-  ],
-  "no_sector": []
+  ]
 }

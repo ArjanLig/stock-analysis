@@ -280,3 +280,54 @@ def test_universe_snapshot_is_well_formed():
     # snapshot records an as-of date
     json.dumps(uni)  # serialisable
     assert uni["as_of"]
+
+
+# ── Index constituent parsing ──────────────────────────────────────────────────
+
+_VALID = {cc._norm(t) for t in ("AAPL", "MSFT", "WMT", "MMM", "GS")}
+
+
+def test_parse_index_tickers_tolerates_tag_attributes():
+    """The original parser required a bare <tr>, so it silently matched nothing
+    once Wikipedia started emitting <tr class=...>. It then fell back to
+    scanning the whole page and returned a handful of stray tickers instead of
+    an error — which shrank the universe by 14 names."""
+    html = """
+      <table class="wikitable sortable"><tbody>
+        <tr class="hdr"><th scope="col">Symbol</th><th>Company</th></tr>
+        <tr class="r1"><td><a href="/x">MMM</a></td><td>3M</td></tr>
+        <tr class="r2"><td><a href="/y">GS</a></td><td>Goldman Sachs</td></tr>
+      </tbody></table>
+    """
+    assert cc._parse_index_tickers(html, _VALID) == ["GS", "MMM"]
+
+
+def test_parse_index_tickers_picks_the_richest_table():
+    """Pages carry several tables (performance, milestones, constituents). Take
+    the one that yields the most recognised tickers, not the first."""
+    html = """
+      <table><tr><td>1985</td><td>132.29</td></tr></table>
+      <table><tr><td>AAPL</td></tr><tr><td>MSFT</td></tr><tr><td>WMT</td></tr></table>
+    """
+    assert cc._parse_index_tickers(html, _VALID) == ["AAPL", "MSFT", "WMT"]
+
+
+def test_parse_index_tickers_ignores_unrecognised_symbols():
+    """Only symbols the SEC ticker file knows survive, so prose and footnote
+    markers can't masquerade as constituents."""
+    html = "<table><tr><td>AAPL</td></tr><tr><td>ZZZZ</td></tr><tr><td>N/A</td></tr></table>"
+    assert cc._parse_index_tickers(html, _VALID) == ["AAPL"]
+
+
+def test_parse_index_tickers_reads_a_linked_symbol_cell():
+    """stockanalysis.com wraps the symbol in an anchor and pads the cell with
+    empty comment nodes; the text still has to come out clean."""
+    html = ('<table><tr><td class="n">12</td>'
+            '<td class="sym"><!----><a href="/stocks/wmt/">WMT</a><!----></td></tr></table>')
+    assert cc._parse_index_tickers(html, _VALID) == ["WMT"]
+
+
+def test_parse_index_tickers_empty_when_no_table_matches():
+    """No recognisable table → empty, which the constituent-count floor in
+    refresh_universe turns into a loud failure rather than a silent shrink."""
+    assert cc._parse_index_tickers("<p>no tables here</p>", _VALID) == []
