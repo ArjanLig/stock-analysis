@@ -32,6 +32,22 @@ def _equity_market_value(cfg):
 
 DEFAULT_DISCOUNT_MODE = "capm"
 
+# Ceiling on the return a company is assumed to earn on *new* capital in
+# perpetuity, expressed as a spread over its own WACC.
+#
+# Carrying the projection-period sales-to-capital into the terminal year implies
+# a return that never fades: DECK's 3.0 implies ~51% forever against a 9.7%
+# WACC, MA's 5.5 implies 256%. That makes growth almost free — MA would
+# reinvest 1% of profit and still grow 3% a year, indefinitely — and more than
+# half of a typical valuation sits in that terminal block.
+#
+# The methodology note (portfolio-vault/Concepts/Damodaran-DCF.md) requires
+# terminal ROIC to converge toward "WACC + a sector-appropriate spread";
+# 4 points is that spread. It is a ceiling, not a target: a config already
+# assuming a modest return keeps it, so the cap can only lower a fair value,
+# never inflate one.
+TERMINAL_ROIC_SPREAD = 0.04
+
 
 def _effective_beta(cfg):
     """Beta applied to the equity risk premium in the discount rate.
@@ -172,6 +188,19 @@ def compute_intrinsic_value(cfg, wacc=None):
     tv_oi = tv_rev * tm
     tv_nopat = tv_oi * (1 - tv_tax)
     tv_reinvest = (tv_rev - revs[-1]) / tv_stc
+
+    # Cap the implied return on new capital at wacc + TERMINAL_ROIC_SPREAD.
+    # Back out what the sales-to-capital reinvestment implies (roic = g /
+    # reinvestment_rate); if that exceeds the ceiling, raise reinvestment to
+    # whatever the capped return would demand. Below the ceiling nothing moves,
+    # so the arithmetic is unchanged for configs that were already modest.
+    terminal_roic = None
+    if tv_nopat > 0 and tg > 0 and tv_reinvest > 0:
+        reinvest_rate = tv_reinvest / tv_nopat
+        implied_roic = tg / reinvest_rate
+        terminal_roic = min(implied_roic, tv_wacc + TERMINAL_ROIC_SPREAD)
+        tv_reinvest = tv_nopat * (tg / terminal_roic)
+
     tv_fcff = tv_nopat - tv_reinvest
     tv = tv_fcff / (tv_wacc - tg)
     tv_df = 1 / (1 + tv_wacc) ** (0.5 + n_p - 1)
@@ -195,6 +224,9 @@ def compute_intrinsic_value(cfg, wacc=None):
         'equity_value': equity,
         'wacc': wacc,
         'tv_pct': pv_tv / ev if ev > 0 else 0,
+        # None when the terminal year is loss-making or has no growth, i.e.
+        # when there is no meaningful return on new capital to cap.
+        'terminal_roic': terminal_roic,
     }
 
 
