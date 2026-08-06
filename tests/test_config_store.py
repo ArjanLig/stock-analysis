@@ -86,3 +86,83 @@ def test_load_config_non_transient_raises_immediately():
     with pytest.raises(ValueError):
         config_store.load_config(_FakeClient(behavior), "x")
     assert calls["n"] == 1  # no retry for a non-transient error
+
+
+# ── save_config merges: omitting a key must not delete it ──────────────────────
+
+class _CapturingClient:
+    """Records what save_config upserts, and serves a stored config to the
+    load_config lookup that the merge performs."""
+
+    def __init__(self, existing):
+        self.existing = existing
+        self.saved = None
+        self._t = self
+
+    def table(self, *a, **k):
+        return self
+
+    def select(self, *a, **k):
+        return self
+
+    def eq(self, *a, **k):
+        return self
+
+    def maybe_single(self):
+        return self
+
+    def upsert(self, payload, *a, **k):
+        self.saved = payload
+        return self
+
+    def execute(self):
+        if self.saved is not None:
+            return None
+        return _Resp(self.existing)
+
+
+def _save(existing, incoming):
+    c = _CapturingClient(existing)
+    config_store.save_config(c, "TEST", incoming, user_id="u")
+    return c.saved["config"]
+
+
+def test_save_config_preserves_keys_the_caller_omitted():
+    """A partial save must not wipe the rest of the config. Every field is a
+    deliberate input, and a caller that sends only the two it changed used to
+    silently delete the other forty — the recurring 'my values changed by
+    themselves' complaint."""
+    existing = {"margin_of_safety": 0.275, "sector_betas": [["Shoe", 1.14, 1.0]],
+                "cash_bridge": 1907, "terminal_growth": 0.03}
+    out = _save(existing, {"margin_of_safety": 0.27})
+
+    assert out["margin_of_safety"] == 0.27          # the caller's change wins
+    assert out["sector_betas"] == [["Shoe", 1.14, 1.0]]   # untouched, preserved
+    assert out["cash_bridge"] == 1907
+    assert out["terminal_growth"] == 0.03
+
+
+def test_save_config_lets_the_caller_overwrite_with_a_falsy_value():
+    """Preserving must not block a deliberate 0 / False / empty string."""
+    out = _save({"minority_interest": 500}, {"minority_interest": 0})
+    assert out["minority_interest"] == 0
+
+
+def test_save_config_still_allows_deleting_the_derived_wacc_cache():
+    """wacc_per_year / terminal_wacc are persisted only when overridden; the
+    editor pops them so they fall back to a live compute. Merging them back
+    would resurrect the frozen-WACC drift fixed in 2026-07."""
+    existing = {"wacc_per_year": [0.0798] * 10, "terminal_wacc": 0.0798,
+                "roce_metric_override": "roe", "cash_bridge": 1907}
+    out = _save(existing, {"cash_bridge": 1907})
+
+    assert "wacc_per_year" not in out
+    assert "terminal_wacc" not in out
+    assert "roce_metric_override" not in out
+    assert out["cash_bridge"] == 1907
+
+
+def test_save_config_writes_a_brand_new_ticker_unchanged():
+    c = _CapturingClient(None)
+    config_store.save_config(c, "NEW", {"cash_bridge": 10}, user_id="u")
+    assert c.saved["config"] == {"cash_bridge": 10}

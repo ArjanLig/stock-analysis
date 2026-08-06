@@ -89,6 +89,22 @@ _GUARDED_KEYS_RESTORE_MISSING_ONLY = (
 # only need to know "is this key guarded at all?".
 _AI_NOTES_GUARDED_KEYS = _GUARDED_KEYS_RESTORE_EMPTY + _GUARDED_KEYS_RESTORE_MISSING_ONLY
 
+# Keys a caller deletes by leaving them out. Everything else is merged: a
+# partial save keeps whatever it didn't mention, because every config field is
+# a deliberate input and dropping forty of them to change two is never intended.
+# These three are the exception — derived caches and overrides whose *absence*
+# is the signal:
+#   wacc_per_year / terminal_wacc  the DCF editor persists them only when
+#       manually overridden and pops them otherwise, so they fall back to a
+#       live compute. Merging them back resurrects the frozen-WACC drift fixed
+#       in 2026-07 (a stale rate surviving an rf/ERP change).
+#   roce_metric_override           cleared to fall back to the computed metric.
+_DELETABLE_BY_OMISSION = (
+    "wacc_per_year",
+    "terminal_wacc",
+    "roce_metric_override",
+)
+
 
 def save_config(client, ticker, cfg, user_id=None):
     """Upsert a DCF config dict to Supabase.
@@ -121,44 +137,46 @@ def save_config(client, ticker, cfg, user_id=None):
         # guard purposes. Numeric 0 / False are not relevant to guarded keys.
         return v is None or (isinstance(v, (dict, list, str)) and len(v) == 0)
 
-    needs_recovery = [
-        k for k in _GUARDED_KEYS_RESTORE_EMPTY
-        if k not in cfg or _is_empty(cfg[k])
-    ] + [
-        k for k in _GUARDED_KEYS_RESTORE_MISSING_ONLY
-        if k not in cfg
-    ]
-    if needs_recovery:
-        # Defensive: load_config may crash on PostgREST PGRST116 in older
-        # postgrest-py versions even though we ask for maybe_single + catch
-        # PGRST116 by string. Treat any failure here as "no existing row"
-        # so brand-new tickers can still be saved.
-        try:
-            existing = load_config(client, ticker, user_id=user_id)
-        except Exception as _e:
+    # Every absent key is a candidate for restore, not just a hand-picked few:
+    # a save that omits a field means "I didn't touch this", not "delete it".
+    # The guarded-empty keys additionally recover when present but empty, since
+    # for those an empty value is almost always a caller bug rather than intent.
+    # Defensive: load_config may crash on PostgREST PGRST116 in older
+    # postgrest-py versions even though we ask for maybe_single + catch
+    # PGRST116 by string. Treat any failure here as "no existing row"
+    # so brand-new tickers can still be saved.
+    try:
+        existing = load_config(client, ticker, user_id=user_id)
+    except Exception as _e:
+        logger.warning(
+            "save_config(%s): load_config raised during merge; treating as "
+            "new ticker. Error: %s", ticker, _e,
+        )
+        existing = None
+
+    if existing:
+        cfg = dict(cfg)
+        preserved, restored_empty = [], []
+        for k, v in existing.items():
+            if k in _DELETABLE_BY_OMISSION:
+                continue                       # absence is the signal
+            if k not in cfg:
+                cfg[k] = v                     # caller didn't touch it
+                preserved.append(k)
+            elif k in _GUARDED_KEYS_RESTORE_EMPTY and _is_empty(cfg[k]) \
+                    and not _is_empty(v):
+                cfg[k] = v                     # empty here is a caller bug
+                restored_empty.append(k)
+        if restored_empty:
+            import traceback
+            stack = "".join(traceback.format_stack(limit=6)[:-1])
             logger.warning(
-                "save_config(%s): load_config raised during guarded-keys "
-                "restore; treating as new ticker. Error: %s",
-                ticker, _e,
+                "save_config(%s): restored %s from DB (caller passed empty).\n"
+                "Call stack:\n%s", ticker, restored_empty, stack,
             )
-            existing = None
-        if existing:
-            preserved = []
-            for k in needs_recovery:
-                # Only restore from DB when the DB value is itself non-empty;
-                # never replace a meaningful new value with a stale one.
-                if k in existing and not _is_empty(existing[k]):
-                    cfg = dict(cfg)
-                    cfg[k] = existing[k]
-                    preserved.append(k)
-            if preserved:
-                import traceback
-                stack = "".join(traceback.format_stack(limit=6)[:-1])
-                logger.warning(
-                    "save_config(%s): preserved %s from DB (caller passed missing/empty).\n"
-                    "Call stack:\n%s",
-                    ticker, preserved, stack,
-                )
+        if preserved:
+            logger.info("save_config(%s): merged %d untouched key(s) from DB: %s",
+                        ticker, len(preserved), preserved)
 
     data = _prepare_for_json(cfg)
 
