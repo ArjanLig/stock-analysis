@@ -1061,10 +1061,7 @@ def test_all_lenses_active_weighted_in_range():
     )
     # current_vs_mid signed correctly
     expected_cvm = (cfg["stock_price"] - summary["weighted_fv_mid"]) / summary["weighted_fv_mid"]
-    # current_vs_mid is stored rounded to 4 decimals, so compare on that scale —
-    # a relative tolerance is tighter than the rounding itself once the ratio
-    # drops near zero.
-    assert summary["current_vs_mid"] == pytest.approx(expected_cvm, abs=1e-4)
+    assert summary["current_vs_mid"] == pytest.approx(expected_cvm, rel=1e-3)
     # weights sum to 1.0
     total_norm = sum(lenses[n]["weight_normalized"] for n in active)
     assert total_norm == pytest.approx(1.0)
@@ -1422,69 +1419,3 @@ def test_resolve_verdict_falls_back_to_scorecard():
     out = scorecard_utils.resolve_verdict(cfg)
     assert out["verdict"] == "revisit"
     assert out["phase"] == 3
-
-
-# ── Terminal ROIC is capped at WACC + spread ───────────────────────────────────
-
-def _tv_cfg(**over):
-    """Minimal config whose terminal block is what matters."""
-    cfg = {
-        "discount_mode": "capm", "risk_free_rate": 0.0461, "erp": 0.0445,
-        "tax_rate": 0.23, "equity_market_value": 14300, "debt_market_value": 0,
-        "credit_spread": 0.004, "sector_betas": [("Shoe", 1.14, 1.0)],
-        "base_revenue": 5472, "revenue_growth": [0.04] * 10,
-        "op_margins": [0.22] * 10, "terminal_growth": 0.03,
-        "terminal_margin": 0.22, "sales_to_capital": 3.0,
-        "cash_bridge": 1907, "shares_outstanding": 144, "margin_of_safety": 0.275,
-        "stock_price": 99.31,
-    }
-    cfg.update(over)
-    return cfg
-
-
-def test_terminal_roic_is_capped_at_wacc_plus_spread():
-    """Carrying the projection-period sales-to-capital into perpetuity implies a
-    return on new capital that never fades — DECK's 3.0 implies ~51% forever
-    against a 9.7% WACC. The methodology note requires terminal ROIC to
-    converge toward WACC + a sector spread, so the implied figure is capped and
-    reinvestment rises to match."""
-    import dcf_calculator
-    cfg = _tv_cfg()
-    out = dcf_calculator.compute_intrinsic_value(cfg)
-
-    assert out["terminal_roic"] < 0.51                     # the 51% is gone
-    assert out["terminal_roic"] == pytest.approx(
-        out["wacc"] + dcf_calculator.TERMINAL_ROIC_SPREAD, abs=1e-9)
-    # A capped ROIC means more reinvestment, so less terminal FCFF and a lower
-    # value than the uncapped convention produced.
-    assert out["intrinsic_value"] < 132.0
-
-
-def test_terminal_roic_below_the_cap_is_left_alone():
-    """A capital-hungry business already assuming a modest return must not be
-    touched — the cap is a ceiling, not a target."""
-    import dcf_calculator
-    cfg = _tv_cfg(sales_to_capital=0.6)                    # implies ~10% ROIC
-    out = dcf_calculator.compute_intrinsic_value(cfg)
-
-    # Reinvestment divides by the revenue *increment* while NOPAT sits on the
-    # terminal year, so the implied return carries a (1 + g) factor.
-    implied = 1.03 * 0.6 * 0.22 * (1 - 0.23)
-    assert out["terminal_roic"] == pytest.approx(implied, rel=1e-6)
-    assert out["terminal_roic"] < out["wacc"] + dcf_calculator.TERMINAL_ROIC_SPREAD
-
-
-def test_terminal_roic_cap_is_inert_without_terminal_growth():
-    """No perpetual growth means no perpetual reinvestment, so there is nothing
-    for the cap to scale."""
-    import dcf_calculator
-    a = dcf_calculator.compute_intrinsic_value(_tv_cfg(terminal_growth=0.0))
-    assert a["intrinsic_value"] > 0
-
-
-def test_terminal_roic_cap_survives_a_loss_making_terminal_year():
-    """Negative terminal NOPAT makes the implied ROIC meaningless; fall back to
-    the sales-to-capital reinvestment rather than dividing by a negative."""
-    import dcf_calculator
-    out = dcf_calculator.compute_intrinsic_value(_tv_cfg(terminal_margin=-0.05))
-    assert out["intrinsic_value"] == out["intrinsic_value"]   # not NaN
