@@ -53,6 +53,15 @@ YAHOO_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
 }
 ERP_DEFAULT = 0.047  # Damodaran Jan 2026 estimate
+
+# Risk-free rate baseline. Deliberately a constant rather than a live Treasury
+# fetch: the watchlist was harmonised on 2026-07-29 so that identical risk gets
+# an identical hurdle, with the explicit decision to review rf and ERP once a
+# year instead of auto-fetching. Building each new ticker off the day's 10Y
+# undid that silently — DECK came in at 4.61%, CAT 4.62%, NVDA 4.45%, BKNG
+# 4.63%, VLO 4.75%, so seven names drifted off the baseline within a week.
+# Review this and ERP_DEFAULT together, annually.
+RISK_FREE_RATE_DEFAULT = 0.0465  # reviewed 2026-07-29
 TERMINAL_GROWTH_DEFAULT = 0.025
 MARGIN_OF_SAFETY_DEFAULT = 0.20
 TERMINAL_GROWTH_REAL_DEFAULT = 0.005  # 0.5% real terminal growth
@@ -3351,7 +3360,8 @@ Examples:
 
     # ── Step 4: Market data ──
     stock_price, market_cap, shares_yahoo = fetch_stock_price(ticker)
-    risk_free_rate = fetch_treasury_yield()
+    # Baseline, not the day's 10Y — see RISK_FREE_RATE_DEFAULT.
+    risk_free_rate = RISK_FREE_RATE_DEFAULT
 
     # ── Step 5: Credit rating ──
     oi_latest = financials["operating_income"][-1] if financials["operating_income"] and financials["operating_income"][-1] is not None else 0

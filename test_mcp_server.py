@@ -309,7 +309,11 @@ def test_build_dcf_config_impl_real_mode(
     )
     assert cfg["valuation_basis"] == "real"
     assert cfg["risk_free_rate"] == pytest.approx(0.019, abs=0.001)
-    assert cfg["nominal_risk_free_rate"] == pytest.approx(0.0427, abs=0.001)
+    # The nominal leg is the harmonised baseline, not the day's 10Y — see
+    # gather_data.RISK_FREE_RATE_DEFAULT.
+    import gather_data
+    assert cfg["nominal_risk_free_rate"] == pytest.approx(
+        gather_data.RISK_FREE_RATE_DEFAULT, abs=1e-9)
     assert "breakeven_inflation" in cfg
     mock_tips.assert_called_once()
 
@@ -1622,3 +1626,45 @@ def test_save_to_watchlist_allows_a_config_without_sector_betas():
         assert "Saved X" in mcp_server._save_to_watchlist_impl(
             "X", {"equity_market_value": 1000})
         mock_save.assert_called_once()
+
+
+def test_build_dcf_config_uses_the_baseline_risk_free_rate_not_a_live_fetch():
+    """rf and ERP were harmonised across the watchlist in 2026-07 with an
+    explicit decision to review them once a year rather than auto-fetch, so
+    identical risk gets an identical hurdle. build_dcf_config kept calling
+    fetch_treasury_yield, so every ticker added since carried whatever the 10Y
+    happened to be that day — DECK 4.61%, CAT 4.62%, NVDA 4.45%, BKNG 4.63%,
+    VLO 4.75% — and the portfolio drifted apart again."""
+    import mcp_server
+    import gather_data
+
+    financial_data = {
+        "years": [2024, 2025], "revenue": [100_000, 110_000],
+        "operating_income": [30_000, 33_000], "shares": [1000, 1000],
+        "interest_expense_latest": 500,
+    }
+
+    with patch.object(mcp_server, "gather_data") as mock_gd, \
+         patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "load_config", return_value=None):
+        mock_gd.fetch_stock_price.return_value = (150.0, 0, 0)
+        mock_gd.synthetic_credit_rating.return_value = ("A+", 0.01)
+        mock_gd.resolve_sector_betas.return_value = [("Software", 1.23, 1.0)]
+        mock_gd.build_config.return_value = {"ticker": "TEST"}
+        mock_gd.RISK_FREE_RATE_DEFAULT = gather_data.RISK_FREE_RATE_DEFAULT
+
+        mcp_server._build_dcf_config_impl(
+            ticker="TEST", financial_data=financial_data,
+            company_name="Test Corp", sic_code="7372",
+        )
+
+        mock_gd.fetch_treasury_yield.assert_not_called()
+        assert mock_gd.build_config.call_args.kwargs["risk_free_rate"] == \
+            gather_data.RISK_FREE_RATE_DEFAULT
+
+
+def test_the_baseline_rate_matches_the_harmonised_portfolio_value():
+    """Pin the constant: the watchlist was harmonised to 4.65% / 4.70%."""
+    import gather_data
+    assert gather_data.RISK_FREE_RATE_DEFAULT == 0.0465
+    assert gather_data.ERP_DEFAULT == 0.047

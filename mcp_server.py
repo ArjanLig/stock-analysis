@@ -102,7 +102,10 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
     if stock_price <= 0:
         raise ValueError(f"Could not fetch stock price for {ticker}")
 
-    risk_free_rate = gather_data.fetch_treasury_yield()
+    # Baseline, not a live fetch — see gather_data.RISK_FREE_RATE_DEFAULT.
+    # Fetching the day's 10Y per ticker is what pulled the watchlist off the
+    # harmonised 4.65% again after July.
+    risk_free_rate = gather_data.RISK_FREE_RATE_DEFAULT
 
     nominal_risk_free_rate = None
     if valuation_basis == "real":
