@@ -285,6 +285,20 @@ def _refresh_all_valuations_impl(force: bool = False,
 
 def _save_to_watchlist_impl(ticker, cfg, user_id: str | None = None):
     """Core logic for save_to_watchlist."""
+    # equity_market_value is a deliberate input (see
+    # dcf_calculator._equity_market_value). Without it the CAPM discount rate
+    # falls back to stock_price × shares_outstanding and silently drifts with
+    # the market — and drifts the wrong way, making a stock look cheaper the
+    # more expensive it gets. Refuse rather than store a config that floats.
+    if not (cfg or {}).get("equity_market_value") \
+            or float(cfg["equity_market_value"]) <= 0:
+        return (
+            f"{ticker.upper()} not saved: config needs a positive "
+            f"'equity_market_value' ($M). It anchors the CAPM discount rate "
+            f"(D/E relevering + WACC weights); without it the rate follows the "
+            f"day's price. Set it from the market cap you want to value at."
+        )
+
     user_id = user_id or USER_ID
     client = get_supabase_client()
     config_store.save_config(client, ticker, cfg, user_id=user_id)
@@ -1049,7 +1063,11 @@ def save_to_watchlist(ticker: str, config: dict) -> str:
 
     Args:
         ticker: Stock ticker symbol (e.g. "MSFT")
-        config: Complete DCF config dict (from build_dcf_config).
+        config: Complete DCF config dict (from build_dcf_config). Must carry a
+            positive "equity_market_value" ($M): it anchors the CAPM discount
+            rate (D/E relevering + WACC weights). Without it the rate falls back
+            to stock_price × shares_outstanding and drifts with the market, so
+            the save is refused.
 
     Peers (config["peers"]) drive the multiples lens — each peer is a dict with
     "ticker", "op_margin", "rev_growth", and the two multiples the lens reads:

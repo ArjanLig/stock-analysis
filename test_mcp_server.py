@@ -1550,3 +1550,31 @@ def test_build_dcf_config_derives_market_cap_for_a_new_ticker():
             company_name="Test Corp", sic_code="7372",
         )
         assert mock_gd.build_config.call_args.kwargs["market_cap"] == 150.0 * 1000
+
+
+def test_save_to_watchlist_refuses_config_without_equity_market_value():
+    """equity_market_value is a deliberate input: without it the CAPM discount
+    rate silently falls back to stock_price × shares_outstanding and drifts
+    with the market. Refuse the save rather than store a config that floats."""
+    import mcp_server
+
+    with patch.object(mcp_server, "get_supabase_client") as mock_client, \
+         patch.object(mcp_server.config_store, "save_config") as mock_save:
+        for bad in ({"company": "X"}, {"equity_market_value": 0},
+                    {"equity_market_value": None}, {"equity_market_value": -5}):
+            out = mcp_server._save_to_watchlist_impl("TEST", bad)
+            assert "equity_market_value" in out
+            assert "not saved" in out.lower()
+        mock_save.assert_not_called()
+        mock_client.assert_not_called()
+
+
+def test_save_to_watchlist_accepts_config_with_equity_market_value():
+    import mcp_server
+
+    with patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "save_config") as mock_save:
+        out = mcp_server._save_to_watchlist_impl(
+            "TEST", {"equity_market_value": 150_000, "company": "X"})
+        assert "Saved TEST" in out
+        mock_save.assert_called_once()

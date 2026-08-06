@@ -285,7 +285,13 @@ TOOLS: list[dict] = [
     },
     {
         "name": "save_to_watchlist",
-        "description": "Upsert a complete DCF config into the user's watchlist.",
+        "description": (
+            "Upsert a complete DCF config into the user's watchlist. The config "
+            "MUST carry a positive 'equity_market_value' ($M) — it anchors the "
+            "CAPM discount rate (D/E relevering + WACC weights), and without it "
+            "the rate silently follows the day's price. The save is refused "
+            "otherwise."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {

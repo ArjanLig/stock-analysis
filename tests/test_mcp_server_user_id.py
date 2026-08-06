@@ -67,7 +67,11 @@ def test_save_to_watchlist_impl_uses_explicit_user_id(monkeypatch):
     monkeypatch.setattr(mcp_server.config_store, "save_config", fake_save)
     monkeypatch.setattr(mcp_server, "USER_ID", "env-fallback-uid")
 
-    mcp_server._save_to_watchlist_impl("AAPL", {"company": "Apple"}, user_id="caller-uid")
+    # equity_market_value is mandatory — a config without it is refused before
+    # the save is ever attempted (it would leave the discount rate floating).
+    mcp_server._save_to_watchlist_impl(
+        "AAPL", {"company": "Apple", "equity_market_value": 3_000_000},
+        user_id="caller-uid")
     assert captured["user_id"] == "caller-uid"
 
 
