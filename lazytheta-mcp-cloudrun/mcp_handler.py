@@ -286,11 +286,15 @@ TOOLS: list[dict] = [
     {
         "name": "save_to_watchlist",
         "description": (
-            "Upsert a complete DCF config into the user's watchlist. The config "
-            "MUST carry a positive 'equity_market_value' ($M) — it anchors the "
-            "CAPM discount rate (D/E relevering + WACC weights), and without it "
-            "the rate silently follows the day's price. The save is refused "
-            "otherwise."
+            "Upsert a complete DCF config into the user's watchlist. Two fields "
+            "are validated because both silently move the discount rate. "
+            "'equity_market_value' ($M) must be present and positive — it "
+            "anchors the CAPM rate (D/E relevering + WACC weights); without it "
+            "the rate follows the day's price. 'sector_betas' is a list of "
+            "[name, unlevered_beta, revenue_weight] where beta_u = sum(beta x "
+            "weight), so the weights must sum to 1.0 and a single sector takes "
+            "weight 1.0 — never repeat the beta in the weight slot, that squares "
+            "it. A config failing either check is refused, not stored."
         ),
         "inputSchema": {
             "type": "object",

@@ -299,6 +299,27 @@ def _save_to_watchlist_impl(ticker, cfg, user_id: str | None = None):
             f"day's price. Set it from the market cap you want to value at."
         )
 
+    # sector_betas entries are (name, unlevered_beta, revenue_weight) and
+    # beta_u is sum(beta × weight), so the weights have to sum to 1.0. Putting
+    # the beta in the weight field squares it and quietly moves the discount
+    # rate — DECK carried ["Shoe", 1.14, 1.14], giving beta_u 1.2996 and a WACC
+    # of 10.39% where 1.14 alone gives 9.68%. Authored wrong five times now.
+    betas = (cfg or {}).get("sector_betas")
+    if betas:
+        try:
+            total = sum(float(entry[2]) for entry in betas)
+        except (TypeError, IndexError, ValueError):
+            return (f"{ticker.upper()} not saved: each 'sector_betas' entry must "
+                    f"be [name, unlevered_beta, revenue_weight].")
+        if abs(total - 1.0) > 0.001:
+            return (
+                f"{ticker.upper()} not saved: 'sector_betas' revenue weights sum "
+                f"to {total:g}, not 1.0. Each entry is [name, unlevered_beta, "
+                f"revenue_weight] and beta_u = sum(beta x weight) — a single "
+                f"sector takes weight 1.0. A weight equal to the beta is the "
+                f"usual cause: it squares the beta and shifts the WACC."
+            )
+
     user_id = user_id or USER_ID
     client = get_supabase_client()
     config_store.save_config(client, ticker, cfg, user_id=user_id)
@@ -1063,11 +1084,17 @@ def save_to_watchlist(ticker: str, config: dict) -> str:
 
     Args:
         ticker: Stock ticker symbol (e.g. "MSFT")
-        config: Complete DCF config dict (from build_dcf_config). Must carry a
-            positive "equity_market_value" ($M): it anchors the CAPM discount
-            rate (D/E relevering + WACC weights). Without it the rate falls back
-            to stock_price × shares_outstanding and drifts with the market, so
-            the save is refused.
+        config: Complete DCF config dict (from build_dcf_config). Two fields are
+            validated because both silently move the discount rate:
+              • "equity_market_value" ($M), required and positive — it anchors
+                the CAPM rate (D/E relevering + WACC weights). Without it the
+                rate falls back to stock_price × shares_outstanding and drifts
+                with the market.
+              • "sector_betas" — a list of [name, unlevered_beta,
+                revenue_weight]. beta_u = sum(beta × weight), so the weights
+                must sum to 1.0; a single sector takes weight 1.0. Do NOT repeat
+                the beta in the weight slot — that squares it.
+            A config failing either check is refused, not stored.
 
     Peers (config["peers"]) drive the multiples lens — each peer is a dict with
     "ticker", "op_margin", "rev_growth", and the two multiples the lens reads:

@@ -1578,3 +1578,47 @@ def test_save_to_watchlist_accepts_config_with_equity_market_value():
             "TEST", {"equity_market_value": 150_000, "company": "X"})
         assert "Saved TEST" in out
         mock_save.assert_called_once()
+
+
+def test_save_to_watchlist_refuses_sector_beta_weights_that_do_not_sum_to_one():
+    """sector_betas entries are (name, unlevered_beta, revenue_weight) and the
+    weights must sum to 1.0 — beta_u is sum(beta × weight). Filling the weight
+    field with the beta instead silently squares it: DECK carried
+    ["Shoe", 1.14, 1.14] → beta_u 1.2996 → WACC 10.39% where 1.14 alone gives
+    9.68%. This has now been authored wrong four times (MCD, MA, UBER, DECK,
+    CAT), so the save refuses it."""
+    import mcp_server
+
+    bad = {"equity_market_value": 14_300,
+           "sector_betas": [["Shoe", 1.14, 1.14]]}
+    with patch.object(mcp_server, "get_supabase_client") as mock_client, \
+         patch.object(mcp_server.config_store, "save_config") as mock_save:
+        out = mcp_server._save_to_watchlist_impl("DECK", bad)
+        assert "sector_betas" in out
+        assert "1.14" in out          # names the offending sum
+        assert "not saved" in out.lower()
+        mock_save.assert_not_called()
+        mock_client.assert_not_called()
+
+
+def test_save_to_watchlist_accepts_multi_sector_weights_that_sum_to_one():
+    import mcp_server
+
+    ok = {"equity_market_value": 2_900_000,
+          "sector_betas": [["Software", 1.23, 0.6], ["Advertising", 0.93, 0.4]]}
+    with patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "save_config") as mock_save:
+        assert "Saved MSFT" in mcp_server._save_to_watchlist_impl("MSFT", ok)
+        mock_save.assert_called_once()
+
+
+def test_save_to_watchlist_allows_a_config_without_sector_betas():
+    """Only validate what is present — a config that carries no sector_betas at
+    all is a separate concern (it falls back to a market beta downstream)."""
+    import mcp_server
+
+    with patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "save_config") as mock_save:
+        assert "Saved X" in mcp_server._save_to_watchlist_impl(
+            "X", {"equity_market_value": 1000})
+        mock_save.assert_called_once()
