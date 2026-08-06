@@ -605,3 +605,43 @@ def test_sector_beta_default_falls_back_when_new_sector_is_unknown():
     rather than silently dropping to a placeholder."""
     assert streamlit_app._sector_beta_default(
         "Shoe", 1.14, "Online Travel Services", _DAM) == 1.14
+
+
+# ── The editor's summary must match what the engine runs on ───────────────────
+
+def test_effective_stc_prefers_the_per_year_list_over_the_scalar():
+    """The 'Used in DCF' line read sales_to_capital straight from the config,
+    so NVDA displayed 8.00 while the projection ran on stc_per_year's 5.0."""
+    cfg = {"sales_to_capital": 8.0, "stc_per_year": [5.0] * 10,
+           "terminal_stc": 5.0, "revenue_growth": [0.05] * 10}
+    per_year, terminal = streamlit_app._effective_stc(cfg)
+    assert per_year == [5.0] * 10
+    assert terminal == 5.0
+
+
+def test_effective_stc_expands_a_lone_scalar():
+    cfg = {"sales_to_capital": 3.0, "revenue_growth": [0.05] * 10}
+    per_year, terminal = streamlit_app._effective_stc(cfg)
+    assert per_year == [3.0] * 10
+    assert terminal == 3.0
+
+
+def test_effective_stc_matches_what_the_engine_reports_it_used():
+    """Pin the display to the engine. If precedence ever changes in
+    dcf_calculator, this fails rather than letting the page drift back into
+    showing a number the projection never saw."""
+    import dcf_calculator
+    cfg = {
+        "discount_mode": "capm", "risk_free_rate": 0.046, "erp": 0.045,
+        "tax_rate": 0.23, "equity_market_value": 10000, "debt_market_value": 0,
+        "credit_spread": 0.004, "sector_betas": [("S", 1.0, 1.0)],
+        "base_revenue": 1000, "revenue_growth": [0.05] * 5,
+        "op_margins": [0.20] * 5, "terminal_growth": 0.025, "terminal_margin": 0.20,
+        "sales_to_capital": 8.0, "stc_per_year": [1.5, 1.6], "terminal_stc": 2.4,
+        "cash_bridge": 100, "shares_outstanding": 100, "margin_of_safety": 0.2,
+        "stock_price": 50.0,
+    }
+    per_year, terminal = streamlit_app._effective_stc(cfg)
+    out = dcf_calculator.compute_intrinsic_value(cfg)
+    assert per_year == out["stc_used"]
+    assert terminal == out["terminal_stc_used"]

@@ -689,6 +689,25 @@ def _render_dividend_sensitivity_matrix(
     return html
 
 
+def _effective_stc(cfg):
+    """The sales-to-capital the DCF will actually run on: (per_year, terminal).
+
+    Resolved exactly as dcf_calculator does — stc_per_year wins over the scalar,
+    terminal_stc over the last projected year — and pinned to it by test. The
+    editor's summary line read the raw scalar instead, so NVDA displayed 8.00
+    under a label saying "Used in DCF" while the projection ran on 5.0 from
+    stc_per_year. A number on screen has to be the number that was computed.
+    """
+    n = len(cfg.get('revenue_growth') or [])
+    values = cfg.get('stc_per_year') or [cfg.get('sales_to_capital', 1.0)] * n
+    values = [float(v) for v in values]
+    if values and len(values) < n:
+        values = values + [values[-1]] * (n - len(values))
+    values = values[:n]
+    terminal = float(cfg.get('terminal_stc', values[-1] if values else 1.0))
+    return values, terminal
+
+
 def _sector_beta_default(stored_name, stored_beta, chosen_name, dam_betas):
     """Unlevered beta to pre-fill for one sector row in the DCF editor.
 
@@ -5101,8 +5120,15 @@ def _dcf_editor(ticker):
                         _s2c_median = _s2c_ratios[len(_s2c_ratios) // 2]
                         st.markdown(_s2c_val.format(label="Median Sales-to-Capital", value=f"{_s2c_median:.2f}",
                                                    extra=f"font-weight:700;font-size:1.15rem;color:{T['accent']};"), unsafe_allow_html=True)
-                        st.markdown(_s2c_val.format(label="Used in DCF", value=f"{cfg.get('sales_to_capital', 1.0):.2f}",
+                        _eff_stc, _eff_tv_stc = _effective_stc(cfg)
+                        if _eff_stc and min(_eff_stc) != max(_eff_stc):
+                            _eff_txt = f"{min(_eff_stc):.2f}–{max(_eff_stc):.2f}"
+                        else:
+                            _eff_txt = f"{(_eff_stc[0] if _eff_stc else 1.0):.2f}"
+                        st.markdown(_s2c_val.format(label="Used in DCF", value=_eff_txt,
                                                    extra="font-weight:700;font-size:1.05rem;"), unsafe_allow_html=True)
+                        st.markdown(_s2c_val.format(label=" terminal", value=f"{_eff_tv_stc:.2f}",
+                                                   extra=f"color:{T['text_muted']};font-size:0.85rem;"), unsafe_allow_html=True)
                 else:
                     st.info("Not enough historical data to compute Sales-to-Capital breakdown")
 

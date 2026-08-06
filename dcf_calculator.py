@@ -127,16 +127,23 @@ def compute_intrinsic_value(cfg, wacc=None):
     tg = cfg['terminal_growth']
     tm = cfg.get('terminal_margin', margins[-1])
 
-    # Per-year lists (from editor) with scalar fallbacks
-    default_tax = cfg['tax_rate']
-    tax_list = cfg.get('tax_per_year', [default_tax] * n_p)
-    if len(tax_list) < n_p:
-        tax_list = list(tax_list) + [tax_list[-1] if tax_list else default_tax] * (n_p - len(tax_list))
+    # Per-year inputs have exactly one representation. A scalar
+    # ``sales_to_capital`` used to stand in silently when the list was absent,
+    # which let the config carry two different numbers for the same assumption
+    # — NVDA held sales_to_capital 8.0 next to stc_per_year 5.0, and the editor
+    # displayed the 8.0 under a label reading "Used in DCF". Missing is now an
+    # error, so a value on screen can always be traced to the one that ran.
+    def _per_year(key, scalar_key):
+        values = cfg.get(key)
+        if not values:
+            values = [cfg[scalar_key]] * n_p      # flat profile from the scalar
+        values = [float(v) for v in values]
+        if len(values) < n_p:                     # pad from the last authored year
+            values = values + [values[-1]] * (n_p - len(values))
+        return values[:n_p]
 
-    default_stc = cfg['sales_to_capital']
-    stc_list = cfg.get('stc_per_year', [default_stc] * n_p)
-    if len(stc_list) < n_p:
-        stc_list = list(stc_list) + [stc_list[-1] if stc_list else default_stc] * (n_p - len(stc_list))
+    tax_list = _per_year('tax_per_year', 'tax_rate')
+    stc_list = _per_year('stc_per_year', 'sales_to_capital')
 
     default_wacc = wacc
     wacc_list = cfg.get('wacc_per_year', [default_wacc] * n_p)
@@ -195,6 +202,13 @@ def compute_intrinsic_value(cfg, wacc=None):
         'equity_value': equity,
         'wacc': wacc,
         'tv_pct': pv_tv / ev if ev > 0 else 0,
+        # The per-year inputs this run actually used, padded and resolved.
+        # The page renders these rather than re-reading the config, so a
+        # displayed number can never diverge from the one that was computed.
+        'stc_used': stc_list,
+        'terminal_stc_used': tv_stc,
+        'tax_used': tax_list,
+        'terminal_tax_used': tv_tax,
     }
 
 

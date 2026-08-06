@@ -1419,3 +1419,66 @@ def test_resolve_verdict_falls_back_to_scorecard():
     out = scorecard_utils.resolve_verdict(cfg)
     assert out["verdict"] == "revisit"
     assert out["phase"] == 3
+
+
+# ── One source of truth for per-year inputs ────────────────────────────────────
+
+def _proj_cfg(**over):
+    cfg = {
+        "discount_mode": "capm", "risk_free_rate": 0.046, "erp": 0.045,
+        "tax_rate": 0.23, "equity_market_value": 10000, "debt_market_value": 0,
+        "credit_spread": 0.004, "sector_betas": [("S", 1.0, 1.0)],
+        "base_revenue": 1000, "revenue_growth": [0.05] * 5,
+        "op_margins": [0.20] * 5, "terminal_growth": 0.025,
+        "terminal_margin": 0.20,
+        "stc_per_year": [2.0] * 5, "terminal_stc": 2.0,
+        "tax_per_year": [0.23] * 5, "terminal_tax": 0.23,
+        "cash_bridge": 100, "shares_outstanding": 100, "margin_of_safety": 0.2,
+        "stock_price": 50.0,
+    }
+    cfg.update(over)
+    return cfg
+
+
+def test_the_scalar_is_a_flat_profile_not_a_second_opinion():
+    """A config may carry only sales_to_capital — that is a flat per-year
+    profile, and the result reports it as such. What it must never do is sit
+    alongside a differing stc_per_year while the page shows the scalar under a
+    label reading "Used in DCF"; NVDA held 8.0 next to a list of 5.0."""
+    import dcf_calculator
+    cfg = _proj_cfg()
+    del cfg["stc_per_year"]
+    cfg["sales_to_capital"] = 8.0
+
+    out = dcf_calculator.compute_intrinsic_value(cfg)
+    assert out["stc_used"] == [8.0] * 5      # expanded, and reported
+
+    # With a list present the list wins, and the result says so — the scalar
+    # cannot quietly become the displayed number.
+    cfg["stc_per_year"] = [5.0] * 5
+    out2 = dcf_calculator.compute_intrinsic_value(cfg)
+    assert out2["stc_used"] == [5.0] * 5
+    assert out2["intrinsic_value"] != out["intrinsic_value"]
+
+
+def test_result_reports_the_per_year_inputs_it_actually_used():
+    """The page must be able to render what the engine ran on rather than
+    re-reading the config and re-deriving precedence — that divergence is what
+    made the display lie in the first place."""
+    import dcf_calculator
+    out = dcf_calculator.compute_intrinsic_value(
+        _proj_cfg(stc_per_year=[1.5, 1.6, 1.7, 1.8, 1.9], terminal_stc=2.4))
+
+    assert out["stc_used"] == [1.5, 1.6, 1.7, 1.8, 1.9]
+    assert out["terminal_stc_used"] == 2.4
+    assert out["tax_used"] == [0.23] * 5
+    assert out["terminal_tax_used"] == 0.23
+
+
+def test_a_short_per_year_list_is_padded_and_reported_as_padded():
+    """Shorter lists were already padded from the last value; the result must
+    show the padded list so the page can't display the un-padded original."""
+    import dcf_calculator
+    out = dcf_calculator.compute_intrinsic_value(
+        _proj_cfg(stc_per_year=[1.5, 1.6]))
+    assert out["stc_used"] == [1.5, 1.6, 1.6, 1.6, 1.6]
