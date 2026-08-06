@@ -97,7 +97,9 @@ def test_build_dcf_config_tool():
     """build_dcf_config should resolve sector betas and call build_config with no auto-selected peers."""
     import mcp_server
 
-    with patch.object(mcp_server, "gather_data") as mock_gd:
+    with patch.object(mcp_server, "gather_data") as mock_gd, \
+         patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "load_config", return_value=None):
         mock_gd.fetch_stock_price.return_value = (150.0, 0, 0)
         mock_gd.fetch_treasury_yield.return_value = 0.04
         mock_gd.synthetic_credit_rating.return_value = ("A+", 0.01)
@@ -1481,3 +1483,70 @@ def test_headline_roce_uses_excess_adjusted_and_flags_capped():
     assert round(h["roce_latest_pct"], 1) == 25.0
     # yr0 was capped (CE≤0) → headline flags it
     assert h["roce_capped"] is True
+
+
+# ---------------------------------------------------------------------------
+# Capital structure is a deliberate input, not a live quantity
+# ---------------------------------------------------------------------------
+
+def test_build_dcf_config_carries_forward_existing_equity_market_value():
+    """Under CAPM the discount rate depends on equity market value (via the
+    Hamada relevering and the WACC weights), so re-deriving it from today's
+    price makes the WACC — and the fair value — drift with the market. Worse,
+    it drifts the wrong way: price up → D/E down → WACC down → fair value up.
+
+    Rebuilding a config for a ticker already on the watchlist must therefore
+    keep the stored value rather than recompute it from the live price."""
+    import mcp_server
+
+    stored = {"equity_market_value": 150_000, "company": "Test Corp"}
+    financial_data = {
+        "years": [2024, 2025], "revenue": [100_000, 110_000],
+        "operating_income": [30_000, 33_000], "shares": [1000, 1000],
+        "interest_expense_latest": 500,
+    }
+
+    with patch.object(mcp_server, "gather_data") as mock_gd, \
+         patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "load_config", return_value=stored):
+        mock_gd.fetch_stock_price.return_value = (999.0, 0, 0)   # price has moved a lot
+        mock_gd.fetch_treasury_yield.return_value = 0.04
+        mock_gd.synthetic_credit_rating.return_value = ("A+", 0.01)
+        mock_gd.resolve_sector_betas.return_value = [("Software", 1.23, 1.0)]
+        mock_gd.build_config.return_value = {"ticker": "TEST"}
+
+        mcp_server._build_dcf_config_impl(
+            ticker="TEST", financial_data=financial_data,
+            company_name="Test Corp", sic_code="7372",
+        )
+
+        # 999 × 1000 = 999,000 would be the freshly derived figure; the stored
+        # 150,000 must win.
+        assert mock_gd.build_config.call_args.kwargs["market_cap"] == 150_000
+
+
+def test_build_dcf_config_derives_market_cap_for_a_new_ticker():
+    """A ticker that isn't on the watchlist yet has nothing to carry forward,
+    so the live price is the right starting point."""
+    import mcp_server
+
+    financial_data = {
+        "years": [2024, 2025], "revenue": [100_000, 110_000],
+        "operating_income": [30_000, 33_000], "shares": [1000, 1000],
+        "interest_expense_latest": 500,
+    }
+
+    with patch.object(mcp_server, "gather_data") as mock_gd, \
+         patch.object(mcp_server, "get_supabase_client"), \
+         patch.object(mcp_server.config_store, "load_config", return_value=None):
+        mock_gd.fetch_stock_price.return_value = (150.0, 0, 0)
+        mock_gd.fetch_treasury_yield.return_value = 0.04
+        mock_gd.synthetic_credit_rating.return_value = ("A+", 0.01)
+        mock_gd.resolve_sector_betas.return_value = [("Software", 1.23, 1.0)]
+        mock_gd.build_config.return_value = {"ticker": "TEST"}
+
+        mcp_server._build_dcf_config_impl(
+            ticker="TEST", financial_data=financial_data,
+            company_name="Test Corp", sic_code="7372",
+        )
+        assert mock_gd.build_config.call_args.kwargs["market_cap"] == 150.0 * 1000

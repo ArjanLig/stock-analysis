@@ -9,11 +9,20 @@ without generating a full Excel workbook.
 def _equity_market_value(cfg):
     """Equity market value ($M) used for WACC/CAPM weighting.
 
-    Some config paths (e.g. an MCP save_to_watchlist with a hand-built
-    config) omit ``equity_market_value``. Fall back to
-    ``stock_price × shares_outstanding`` — the same mkt_cap fallback
-    convention used in dcf_template — so callers never raise KeyError
-    (which would silently drop the ticker from the watchlist overview).
+    This is a **deliberate input**, on a par with the risk-free rate and the
+    ERP: you set it when you author the config and revise it consciously. It
+    is deliberately not refreshed from the live price, because under CAPM it
+    drives both the Hamada relevering (via D/E) and the WACC weights — so a
+    live value would make the discount rate, and every fair value, drift with
+    the market. It also drifts the wrong way: price up → D/E down → WACC down
+    → fair value up, which would make a stock look cheaper the more expensive
+    it gets.
+
+    Some config paths (e.g. an MCP save_to_watchlist with a hand-built config)
+    omit it. Those fall back to ``stock_price × shares_outstanding`` so callers
+    never raise KeyError — which would silently drop the ticker from the
+    watchlist overview — but such a config *does* float with the price. Give
+    every config an explicit ``equity_market_value`` to avoid that.
     """
     emv = cfg.get("equity_market_value") or 0
     if emv:

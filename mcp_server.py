@@ -111,7 +111,22 @@ def _build_dcf_config_impl(ticker, financial_data, company_name,
 
     shares = financial_data.get("shares", [])
     shares_latest = shares[-1] if shares else 0
+
+    # Equity market value is a deliberate input, not a live quantity. Under
+    # CAPM it drives both the Hamada relevering (via D/E) and the WACC weights,
+    # so re-deriving it from today's price makes the discount rate — and every
+    # fair value — drift with the market, and drift the wrong way: price up →
+    # D/E down → WACC down → fair value up. Rebuilding a ticker that is already
+    # on the watchlist therefore carries the stored figure forward; only a
+    # genuinely new ticker starts from the live price.
     market_cap = stock_price * shares_latest
+    try:
+        existing = config_store.load_config(get_supabase_client(), ticker,
+                                            user_id=user_id)
+    except Exception:                      # no DB reachable → fall back to live
+        existing = None
+    if existing and existing.get("equity_market_value"):
+        market_cap = existing["equity_market_value"]
 
     oi_latest = financial_data.get("operating_income", [0])[-1] or 0
     ie_latest = financial_data.get("interest_expense_latest", 0) or 0
