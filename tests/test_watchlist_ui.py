@@ -578,3 +578,30 @@ def test_wacc_persistence_self_heals_stale_frozen_value():
     streamlit_app._apply_wacc_persistence(cfg, [d] * 10, d, d)
     assert "wacc_per_year" not in cfg
     assert "terminal_wacc" not in cfg
+
+
+# ── DCF editor: the stored sector beta is a deliberate input ────────────────────
+
+_DAM = {"Shoe": 0.93, "Machinery": 0.87, "Semiconductor": 1.49}
+
+
+def test_sector_beta_default_keeps_the_stored_beta_when_sector_unchanged():
+    """The editor used to overwrite the config's beta with Damodaran's current
+    figure on every render, even untouched. DECK was authored at 1.14 for
+    "Shoe"; Damodaran now publishes 0.93, so simply opening the ticker page
+    showed 8.75% instead of the intended 9.68% — and persisted it on save."""
+    assert streamlit_app._sector_beta_default("Shoe", 1.14, "Shoe", _DAM) == 1.14
+
+
+def test_sector_beta_default_adopts_the_new_sector_beta_when_changed():
+    """Picking a different sector is an explicit act, so its live beta is the
+    sensible starting point."""
+    assert streamlit_app._sector_beta_default(
+        "Shoe", 1.14, "Semiconductor", _DAM) == 1.49
+
+
+def test_sector_beta_default_falls_back_when_new_sector_is_unknown():
+    """A hand-typed sector Damodaran doesn't publish keeps the stored beta
+    rather than silently dropping to a placeholder."""
+    assert streamlit_app._sector_beta_default(
+        "Shoe", 1.14, "Online Travel Services", _DAM) == 1.14

@@ -689,6 +689,24 @@ def _render_dividend_sensitivity_matrix(
     return html
 
 
+def _sector_beta_default(stored_name, stored_beta, chosen_name, dam_betas):
+    """Unlevered beta to pre-fill for one sector row in the DCF editor.
+
+    The stored beta wins whenever the sector is unchanged. It is a deliberate
+    input — the MCP authored it, sometimes overriding Damodaran on purpose —
+    and replacing it with Damodaran's current figure on every render moved
+    DECK's discount rate from the intended 9.68% to 8.75% simply by opening the
+    ticker page, then persisted that on the next save.
+
+    Picking a *different* sector is an explicit act, so that sector's live beta
+    becomes the starting point; an unknown sector keeps the stored value rather
+    than dropping to a placeholder.
+    """
+    if chosen_name != stored_name:
+        return float((dam_betas or {}).get(chosen_name, stored_beta))
+    return float(stored_beta)
+
+
 def calculate_multi_lens_valuation_remote(cfg: dict) -> dict:
     """Thin wrapper so tests can monkey-patch this name without touching
     the pure orchestrator."""
@@ -4941,7 +4959,8 @@ def _dcf_editor(ticker):
                             new_name = st.selectbox(
                                 "Sector", sector_list, index=idx, key=f"ed_bn_{i}",
                             )
-                            new_beta = dam_betas.get(new_name, float(beta))
+                            new_beta = _sector_beta_default(
+                                name, beta, new_name, dam_betas)
                         else:
                             new_name = st.text_input("Sector", value=name, key=f"ed_bn_{i}")
                             new_beta = float(beta)
