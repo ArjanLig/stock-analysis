@@ -4421,7 +4421,6 @@ def _watchlist_overview():
         rows.append({
             'ticker': t,
             'company': _prettify_company(cfg_wl.get('company', t)),
-            'notes': cfg_wl.get('notes', ''),
             'category': cfg_wl.get('category', 'Uncategorized'),
             'price': live_price,
             'intrinsic': _wl_intrinsic,
@@ -4544,15 +4543,7 @@ def _watchlist_overview():
             f'<img src="{logo_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px" onerror="this.style.display=\'none\'"><strong>{t}</strong>',
             unsafe_allow_html=True,
         )
-        _note = row.get('notes', '')
-        if _note:
-            _note_preview = _note[:50].replace('\n', ' ') + ('...' if len(_note) > 50 else '')
-            cols[2].markdown(
-                f'{row["company"]}<br><span style="font-size:0.78rem;color:{T["text_muted"]}">{_note_preview}</span>',
-                unsafe_allow_html=True,
-            )
-        else:
-            cols[2].markdown(row['company'])
+        cols[2].markdown(row['company'])
         cols[3].markdown(f"${row['price']:.2f}")
         cols[4].markdown(
             _render_fv_cell(
