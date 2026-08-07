@@ -232,6 +232,28 @@ def load_config(client, ticker, user_id=None):
     raise last_exc  # unreachable: loop always returns or raises
 
 
+def load_all_configs(client, user_id=None):
+    """Every config for a user in one round-trip: {TICKER: cfg}.
+
+    The watchlist page used to call load_config once per ticker — 64 separate
+    Supabase requests, six at a time, for 2.5 MB that a single query returns.
+    The payload was never the problem; 64 round-trips of latency were, and the
+    page repeats that every 30 seconds as the cache expires.
+
+    Shapes each config exactly as load_config does (tuples restored), so the
+    two are interchangeable.
+    """
+    query = client.table("watchlist_configs").select("ticker, config")
+    if user_id is not None:
+        query = query.eq("user_id", user_id)
+    resp = query.execute()
+    rows = (resp.data if resp else None) or []
+    return {
+        row["ticker"].upper(): _restore_tuples(row["config"])
+        for row in rows if row.get("ticker") and row.get("config")
+    }
+
+
 def list_watchlist(client, user_id=None):
     """Return list of dicts with ticker metadata + valuation summary.
 

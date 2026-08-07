@@ -166,3 +166,57 @@ def test_save_config_writes_a_brand_new_ticker_unchanged():
     c = _CapturingClient(None)
     config_store.save_config(c, "NEW", {"cash_bridge": 10}, user_id="u")
     assert c.saved["config"] == {"cash_bridge": 10}
+
+
+# ── Bulk loading: one round-trip instead of one per ticker ─────────────────────
+
+class _BulkClient:
+    """Counts how many queries the caller issues."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.queries = 0
+
+    def table(self, *a, **k):
+        return self
+
+    def select(self, *a, **k):
+        self.queries += 1
+        return self
+
+    def eq(self, *a, **k):
+        return self
+
+    def execute(self):
+        class _R:
+            data = self.rows
+        return _R()
+
+
+def test_load_all_configs_issues_a_single_query():
+    """The watchlist called load_config once per ticker — 64 round-trips for
+    2.5 MB that one query returns. Latency, not payload, was the cost."""
+    rows = [{"ticker": "AAPL", "config": {"company": "Apple"}},
+            {"ticker": "MSFT", "config": {"company": "Microsoft"}}]
+    c = _BulkClient(rows)
+    out = config_store.load_all_configs(c, user_id="u")
+
+    assert c.queries == 1
+    assert set(out) == {"AAPL", "MSFT"}
+    assert out["AAPL"]["company"] == "Apple"
+
+
+def test_load_all_configs_restores_tuples_like_load_config():
+    """Must return configs shaped exactly as load_config does — sector_betas
+    come back as tuples, not lists, or the DCF unpacking breaks."""
+    rows = [{"ticker": "T", "config": {"sector_betas": [["Telecom", 0.39, 1.0]],
+                                       "debt_breakdown": [["Long-Term Debt", 100]]}}]
+    out = config_store.load_all_configs(_BulkClient(rows), user_id="u")
+    assert out["T"]["sector_betas"] == [("Telecom", 0.39, 1.0)]
+
+
+def test_load_all_configs_skips_rows_without_a_config():
+    rows = [{"ticker": "AAPL", "config": {"company": "Apple"}},
+            {"ticker": "BAD", "config": None}]
+    out = config_store.load_all_configs(_BulkClient(rows), user_id="u")
+    assert set(out) == {"AAPL"}

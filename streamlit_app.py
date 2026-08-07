@@ -23,7 +23,7 @@ from error_logger import log_error, log_error_with_trace
 from dcf_calculator import (compute_wacc, compute_intrinsic_value, compute_reverse_dcf,
                             DEFAULT_DISCOUNT_MODE)
 from valuation_lenses import FORWARD_LENSES
-from config_store import save_config, load_config, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
+from config_store import save_config, load_config, load_all_configs, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
 import gather_data
 from gather_data import (
     get_cik,
@@ -4308,19 +4308,9 @@ def _watchlist_overview():
 
     # ── Refresh handler ──
     if wl_refresh:
-        from concurrent.futures import ThreadPoolExecutor as _Pool
-
-        _wl_meta = list_watchlist(_sb_client)
-        _wl_tickers_for_refresh = [item["ticker"] for item in _wl_meta]
-
-        def _load_one_for_refresh(t):
-            c = load_config(_sb_client, t)
-            return (t, c) if c is not None else None
-
-        with _Pool(max_workers=6) as _pool:
-            _refresh_cfgs = {
-                r[0]: r[1] for r in _pool.map(_load_one_for_refresh, _wl_tickers_for_refresh) if r
-            }
+        # One query rather than a pool of per-ticker loads — same reason as the
+        # watchlist's own load, and this one runs on every Refresh All click.
+        _refresh_cfgs = load_all_configs(_sb_client)
 
         if not _refresh_cfgs:
             st.info("Watchlist is empty — nothing to refresh.")
@@ -4371,16 +4361,13 @@ def _watchlist_overview():
 
     @st.cache_data(ttl=30, show_spinner=False)
     def _load_all_configs(user_id, tickers_tuple):
-        from concurrent.futures import ThreadPoolExecutor
-        def _load_one(t):
-            c = load_config(_sb_client, t)
-            return (t, c) if c is not None else None
-        cfgs = {}
-        with ThreadPoolExecutor(max_workers=6) as ex:
-            for result in ex.map(_load_one, tickers_tuple):
-                if result:
-                    cfgs[result[0]] = result[1]
-        return cfgs
+        # One query, not one per ticker: this used to fan 64 requests across a
+        # thread pool for 2.5 MB that a single select returns, and repeat that
+        # every 30 seconds when the cache expired. tickers_tuple stays in the
+        # signature so the cache key still invalidates when the list changes.
+        cfgs = load_all_configs(_sb_client, user_id=user_id)
+        wanted = set(tickers_tuple)
+        return {t: c for t, c in cfgs.items() if t in wanted} if wanted else cfgs
 
     _wl_configs = _load_all_configs(st.session_state["user"]["id"], tuple(item['ticker'] for item in watchlist))
     wl_tickers = list(_wl_configs.keys())
