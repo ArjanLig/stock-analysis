@@ -267,9 +267,16 @@ def list_watchlist(client, user_id=None):
     """
     from scorecard_utils import resolve_verdict
 
+    # Select only what the listing renders. ai_notes is ~80% of the config
+    # payload (2.0 MB of 2.5 MB across a 64-name watchlist) and exactly one of
+    # its keys is read here — the Scorecard, for the verdict and phase — so
+    # pulling the whole column dragged every prescan section into a query that
+    # runs on page load. 2.5 MB → ~300 kB.
     query = (
         client.table("watchlist_configs")
-        .select("ticker, company, stock_price, updated_at, config")
+        .select("ticker, company, stock_price, updated_at, "
+                "config->valuation_summary, config->robustness, "
+                "config->ai_notes->Scorecard")
     )
     if user_id is not None:
         query = query.eq("user_id", user_id)
@@ -286,12 +293,16 @@ def list_watchlist(client, user_id=None):
 
     out = []
     for row in resp.data:
-        cfg = row.get("config") or {}
-        summary = cfg.get("valuation_summary") or {}
+        summary = row.get("valuation_summary") or {}
         lenses = summary.get("lenses") or {}
         lens_count = sum(1 for k in _COUNTED_LENSES if lenses.get(k) is not None)
 
-        _vp = resolve_verdict(cfg)
+        # resolve_verdict reads cfg["ai_notes"]["Scorecard"] and
+        # cfg["robustness"]; rebuild just that shape from the narrow select.
+        _vp = resolve_verdict({
+            "ai_notes": {"Scorecard": row.get("Scorecard")} if row.get("Scorecard") else None,
+            "robustness": row.get("robustness"),
+        })
 
         out.append({
             "ticker": row["ticker"],

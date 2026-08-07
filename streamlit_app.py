@@ -4288,6 +4288,7 @@ def _watchlist_overview():
                     terminal_growth=TERMINAL_GROWTH_DEFAULT,
                 )
                 save_config(_sb_client, ticker_clean, wl_cfg)
+                st.cache_data.clear()      # the watchlist listing is cached
                 st.success(f"{ticker_clean} added to watchlist")
                 st.rerun()
             except ValueError as e:
@@ -4344,7 +4345,15 @@ def _watchlist_overview():
             st.rerun()
 
     # ── Overview table ──
-    watchlist = list_watchlist(_sb_client)
+    # Cached: list_watchlist selects the full `config` column to derive its
+    # metadata, so it pulled the same 2.5 MB as the config load — 0.50s on
+    # every rerun, i.e. every click and every widget change, before anything
+    # was even drawn. Adding or removing a ticker clears the cache.
+    @st.cache_data(ttl=30, show_spinner=False)
+    def _cached_watchlist(user_id):
+        return list_watchlist(_sb_client, user_id=user_id)
+
+    watchlist = _cached_watchlist(st.session_state["user"]["id"])
     if not watchlist:
         st.info("Your watchlist is empty. Add a ticker above or use 'Add to Watchlist' on the DCF page.")
         return
@@ -4623,6 +4632,7 @@ def _watchlist_overview():
         with cols[10]:
             if st.button("", key=f"wl_rm_row_{t}", icon=":material/close:"):
                 remove_from_watchlist(_sb_client, t)
+                st.cache_data.clear()      # the watchlist listing is cached
                 st.rerun()
 
     # ── Group rows by category and render ──

@@ -220,3 +220,72 @@ def test_load_all_configs_skips_rows_without_a_config():
             {"ticker": "BAD", "config": None}]
     out = config_store.load_all_configs(_BulkClient(rows), user_id="u")
     assert set(out) == {"AAPL"}
+
+
+# ── list_watchlist selects only the fields it renders ─────────────────────────
+
+class _SelectCapturingClient:
+    def __init__(self, rows):
+        self.rows, self.select_arg = rows, None
+
+    def table(self, *a, **k):
+        return self
+
+    def select(self, arg, *a, **k):
+        self.select_arg = arg
+        return self
+
+    def eq(self, *a, **k):
+        return self
+
+    def execute(self):
+        class _R:
+            data = self.rows
+        return _R()
+
+
+def test_list_watchlist_does_not_pull_the_whole_config():
+    """ai_notes is 80% of the config payload (2.0 MB of 2.5 MB across the
+    watchlist) and list_watchlist reads exactly one key from it — the Scorecard
+    — to resolve a verdict. Selecting the whole column made the listing carry
+    every prescan section on every load."""
+    c = _SelectCapturingClient([])
+    config_store.list_watchlist(c, user_id="u")
+
+    assert "config->ai_notes->Scorecard" in c.select_arg
+    assert "config->valuation_summary" in c.select_arg
+    # the whole column must not be requested
+    assert not any(part.strip() == "config" for part in c.select_arg.split(","))
+
+
+def test_list_watchlist_builds_rows_from_the_narrow_selection():
+    rows = [{
+        "ticker": "AAPL", "company": "Apple", "stock_price": 200.0,
+        "updated_at": "2026-08-07",
+        "valuation_summary": {"weighted_fv_mid": 180.0, "buy_price": 144.0,
+                              "weighted_fv_low": 160.0, "weighted_fv_high": 200.0,
+                              "current_vs_mid": 0.11,
+                              "lenses": {"dcf": {"fv_mid": 180.0}, "multiples": None}},
+        "robustness": {"verdict_mapped": "deep_dive"},
+        "Scorecard": '```json\n{"phase": {"number": 5, "name": "Capital Return"}}\n```',
+    }]
+    out = config_store.list_watchlist(_SelectCapturingClient(rows), user_id="u")
+
+    assert len(out) == 1
+    e = out[0]
+    assert e["ticker"] == "AAPL"
+    assert e["fv_mid"] == 180.0
+    assert e["buy_price"] == 144.0
+    assert e["lens_count"] == 1          # only dcf is non-null
+    assert e["verdict"] == "deep_dive"   # robustness wins over the scorecard
+    assert e["phase"] == 5
+
+
+def test_list_watchlist_tolerates_a_row_with_nothing_computed():
+    rows = [{"ticker": "NEW", "company": "New Co", "stock_price": 10.0,
+             "updated_at": "", "valuation_summary": None,
+             "robustness": None, "Scorecard": None}]
+    out = config_store.list_watchlist(_SelectCapturingClient(rows), user_id="u")
+    assert out[0]["ticker"] == "NEW"
+    assert out[0]["fv_mid"] is None
+    assert out[0]["lens_count"] == 0
