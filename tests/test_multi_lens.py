@@ -1101,19 +1101,20 @@ def test_list_watchlist_enriched_shape():
             "company": "With Co",
             "stock_price": 90.0,
             "updated_at": "2026-05-05T00:00:00Z",
-            "config": {
-                "valuation_summary": summary,
-                "ai_notes": {
-                    "Scorecard": '```json\n{"verdict":"deep_dive","phase":{"number":3,"name":"S"}}\n```'
-                },
-            },
+            # list_watchlist selects the JSON paths it renders rather than the
+            # whole config column, so PostgREST returns them as top-level keys.
+            "valuation_summary": summary,
+            "robustness": None,
+            "Scorecard": '```json\n{"verdict":"deep_dive","phase":{"number":3,"name":"S"}}\n```',
         },
         {
             "ticker": "WITHOUT",
             "company": "Without Co",
             "stock_price": 50.0,
             "updated_at": "2026-05-05T00:00:00Z",
-            "config": {},  # no valuation_summary, no ai_notes
+            "valuation_summary": None,   # nothing computed yet
+            "robustness": None,
+            "Scorecard": None,
         },
     ]
 
