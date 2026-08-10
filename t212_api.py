@@ -90,12 +90,25 @@ def fetch_portfolio_data(creds: dict):
     positions = _get("/equity/positions", creds, min_interval=1.0)
     cost_basis = {}
     for pos in positions or []:
-        info = _clean(pos.get("ticker", ""), creds)
+        # /equity/positions nests the instrument and names its money fields
+        # differently from the rest of the API. Reading them flat yielded a
+        # blank symbol and zeros for everything except the share count.
+        instrument = pos.get("instrument") or {}
+        wallet = pos.get("walletImpact") or {}
+        info = _clean(instrument.get("ticker", ""), creds)
         symbol = info["symbol"]
         shares = pos.get("quantity") or 0
-        avg = pos.get("averagePrice") or 0.0
-        pl = pos.get("ppl") or 0.0
-        cost = shares * avg
+
+        # walletImpact is denominated in the *account* currency while
+        # currentPrice/averagePricePaid follow the instrument's own currency —
+        # a US holding in a EUR account reports both. Take every figure from
+        # walletImpact so one row can't mix two currencies, and derive the
+        # per-share cost from it rather than from averagePricePaid.
+        cost = wallet.get("totalCost")
+        if cost is None:
+            cost = shares * (pos.get("averagePricePaid") or 0.0)
+        pl = wallet.get("unrealizedProfitLoss") or 0.0
+        avg = (cost / shares) if shares else 0.0
         cost_basis[symbol] = {
             "total_credits": 0,
             "total_debits": 0,
@@ -108,7 +121,13 @@ def fetch_portfolio_data(creds: dict):
             "cost_per_share": avg,
             "trades": [],
             "wheels": [],
-            "currency": info["currency"],
+            # The currency the figures above are actually denominated in — the
+            # account's, because they come from walletImpact. The instrument's
+            # own currency is kept separately: a US stock in a EUR account has
+            # two, and labelling the euro amounts "USD" is how you get a
+            # portfolio total that silently mixes both.
+            "currency": wallet.get("currency") or info["currency"],
+            "instrument_currency": info["currency"],
             "exchange": info["exchange"],
         }
     info = _get("/equity/account/info", creds, min_interval=5.0)

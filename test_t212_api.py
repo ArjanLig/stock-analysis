@@ -109,11 +109,26 @@ class TestPortfolio(unittest.TestCase):
             if path == "/equity/metadata/instruments":
                 return _META
             if path == "/equity/positions":
+                # Shape copied verbatim from a live /equity/positions response
+                # (2026-08-10). The instrument is NESTED and the money fields
+                # are named differently from what the old fixture assumed —
+                # that mismatch is why every T212 row rendered as $0.00 with a
+                # blank ticker while the share count came through fine.
                 return [
-                    {"ticker": "AAPL_US_EQ", "quantity": 10,
-                     "averagePrice": 150.0, "ppl": 200.0},
-                    {"ticker": "ASML_NL_EQ", "quantity": 5,
-                     "averagePrice": 600.0, "ppl": -50.0},
+                    {"instrument": {"ticker": "AAPL_US_EQ", "name": "Apple",
+                                    "isin": "US0378331005", "currency": "USD"},
+                     "quantity": 10, "averagePricePaid": 150.0,
+                     "currentPrice": 170.0,
+                     "walletImpact": {"currency": "EUR", "totalCost": 1500.0,
+                                      "currentValue": 1700.0,
+                                      "unrealizedProfitLoss": 200.0}},
+                    {"instrument": {"ticker": "ASML_NL_EQ", "name": "ASML",
+                                    "isin": "NL0010273215", "currency": "EUR"},
+                     "quantity": 5, "averagePricePaid": 600.0,
+                     "currentPrice": 590.0,
+                     "walletImpact": {"currency": "EUR", "totalCost": 3000.0,
+                                      "currentValue": 2950.0,
+                                      "unrealizedProfitLoss": -50.0}},
                 ]
             if path == "/equity/account/info":
                 return {"id": 42, "currencyCode": "EUR"}
@@ -128,8 +143,12 @@ class TestPortfolio(unittest.TestCase):
         self.assertEqual(cb["AAPL"]["total_pl"], 200.0)
         self.assertEqual(cb["AAPL"]["option_pl"], 0)
         self.assertEqual(cb["AAPL"]["trades"], [])
-        self.assertEqual(cb["AAPL"]["currency"], "USD")
+        # currency = what the figures are denominated in (the account's, via
+        # walletImpact); instrument_currency = the security's own.
+        self.assertEqual(cb["AAPL"]["currency"], "EUR")
+        self.assertEqual(cb["AAPL"]["instrument_currency"], "USD")
         self.assertEqual(cb["ASML"]["currency"], "EUR")
+        self.assertEqual(cb["ASML"]["instrument_currency"], "EUR")
         self.assertEqual(cb["ASML"]["exchange"], "NL")
 
 
