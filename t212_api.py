@@ -99,16 +99,17 @@ def fetch_portfolio_data(creds: dict):
         symbol = info["symbol"]
         shares = pos.get("quantity") or 0
 
-        # walletImpact is denominated in the *account* currency while
-        # currentPrice/averagePricePaid follow the instrument's own currency —
-        # a US holding in a EUR account reports both. Take every figure from
-        # walletImpact so one row can't mix two currencies, and derive the
-        # per-share cost from it rather than from averagePricePaid.
-        cost = wallet.get("totalCost")
-        if cost is None:
-            cost = shares * (pos.get("averagePricePaid") or 0.0)
-        pl = wallet.get("unrealizedProfitLoss") or 0.0
-        avg = (cost / shares) if shares else 0.0
+        # Two currencies live in one position: averagePricePaid / currentPrice
+        # follow the *instrument* (RDDT in USD), walletImpact follows the
+        # *account* (EUR here). Per-share figures use the instrument's, because
+        # that is the currency the app prices everything in — a cost basis of
+        # EUR 140.76 sitting next to a Yahoo quote of USD 158.69 is a
+        # comparison of two different things.
+        avg = pos.get("averagePricePaid") or 0.0
+        price = pos.get("currentPrice") or 0.0
+        cost = shares * avg
+        pl = (price - avg) * shares
+
         cost_basis[symbol] = {
             "total_credits": 0,
             "total_debits": 0,
@@ -121,14 +122,19 @@ def fetch_portfolio_data(creds: dict):
             "cost_per_share": avg,
             "trades": [],
             "wheels": [],
-            # The currency the figures above are actually denominated in — the
-            # account's, because they come from walletImpact. The instrument's
-            # own currency is kept separately: a US stock in a EUR account has
-            # two, and labelling the euro amounts "USD" is how you get a
-            # portfolio total that silently mixes both.
-            "currency": wallet.get("currency") or info["currency"],
-            "instrument_currency": info["currency"],
+            # The currency the per-share figures above are in — the
+            # instrument's. Not cosmetic: a portfolio total that adds a EUR
+            # holding to a USD one without converting is simply wrong, so the
+            # label has to travel with the number.
+            "currency": info["currency"],
             "exchange": info["exchange"],
+            # Same position expressed in the account's currency, straight from
+            # T212. Kept so a multi-currency total can be struck without
+            # inventing an FX rate.
+            "account_currency": wallet.get("currency") or "",
+            "account_cost": wallet.get("totalCost"),
+            "account_value": wallet.get("currentValue"),
+            "account_pl": wallet.get("unrealizedProfitLoss"),
         }
     info = _get("/equity/account/info", creds, min_interval=5.0)
     account_id = str(info.get("id") or "")

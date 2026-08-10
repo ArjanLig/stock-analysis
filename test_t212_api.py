@@ -140,15 +140,18 @@ class TestPortfolio(unittest.TestCase):
         self.assertEqual(cb["AAPL"]["shares_held"], 10)
         self.assertEqual(cb["AAPL"]["cost_per_share"], 150.0)
         self.assertEqual(cb["AAPL"]["adjusted_cost"], 1500.0)
-        self.assertEqual(cb["AAPL"]["total_pl"], 200.0)
+        self.assertEqual(cb["AAPL"]["total_pl"], 200.0)   # (170-150)x10, in USD
         self.assertEqual(cb["AAPL"]["option_pl"], 0)
         self.assertEqual(cb["AAPL"]["trades"], [])
-        # currency = what the figures are denominated in (the account's, via
-        # walletImpact); instrument_currency = the security's own.
-        self.assertEqual(cb["AAPL"]["currency"], "EUR")
-        self.assertEqual(cb["AAPL"]["instrument_currency"], "USD")
+        # Per-share figures follow the instrument's currency so they line up
+        # with the quote the app shows; the account-currency copy rides along
+        # for striking a multi-currency total.
+        self.assertEqual(cb["AAPL"]["currency"], "USD")
+        self.assertEqual(cb["AAPL"]["cost_per_share"], 150.0)      # USD, not EUR
+        self.assertEqual(cb["AAPL"]["account_currency"], "EUR")
+        self.assertEqual(cb["AAPL"]["account_cost"], 1500.0)
+        self.assertEqual(cb["AAPL"]["account_value"], 1700.0)
         self.assertEqual(cb["ASML"]["currency"], "EUR")
-        self.assertEqual(cb["ASML"]["instrument_currency"], "EUR")
         self.assertEqual(cb["ASML"]["exchange"], "NL")
 
 
