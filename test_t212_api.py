@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import requests
 
 import broker_adapter
+import gather_data
 import t212_api
 
 
@@ -103,8 +104,9 @@ class TestPortfolio(unittest.TestCase):
     def setUp(self):
         t212_api._INSTRUMENTS_CACHE = None
 
+    @patch("gather_data.fetch_fx_rate", return_value=1.0)
     @patch("t212_api._get")
-    def test_positions_normalise_to_cost_basis(self, mock_get):
+    def test_positions_normalise_to_cost_basis(self, mock_get, _fx):
         def _router(path, creds, **kw):
             if path == "/equity/metadata/instruments":
                 return _META
@@ -145,25 +147,33 @@ class TestPortfolio(unittest.TestCase):
         self.assertEqual(cb["AAPL"]["total_pl"], 200.0)   # (170-150)x10, in USD
         self.assertEqual(cb["AAPL"]["option_pl"], 0)
         self.assertEqual(cb["AAPL"]["trades"], [])
-        # Per-share figures follow the instrument's currency so they line up
-        # with the quote the app shows; the account-currency copy rides along
-        # for striking a multi-currency total.
+        # Per-share figures are in USD — converted where the instrument is
+        # quoted in something else (see TestUsdNormalisation); the
+        # account-currency copy rides along for reconciling against T212.
         self.assertEqual(cb["AAPL"]["currency"], "USD")
         self.assertEqual(cb["AAPL"]["purchase_price"], 150.0)      # USD, not EUR
         self.assertEqual(cb["AAPL"]["account_currency"], "EUR")
         self.assertEqual(cb["AAPL"]["account_cost"], 1500.0)
         self.assertEqual(cb["AAPL"]["account_value"], 1700.0)
-        self.assertEqual(cb["ASML"]["currency"], "EUR")
+        self.assertEqual(cb["ASML"]["native_currency"], "EUR")
         self.assertEqual(cb["ASML"]["exchange"], "NL")
 
 
 class TestBalances(unittest.TestCase):
+    def setUp(self):
+        gather_data._FX_CACHE.clear()
+
+    @patch("gather_data.fetch_fx_rate", return_value=1.0)
     @patch("t212_api._get")
-    def test_cash_maps_to_balances_shape(self, mock_get):
-        mock_get.return_value = {
-            "free": 250.0, "total": 10250.0, "invested": 10000.0,
-            "ppl": 250.0, "result": 0.0, "pieCash": 0.0, "blocked": 0.0,
-        }
+    def test_cash_maps_to_balances_shape(self, mock_get, _fx):
+        def _router(path, creds, **kw):
+            if path == "/equity/account/info":
+                return {"id": 42, "currencyCode": "USD"}
+            return {
+                "free": 250.0, "total": 10250.0, "invested": 10000.0,
+                "ppl": 250.0, "result": 0.0, "pieCash": 0.0, "blocked": 0.0,
+            }
+        mock_get.side_effect = _router
         b = t212_api.fetch_account_balances(_CREDS)
         self.assertEqual(b["net_liquidating_value"], 10250.0)
         self.assertEqual(b["cash_balance"], 250.0)
@@ -174,6 +184,36 @@ class TestBalances(unittest.TestCase):
                   "maintenance_excess", "used_derivative_buying_power",
                   "reg_t_margin_requirement"):
             self.assertIn(k, b)
+
+    @patch("t212_api._get")
+    def test_a_euro_account_is_reported_in_dollars(self, mock_get):
+        """T212 keeps a Dutch account in EUR. Adding that figure straight to a
+        Tastytrade balance in USD would overstate nothing and understate the
+        combined total by the whole FX difference — and the combined total is
+        the number the portfolio header shows."""
+        def _router(path, creds, **kw):
+            if path == "/equity/account/info":
+                return {"id": 42, "currencyCode": "EUR"}
+            return {"free": 100.0, "total": 1000.0}
+        mock_get.side_effect = _router
+        with patch("gather_data.fetch_fx_rate", return_value=1.15):
+            b = t212_api.fetch_account_balances(_CREDS)
+        self.assertAlmostEqual(b["net_liquidating_value"], 1150.0)
+        self.assertAlmostEqual(b["cash_balance"], 115.0)
+        self.assertEqual(b["currency"], "USD")
+
+    @patch("t212_api._get")
+    def test_an_unknown_rate_reports_the_native_currency(self, mock_get):
+        """Rather than pass off euros as dollars in a portfolio total."""
+        def _router(path, creds, **kw):
+            if path == "/equity/account/info":
+                return {"id": 42, "currencyCode": "EUR"}
+            return {"free": 100.0, "total": 1000.0}
+        mock_get.side_effect = _router
+        with patch("gather_data.fetch_fx_rate", return_value=None):
+            b = t212_api.fetch_account_balances(_CREDS)
+        self.assertAlmostEqual(b["net_liquidating_value"], 1000.0)
+        self.assertEqual(b["currency"], "EUR")
 
 
 class TestAdapterT212(unittest.TestCase):
@@ -318,3 +358,113 @@ class TestSignConvention(unittest.TestCase):
         self.assertAlmostEqual(
             (market_value + d["equity_cost"]) / abs(d["equity_cost"]) * 100,
             13.333, places=2)
+
+
+class TestFxRate(unittest.TestCase):
+    """USD conversion for a multi-currency portfolio."""
+
+    def setUp(self):
+        gather_data._FX_CACHE.clear()
+
+    @patch("gather_data.fetch_stock_price")
+    def test_usd_needs_no_lookup(self, mock_price):
+        self.assertEqual(gather_data.fetch_fx_rate("USD"), 1.0)
+        mock_price.assert_not_called()
+
+    @patch("gather_data.fetch_stock_price", return_value=(1.1546, 0, 0))
+    def test_eur_uses_the_pair_ticker(self, mock_price):
+        self.assertAlmostEqual(gather_data.fetch_fx_rate("EUR"), 1.1546)
+        mock_price.assert_called_once_with("EURUSD=X")
+
+    @patch("gather_data.fetch_stock_price", return_value=(1.1546, 0, 0))
+    def test_rate_is_cached_per_currency(self, mock_price):
+        gather_data.fetch_fx_rate("EUR")
+        gather_data.fetch_fx_rate("EUR")
+        self.assertEqual(mock_price.call_count, 1)
+
+    @patch("gather_data.fetch_stock_price", return_value=(0, 0, 0))
+    def test_a_failed_lookup_returns_none_rather_than_a_wrong_number(self, _p):
+        """Silently falling back to 1.0 would add euros to dollars as if they
+        were the same unit — the caller must be able to tell it doesn't know."""
+        self.assertIsNone(gather_data.fetch_fx_rate("EUR"))
+
+    @patch("gather_data.fetch_stock_price", side_effect=RuntimeError("boom"))
+    def test_an_exception_is_not_swallowed_into_a_rate(self, _p):
+        self.assertIsNone(gather_data.fetch_fx_rate("EUR"))
+
+
+class TestUsdNormalisation(unittest.TestCase):
+    """Positions quoted in another currency are converted, not relabelled."""
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+        gather_data._FX_CACHE.clear()
+
+    def _fetch(self):
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path == "/equity/positions":
+                return [
+                    {"instrument": {"ticker": "AAPL_US_EQ", "name": "Apple",
+                                    "isin": "US0378331005", "currency": "USD"},
+                     "quantity": 10, "averagePricePaid": 150.0, "currentPrice": 170.0,
+                     "walletImpact": {"currency": "EUR", "totalCost": 1300.0,
+                                      "currentValue": 1473.0,
+                                      "unrealizedProfitLoss": 173.0}},
+                    {"instrument": {"ticker": "ASML_NL_EQ", "name": "ASML",
+                                    "isin": "NL0010273215", "currency": "EUR"},
+                     "quantity": 5, "averagePricePaid": 600.0, "currentPrice": 620.0,
+                     "walletImpact": {"currency": "EUR", "totalCost": 3000.0,
+                                      "currentValue": 3100.0,
+                                      "unrealizedProfitLoss": 100.0}},
+                ]
+            if path == "/equity/account/info":
+                return {"id": 42}
+            raise AssertionError(path)
+        with patch("t212_api._get", side_effect=_router), \
+             patch("gather_data.fetch_stock_price", return_value=(1.20, 0, 0)):
+            return t212_api.fetch_portfolio_data(_CREDS)[0]
+
+    def test_a_usd_instrument_is_untouched(self):
+        d = self._fetch()["AAPL"]
+        self.assertEqual(d["purchase_price"], 150.0)
+        self.assertEqual(d["broker_price"], 170.0)
+        self.assertEqual(d["equity_cost"], -1500.0)
+        self.assertEqual(d["currency"], "USD")
+
+    def test_a_eur_instrument_is_converted_at_the_rate(self):
+        """EUR 600 at 1.20 is USD 720 — the number changes, not just the sign
+        in front of it. Leaving it at 600 under a $ label understates the
+        holding and skews every weight in the table."""
+        d = self._fetch()["ASML"]
+        self.assertAlmostEqual(d["purchase_price"], 720.0)
+        self.assertAlmostEqual(d["broker_price"], 744.0)
+        self.assertAlmostEqual(d["equity_cost"], -3600.0)
+        self.assertEqual(d["currency"], "USD")
+        # The original is preserved so the row can say where it came from.
+        self.assertEqual(d["native_currency"], "EUR")
+        self.assertAlmostEqual(d["native_purchase_price"], 600.0)
+
+    def test_an_unknown_rate_leaves_the_position_in_its_own_currency(self):
+        """Better a row that says EUR than a dollar figure that is really
+        euros."""
+        with patch("gather_data.fetch_fx_rate", return_value=None):
+            def _router(path, creds, **kw):
+                if path == "/equity/metadata/instruments":
+                    return _META
+                if path == "/equity/positions":
+                    return [{"instrument": {"ticker": "ASML_NL_EQ", "name": "ASML",
+                                            "isin": "NL0010273215", "currency": "EUR"},
+                             "quantity": 5, "averagePricePaid": 600.0,
+                             "currentPrice": 620.0,
+                             "walletImpact": {"currency": "EUR", "totalCost": 3000.0,
+                                              "currentValue": 3100.0,
+                                              "unrealizedProfitLoss": 100.0}}]
+                if path == "/equity/account/info":
+                    return {"id": 42}
+                raise AssertionError(path)
+            with patch("t212_api._get", side_effect=_router):
+                d = t212_api.fetch_portfolio_data(_CREDS)[0]["ASML"]
+        self.assertEqual(d["currency"], "EUR")
+        self.assertAlmostEqual(d["purchase_price"], 600.0)

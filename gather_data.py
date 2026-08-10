@@ -759,6 +759,36 @@ def parse_financials(facts, n_years=6, ticker=None):
 
 # ── Market Data Module ────────────────────────────────────────────────
 
+_FX_CACHE: dict = {}
+
+
+def fetch_fx_rate(currency: str):
+    """How many USD one unit of `currency` buys, or None if unknown.
+
+    The app prices everything in dollars, but a broker account can hold
+    instruments quoted in another currency — a EUR-denominated ETF next to US
+    stocks. Adding those figures untouched treats euros as dollars.
+
+    Returns None rather than 1.0 when the rate can't be fetched: a silent
+    fallback would produce a total that looks right and isn't. Callers must
+    decide what to do with "I don't know".
+    """
+    code = (currency or "USD").upper()
+    if code in ("", "USD"):
+        return 1.0
+    if code in _FX_CACHE:
+        return _FX_CACHE[code]
+    try:
+        rate, _, _ = fetch_stock_price(f"{code}USD=X")
+    except Exception as e:
+        print(f"  WARNING: FX lookup failed for {code}: {e}")
+        return None
+    if not rate or rate <= 0:
+        return None
+    _FX_CACHE[code] = rate
+    return rate
+
+
 def fetch_stock_price(ticker):
     """Fetch current stock price from Yahoo Finance chart API.
 

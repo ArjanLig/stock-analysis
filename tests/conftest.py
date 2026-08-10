@@ -14,7 +14,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # module-level code that touches st.session_state["..."] doesn't crash.
 import streamlit as st
 session_state_mock = MagicMock()
-session_state_mock.get = MagicMock(return_value=0)
+# get(key, default) hands back the default, the way a dict does. Returning 0
+# for every call meant `session_state.get("x", [])` yielded an int, and code
+# that then iterated the result blew up in the test suite but never in the app.
+session_state_mock.get = MagicMock(
+    side_effect=lambda key, default=0: default
+)
 session_state_mock.pop = MagicMock(return_value=False)
 session_state_mock.__getitem__ = MagicMock()
 session_state_mock.__setitem__ = MagicMock()

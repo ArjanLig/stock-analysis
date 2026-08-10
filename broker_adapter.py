@@ -231,6 +231,119 @@ def fetch_earnings_dates(tickers):
 
 
 # ---------------------------------------------------------------------------
+# Multi-broker aggregation
+# ---------------------------------------------------------------------------
+
+BROKER_NAMES = {
+    "tastytrade": "Tastytrade",
+    "ibkr": "Interactive Brokers",
+    "t212": "Trading 212",
+}
+
+
+def connected_brokers():
+    """Return the connected brokers, in a stable display order."""
+    out = []
+    if st.session_state.get("tt_refresh_token"):
+        out.append("tastytrade")
+    if st.session_state.get("ibkr_credentials"):
+        out.append("ibkr")
+    if st.session_state.get("t212_credentials"):
+        out.append("t212")
+    return out
+
+
+def _fetch_one(broker):
+    if broker == "t212":
+        return t212_api.fetch_portfolio_data(_get_t212_creds())
+    if broker == "ibkr":
+        return _get_ibkr().fetch_portfolio_data()
+    return tastytrade_api.fetch_portfolio_data(refresh_token=_get_refresh_token())
+
+
+def fetch_all_portfolio_data():
+    """Return (cost_basis, account_id, failures) across every connected broker.
+
+    Positions stay separate per broker. Holding the same ticker at two brokers
+    mid-transfer is a real state, and blending the two cost bases would print a
+    purchase price that was never paid; two rows is what actually happened. On
+    a collision BOTH keys get the broker suffix — a bare "DECK" sitting next to
+    "DECK (Trading 212)" reads as though the first row belonged to no broker.
+
+    Because the dict key is therefore a display key, each row carries "symbol"
+    (the bare ticker) for price, logo and config lookups.
+
+    `failures` is [(broker_name, exception)] for brokers that could not be
+    reached. Their rows are simply absent, so any total struck from this data
+    is incomplete — the caller has to say so rather than present a smaller
+    number as the truth.
+    """
+    per_broker, failures = {}, []
+    for broker in connected_brokers():
+        try:
+            cb, acct = _fetch_one(broker)
+        except Exception as e:
+            failures.append((BROKER_NAMES[broker], e))
+            continue
+        per_broker[broker] = (cb or {}, acct)
+
+    counts = {}
+    for cb, _ in per_broker.values():
+        for ticker in cb:
+            counts[ticker] = counts.get(ticker, 0) + 1
+
+    merged = {}
+    for broker, (cb, _) in per_broker.items():
+        name = BROKER_NAMES[broker]
+        for ticker, data in cb.items():
+            row = dict(data)
+            row["broker"] = name
+            row["symbol"] = ticker
+            key = ticker if counts[ticker] == 1 else f"{ticker} ({name})"
+            merged[key] = row
+
+    active = get_active_broker()
+    account_id = per_broker.get(active, (None, ""))[1]
+    if not account_id and per_broker:
+        account_id = next(iter(per_broker.values()))[1]
+    return merged, account_id, failures
+
+
+def fetch_all_balances():
+    """Return ({broker_name: balances}, failures) across every connected broker.
+
+    Same caveat as fetch_all_portfolio_data: a broker in `failures` contributes
+    nothing, so any total struck from this is a floor, not the answer.
+    """
+    per_broker, failures = {}, []
+    for broker in connected_brokers():
+        try:
+            if broker == "t212":
+                bal = t212_api.fetch_account_balances(_get_t212_creds())
+            elif broker == "ibkr":
+                bal = _get_ibkr().fetch_account_balances()
+            else:
+                bal = tastytrade_api.fetch_account_balances(
+                    refresh_token=_get_refresh_token()
+                )
+        except Exception as e:
+            failures.append((BROKER_NAMES[broker], e))
+            continue
+        per_broker[BROKER_NAMES[broker]] = bal or {}
+    return per_broker, failures
+
+
+def fetch_all_net_liq():
+    """Return (total, {broker_name: net_liq}, failures) across all brokers."""
+    per_broker, failures = fetch_all_balances()
+    values = {
+        name: (bal.get("net_liquidating_value") or 0.0)
+        for name, bal in per_broker.items()
+    }
+    return sum(values.values()), values, failures
+
+
+# ---------------------------------------------------------------------------
 # Shared functions (broker-independent, always route to tastytrade_api)
 # ---------------------------------------------------------------------------
 

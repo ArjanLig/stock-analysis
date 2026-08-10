@@ -46,12 +46,13 @@ from gather_data import (
     apply_fundamentals_overrides,
 )
 from broker_adapter import (
-    fetch_portfolio_data, fetch_current_prices, fetch_account_balances,
+    fetch_current_prices, fetch_account_balances,
     fetch_net_liq_history, fetch_benchmark_returns,
     fetch_ticker_profiles, fetch_yearly_transfers, fetch_margin_interest, fetch_margin_for_position, fetch_margin_requirements,
     fetch_greeks_and_bwd, fetch_option_chain,
     fetch_earnings_dates, has_active_broker, get_active_broker,
     fetch_benchmark_monthly_returns,
+    fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
 )
 import plotly.graph_objects as go
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
@@ -8860,35 +8861,48 @@ def _load_portfolio_data():
 
     if "portfolio_data" not in st.session_state:
         _active_broker = get_active_broker()
-        if _active_broker == "ibkr":
-            _broker_name = "Interactive Brokers"
-        elif _active_broker == "t212":
-            _broker_name = "Trading 212"
-        else:
-            _broker_name = "Tastytrade"
+        _broker_names = [BROKER_NAMES[b] for b in connected_brokers()]
+        _broker_name = " + ".join(_broker_names) or "your broker"
         with st.spinner(f"Fetching portfolio data from {_broker_name}..."):
             try:
-                cost_basis, acct = fetch_portfolio_data()
+                # Every connected broker, not just the active one: money moving
+                # from Tastytrade to Trading 212 lives at both for a while, and
+                # a portfolio that shows one of them is wrong in the only way
+                # that matters.
+                cost_basis, acct, _failures = fetch_all_portfolio_data()
                 st.session_state.portfolio_data = cost_basis
                 st.session_state.portfolio_account = acct
+                st.session_state.portfolio_broker_failures = [
+                    (n, str(e)) for n, e in _failures
+                ]
                 st.session_state.portfolio_fetched_at = time.time()
             except Exception as e:
-                if _is_auth_error(e):
-                    logger.warning("Broker auth failed — clearing token so user can reconnect")
-                    log_error("AUTH_ERROR", "Broker session expired", page="Portfolio", metadata={"broker": get_active_broker()})
-                    if _active_broker == "t212":
-                        st.session_state.pop("t212_credentials", None)
-                    elif _active_broker == "ibkr":
-                        st.session_state.pop("ibkr_credentials", None)
-                    else:
-                        st.session_state.pop("tt_refresh_token", None)
-                    st.session_state.pop("portfolio_data", None)
-                    st.error("Your broker session has expired. Please reconnect via **Account > Broker Connections**.")
-                else:
-                    logger.error("Portfolio fetch failed: %s", e, exc_info=True)
-                    log_error_with_trace("PORTFOLIO_ERROR", e, page="Portfolio", metadata={"broker": get_active_broker()})
-                    st.error(f"Failed to fetch portfolio data. Please try again. ({type(e).__name__})")
+                logger.error("Portfolio fetch failed: %s", e, exc_info=True)
+                log_error_with_trace("PORTFOLIO_ERROR", e, page="Portfolio", metadata={"broker": get_active_broker()})
+                st.error(f"Failed to fetch portfolio data. Please try again. ({type(e).__name__})")
                 st.stop()
+
+        # An expired session no longer aborts the whole fetch — it arrives as
+        # one broker's failure. Still clear that broker's token so the user
+        # gets the reconnect prompt instead of a silently short portfolio.
+        _cred_key = {"t212": "t212_credentials", "ibkr": "ibkr_credentials",
+                     "tastytrade": "tt_refresh_token"}
+        for _bname, _err in _failures:
+            _bkey = next((k for k, v in BROKER_NAMES.items() if v == _bname), None)
+            if _is_auth_error(_err):
+                logger.warning("%s auth failed — clearing token so user can reconnect", _bname)
+                log_error("AUTH_ERROR", "Broker session expired", page="Portfolio", metadata={"broker": _bkey})
+                st.session_state.pop(_cred_key.get(_bkey, ""), None)
+            else:
+                logger.error("%s portfolio fetch failed: %s", _bname, _err)
+                log_error_with_trace("PORTFOLIO_ERROR", _err, page="Portfolio", metadata={"broker": _bkey})
+
+    # Re-rendered on every run, not just the fetching one: a missing broker
+    # makes every total on this page a floor rather than the answer, and that
+    # has to stay on screen for as long as it is true.
+    for _bname, _msg in st.session_state.get("portfolio_broker_failures", []):
+        st.warning(f"Could not reach {_bname} — its positions are missing here, "
+                   f"so the totals below are incomplete. ({_msg})")
 
     cost_basis = st.session_state.portfolio_data
     acct = st.session_state.get("portfolio_account", "")
@@ -8898,10 +8912,13 @@ def _load_portfolio_data():
         st.stop()
 
     if "portfolio_prices" not in st.session_state:
-        active_tickers = [
-            t for t, d in cost_basis.items()
+        # d["symbol"] rather than the dict key: with two brokers the key may
+        # carry a broker suffix ("DECK (Trading 212)") and Yahoo has never
+        # heard of that.
+        active_tickers = sorted({
+            d.get("symbol", t) for t, d in cost_basis.items()
             if d["shares_held"] > 0 or _has_open_options(d)
-        ]
+        })
         if active_tickers:
             with st.spinner("Fetching current prices..."):
                 st.session_state.portfolio_prices = fetch_current_prices(active_tickers)
@@ -8911,7 +8928,7 @@ def _load_portfolio_data():
     prices = st.session_state.portfolio_prices
 
     for ticker, data in cost_basis.items():
-        price_data = prices.get(ticker)
+        price_data = prices.get(data.get("symbol", ticker))
         shares = data["shares_held"]
 
         # Prefer a quote the broker supplied. Yahoo is looked up on the bare
@@ -8941,6 +8958,30 @@ def _load_portfolio_data():
             data["total_pl_real"] = data["total_pl"]
 
     return cost_basis
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _logo_for(symbol, isin=None):
+    """Logo URL for a position, falling back to its ISIN.
+
+    Parqet indexes logos by symbol, but only resolves US-style tickers: the
+    Amundi ETF WEBN 404s there and renders as a blank square. The same fund
+    resolves fine under /logos/isin/IE0003XJA0J9, and T212 hands us the ISIN
+    with every position — so check the symbol once and fall back.
+
+    Cached for a day; a logo URL that worked this morning still works tonight.
+    """
+    import requests
+    symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
+    if not isin:
+        return symbol_url
+    try:
+        if requests.head(symbol_url, timeout=3, allow_redirects=True).status_code == 200:
+            return symbol_url
+    except Exception as e:
+        logger.debug("Logo HEAD failed for %s: %s", symbol, e)
+        return symbol_url
+    return f"https://assets.parqet.com/logos/isin/{isin}"
 
 
 def _color_val(val):
@@ -10001,12 +10042,18 @@ elif page == "Portfolio":
         st.info("No active positions.")
         st.stop()
 
-    held_tickers = list(held.keys())
+    # Symbols, not dict keys: the key carries a broker suffix once the same
+    # ticker is held at two brokers, and no quote or profile API knows it.
+    held_tickers = sorted({d.get("symbol", t) for t, d in held.items()})
 
     # ── Margin / Buying Power (with integrated simulator) ──
     @st.cache_data(ttl=60, show_spinner=False)
     def _cached_account_balances():
         return fetch_account_balances()
+
+    @st.cache_data(ttl=60, show_spinner=False)
+    def _cached_all_balances():
+        return fetch_all_balances()
 
     @st.cache_data(ttl=120, show_spinner=False)
     def _cached_margin_requirements():
@@ -10227,16 +10274,12 @@ elif page == "Portfolio":
 
     @st.fragment(run_every=timedelta(seconds=30))
     def _portfolio_cards():
-        # Fetch fresh prices + account balances
+        # Fetch fresh prices + account balances (every connected broker, since
+        # the hero card's headline is their sum)
         prices = fetch_current_prices(held_tickers)
-        try:
-            balances = fetch_account_balances()
-        except Exception as e:
-            logger.warning("Account balances fetch failed: %s", e)
-            balances = None
 
         for ticker, data in held.items():
-            price_data = prices.get(ticker)
+            price_data = prices.get(data.get("symbol", ticker))
             shares = data["shares_held"]
             if price_data and shares > 0:
                 p = price_data["price"]
@@ -10248,9 +10291,19 @@ elif page == "Portfolio":
                 data["previous_close"] = price_data.get("previousClose") or price_data["price"]
 
         # ── Hero card ──
-        if balances:
-            net_liq = balances["net_liquidating_value"]
-            cash = balances["cash_balance"]
+        # The header says "Net Liquidating Value" with no broker qualifier, so
+        # it has to be every broker's — one account's balance under that label
+        # is simply the wrong number while money sits at two brokers.
+        try:
+            _bal_by_broker, _bal_failures = _cached_all_balances()
+        except Exception as e:
+            logger.warning("Account balances fetch failed: %s", e)
+            _bal_by_broker, _bal_failures = {}, []
+        if _bal_by_broker:
+            net_liq = sum(b.get("net_liquidating_value") or 0.0
+                          for b in _bal_by_broker.values())
+            cash = sum(b.get("cash_balance") or 0.0
+                       for b in _bal_by_broker.values())
         else:
             net_liq = sum(d["market_value"] for d in held.values())
             cash = 0.0
@@ -10265,6 +10318,16 @@ elif page == "Portfolio":
         day_dollar_sign = "+" if day_chg_dollar >= 0 else ""
         nlv_cls = "hero-green" if net_liq >= 0 else "hero-red"
 
+        # With two brokers the headline is a sum, and a sum with no breakdown
+        # can't be checked against either account.
+        _broker_pills = ""
+        if len(_bal_by_broker) > 1:
+            _broker_pills = "".join(
+                f'<span class="stat-pill">{_bn} '
+                f'<b>${(_bb.get("net_liquidating_value") or 0.0):,.0f}</b></span>'
+                for _bn, _bb in _bal_by_broker.items()
+            )
+
         st.markdown(
             f'<div class="hero-card">'
             f'<p class="hero-label">Net Liquidating Value</p>'
@@ -10272,10 +10335,18 @@ elif page == "Portfolio":
             f'<p class="hero-sub"><span class="{day_chg_cls}">{day_chg_sign}{day_chg_pct:.2f}% ({day_dollar_sign}${abs(day_chg_dollar):,.0f})</span> today &nbsp;·&nbsp; {len(held)} active positions</p>'
             f'<div class="stat-row">'
             f'<span class="stat-pill">Cash <b>${cash:,.0f}</b></span>'
+            f'{_broker_pills}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
+
+        if _bal_failures:
+            st.caption(
+                "Balance unavailable for "
+                + ", ".join(n for n, _ in _bal_failures)
+                + " — the value above excludes it."
+            )
 
         # ── Column picker & Sort ──
         # Wheel-specific columns only mean something once a position has option
@@ -10294,6 +10365,13 @@ elif page == "Portfolio":
         if not _has_wheels:
             all_cols = [c for c in all_cols if c not in _wheel_only]
             default_cols = [c for c in default_cols if c not in _wheel_only]
+        # With one broker every row would say the same thing; with two, the
+        # same ticker can appear twice and the column is the only thing
+        # telling the rows apart.
+        _multi_broker = len({d.get("broker") for d in held.values() if d.get("broker")}) > 1
+        if _multi_broker:
+            all_cols.insert(0, "Broker")
+            default_cols.insert(0, "Broker")
         sort_options = ["Ticker", "Weight", "Day %", "Return %", "Unrealized P/L", "Mkt Value", "Ann. %", "Margin %"]
 
         with st.container(key="toolbar_inline"):
@@ -10375,9 +10453,15 @@ elif page == "Portfolio":
             shares = data["shares_held"]
             break_even = abs(wheel_cps) if last_wheel and shares else purchase_price
 
+            symbol = data.get("symbol", ticker)
             rows.append({
-                "Logo": f"https://assets.parqet.com/logos/symbol/{ticker}",
-                "Ticker": ticker,
+                # The position's key in `held`. Kept because "Ticker" is the
+                # bare symbol and two brokers can supply the same one — looking
+                # anything up by symbol would then hit the wrong position.
+                "_key": ticker,
+                "Logo": _logo_for(symbol, data.get("isin")),
+                "Ticker": symbol,
+                "Broker": data.get("broker", ""),
                 "Shares": shares,
                 "Cost Basis": purchase_price,
                 "Wheel Basis": wheel_cps,
@@ -10469,7 +10553,7 @@ elif page == "Portfolio":
             )
 
             ticker = row["Ticker"]
-            open_opts = opts_by_ticker.get(ticker)
+            open_opts = opts_by_ticker.get(row["_key"])
 
             if open_opts:
                 # Build option sub-cards
@@ -10740,7 +10824,7 @@ elif page == "Portfolio":
                 country_values = {}
                 for ticker, data in held.items():
                     mv = data["market_value"]
-                    profile = profiles.get(ticker, {})
+                    profile = profiles.get(data.get("symbol", ticker), {})
                     sector = profile.get("sector", "Unknown")
                     country = profile.get("country", "Unknown")
                     sector_values[sector] = sector_values.get(sector, 0) + mv

@@ -12,6 +12,8 @@ import time
 
 import requests
 
+import gather_data
+
 logger = logging.getLogger(__name__)
 
 LIVE_BASE_URL = "https://live.trading212.com/api/v0"
@@ -105,8 +107,19 @@ def fetch_portfolio_data(creds: dict):
         # that is the currency the app prices everything in — a cost basis of
         # EUR 140.76 sitting next to a Yahoo quote of USD 158.69 is a
         # comparison of two different things.
-        avg = pos.get("averagePricePaid") or 0.0
-        price = pos.get("currentPrice") or 0.0
+        native_avg = pos.get("averagePricePaid") or 0.0
+        native_price = pos.get("currentPrice") or 0.0
+        native_ccy = info["currency"] or ""
+
+        # Convert to USD, because that is the unit the app labels every figure
+        # with. A EUR-denominated ETF left at its own numbers under a "$" sign
+        # understates the holding and skews every weight in the table. When the
+        # rate is unknown the position keeps its own currency — a row that says
+        # EUR beats a dollar figure that is really euros.
+        rate = gather_data.fetch_fx_rate(native_ccy)
+        converted = rate is not None and native_ccy not in ("", "USD")
+        avg = native_avg * rate if converted else native_avg
+        price = native_price * rate if converted else native_price
         pl = (price - avg) * shares
 
         # equity_cost and cost_per_share are NEGATIVE by convention — cash that
@@ -141,12 +154,19 @@ def fetch_portfolio_data(creds: dict):
             # the bare "WEBN" 404s — leaving the row at $0 market value and
             # handing 100% of the portfolio weight to the other position.
             "broker_price": price,
-            # The currency the per-share figures above are in — the
-            # instrument's. Not cosmetic: a portfolio total that adds a EUR
-            # holding to a USD one without converting is simply wrong, so the
-            # label has to travel with the number.
-            "currency": info["currency"],
+            # What the figures above are in: USD once converted, otherwise the
+            # instrument's own. The native values are kept alongside so a row
+            # can show where it came from.
+            "currency": "USD" if converted or native_ccy == "USD" else native_ccy,
+            "native_currency": native_ccy,
+            "native_purchase_price": native_avg,
+            "native_price": native_price,
+            "fx_rate": rate if converted else 1.0,
             "exchange": info["exchange"],
+            # Parqet's logo index only resolves US-style tickers; the ISIN is
+            # the fallback that makes a European ETF show its logo instead of
+            # a blank square.
+            "isin": instrument.get("isin") or info["isin"],
             # Same position expressed in the account's currency, straight from
             # T212. Kept so a multi-currency total can be struck without
             # inventing an FX rate.
@@ -161,10 +181,24 @@ def fetch_portfolio_data(creds: dict):
 
 
 def fetch_account_balances(creds: dict) -> dict:
-    """Return the app balances dict from T212 account cash."""
+    """Return the app balances dict from T212 account cash, in USD.
+
+    A Dutch T212 account is denominated in EUR. These figures get added to a
+    Tastytrade balance to form the portfolio's combined value, so they have to
+    be in the same unit — otherwise the header understates the total by the
+    whole FX difference. "currency" says which unit actually came out, since
+    an unavailable rate leaves the numbers native rather than mislabelled.
+    """
     cash = _get("/equity/account/cash", creds, min_interval=5.0) or {}
-    total = cash.get("total") or 0.0
-    free = cash.get("free") or 0.0
+    info = _get("/equity/account/info", creds, min_interval=5.0) or {}
+    native = (info.get("currencyCode") or "USD").upper()
+
+    rate = gather_data.fetch_fx_rate(native)
+    converted = rate is not None and native != "USD"
+    fx = rate if converted else 1.0
+
+    total = (cash.get("total") or 0.0) * fx
+    free = (cash.get("free") or 0.0) * fx
     return {
         "net_liquidating_value": total,
         "cash_balance": free,
@@ -175,4 +209,7 @@ def fetch_account_balances(creds: dict) -> dict:
         "margin_equity": total,
         "used_derivative_buying_power": 0.0,
         "reg_t_margin_requirement": 0.0,
+        "currency": "USD" if converted or native == "USD" else native,
+        "native_currency": native,
+        "fx_rate": fx,
     }
