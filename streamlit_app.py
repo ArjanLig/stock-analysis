@@ -8913,6 +8913,15 @@ def _load_portfolio_data():
     for ticker, data in cost_basis.items():
         price_data = prices.get(ticker)
         shares = data["shares_held"]
+
+        # Prefer a quote the broker supplied. Yahoo is looked up on the bare
+        # symbol, which only resolves for US listings — a European ETF like
+        # WEBN (Xetra: WEBN.DE) 404s and the position silently falls to a $0
+        # market value, which then skews every weight in the table.
+        if not price_data and data.get("broker_price"):
+            price_data = {"price": data["broker_price"],
+                          "previousClose": data["broker_price"]}
+
         if price_data and shares > 0:
             price = price_data["price"]
             data["current_price"] = price
@@ -10269,11 +10278,22 @@ elif page == "Portfolio":
         )
 
         # ── Column picker & Sort ──
+        # Wheel-specific columns only mean something once a position has option
+        # legs. A Trading 212 account is plain buy-and-hold, so Wheel Basis,
+        # Premie, Days and Ann. % would sit there empty or — worse — show a
+        # figure reconstructed from trades that don't exist. Offer them only
+        # when there is a wheel to describe.
+        _has_wheels = any(d.get("wheels") for d in held.values())
+        _wheel_only = ["Wheel Basis", "Break-even", "Ann. %", "Premie", "Days"]
+
         all_cols = ["Shares", "Cost Basis", "Wheel Basis", "Break-even", "Current Price",
                     "Day %", "Mkt Value", "Unrealized P/L", "Return %", "Ann. %",
                     "Premie", "Days", "Weight", "Margin", "Margin %"]
         default_cols = ["Shares", "Cost Basis", "Wheel Basis", "Current Price", "Day %",
                         "Mkt Value", "Unrealized P/L", "Return %", "Weight"]
+        if not _has_wheels:
+            all_cols = [c for c in all_cols if c not in _wheel_only]
+            default_cols = [c for c in default_cols if c not in _wheel_only]
         sort_options = ["Ticker", "Weight", "Day %", "Return %", "Unrealized P/L", "Mkt Value", "Ann. %", "Margin %"]
 
         with st.container(key="toolbar_inline"):
@@ -10332,6 +10352,11 @@ elif page == "Portfolio":
                 wheel_cps = (wheel_equity_cost + wheel_option_pl) / shares if shares else 0.0
             else:
                 wheel_cps = data["cost_per_share"]
+                # A plain holding (Trading 212, or any broker without option
+                # legs): the purchase price lives on the position itself rather
+                # than being reconstructed from wheel trades that don't exist,
+                # which is why Cost Basis read $0.00 for every T212 row.
+                purchase_price = data.get("purchase_price") or abs(wheel_cps)
 
             unrealized = data["market_value"] + wheel_equity_cost if last_wheel else data["market_value"] + data["equity_cost"]
             days_held = (date.today() - last_wheel["start"]).days if last_wheel else 0

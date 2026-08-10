@@ -107,8 +107,15 @@ def fetch_portfolio_data(creds: dict):
         # comparison of two different things.
         avg = pos.get("averagePricePaid") or 0.0
         price = pos.get("currentPrice") or 0.0
-        cost = shares * avg
         pl = (price - avg) * shares
+
+        # equity_cost and cost_per_share are NEGATIVE by convention — cash that
+        # left the account. Tastytrade builds them by summing signed trade
+        # values, and the portfolio page relies on it: unrealized P/L is
+        # `market_value + equity_cost`. Handing back a positive cost turned
+        # that into an addition, which is how RDDT showed +212% on a losing
+        # position.
+        cost = -(shares * avg)
 
         cost_basis[symbol] = {
             "total_credits": 0,
@@ -119,9 +126,21 @@ def fetch_portfolio_data(creds: dict):
             "equity_cost": cost,
             "total_pl": pl,
             "adjusted_cost": cost,
-            "cost_per_share": avg,
+            "cost_per_share": -avg,      # negative, same convention as above
             "trades": [],
             "wheels": [],
+            # No option legs and no wheel cycles — a plain holding. The
+            # portfolio page reads this to pick the buy-and-hold column set
+            # instead of the wheel one, whose cost basis and days-held come
+            # from trades that do not exist here.
+            "buy_and_hold": True,
+            "purchase_price": avg,       # positive, for display
+            # T212 quotes the instrument itself, so the page doesn't have to
+            # guess a Yahoo symbol. It gets that wrong for anything not listed
+            # in the US: the Amundi ETF is WEBN.DE on Xetra, and a lookup on
+            # the bare "WEBN" 404s — leaving the row at $0 market value and
+            # handing 100% of the portfolio weight to the other position.
+            "broker_price": price,
             # The currency the per-share figures above are in — the
             # instrument's. Not cosmetic: a portfolio total that adds a EUR
             # holding to a USD one without converting is simply wrong, so the

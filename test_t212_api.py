@@ -138,8 +138,10 @@ class TestPortfolio(unittest.TestCase):
         cb, acct = t212_api.fetch_portfolio_data(_CREDS)
         self.assertEqual(acct, "42")
         self.assertEqual(cb["AAPL"]["shares_held"], 10)
-        self.assertEqual(cb["AAPL"]["cost_per_share"], 150.0)
-        self.assertEqual(cb["AAPL"]["adjusted_cost"], 1500.0)
+        # Negative by convention — see TestSignConvention.
+        self.assertEqual(cb["AAPL"]["cost_per_share"], -150.0)
+        self.assertEqual(cb["AAPL"]["adjusted_cost"], -1500.0)
+        self.assertEqual(cb["AAPL"]["purchase_price"], 150.0)
         self.assertEqual(cb["AAPL"]["total_pl"], 200.0)   # (170-150)x10, in USD
         self.assertEqual(cb["AAPL"]["option_pl"], 0)
         self.assertEqual(cb["AAPL"]["trades"], [])
@@ -147,7 +149,7 @@ class TestPortfolio(unittest.TestCase):
         # with the quote the app shows; the account-currency copy rides along
         # for striking a multi-currency total.
         self.assertEqual(cb["AAPL"]["currency"], "USD")
-        self.assertEqual(cb["AAPL"]["cost_per_share"], 150.0)      # USD, not EUR
+        self.assertEqual(cb["AAPL"]["purchase_price"], 150.0)      # USD, not EUR
         self.assertEqual(cb["AAPL"]["account_currency"], "EUR")
         self.assertEqual(cb["AAPL"]["account_cost"], 1500.0)
         self.assertEqual(cb["AAPL"]["account_value"], 1700.0)
@@ -271,3 +273,48 @@ class TestAdapterT212(unittest.TestCase):
             {"t212_credentials": _CREDS},
         ):
             self.assertTrue(broker_adapter.has_active_broker())
+
+
+class TestSignConvention(unittest.TestCase):
+    """equity_cost / cost_per_share are negative — cash that left the account.
+
+    The portfolio page computes unrealized P/L as `market_value + equity_cost`,
+    matching how Tastytrade sums signed trade values. Returning a positive cost
+    turned that subtraction into an addition: RDDT showed +$1,797 and +212.78%
+    on a position that was actually down.
+    """
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+
+    @patch("t212_api._get")
+    def test_costs_are_negative_and_pl_adds_up(self, mock_get):
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path == "/equity/positions":
+                return [{"instrument": {"ticker": "AAPL_US_EQ", "name": "Apple",
+                                        "isin": "US0378331005", "currency": "USD"},
+                         "quantity": 10, "averagePricePaid": 150.0,
+                         "currentPrice": 170.0,
+                         "walletImpact": {"currency": "EUR", "totalCost": 1500.0,
+                                          "currentValue": 1700.0,
+                                          "unrealizedProfitLoss": 200.0}}]
+            if path == "/equity/account/info":
+                return {"id": 42}
+            raise AssertionError(path)
+        mock_get.side_effect = _router
+
+        d = t212_api.fetch_portfolio_data(_CREDS)[0]["AAPL"]
+        self.assertEqual(d["equity_cost"], -1500.0)
+        self.assertEqual(d["cost_per_share"], -150.0)
+        self.assertEqual(d["purchase_price"], 150.0)   # positive, for display
+        self.assertTrue(d["buy_and_hold"])
+
+        # The page's formula must now yield the real P/L, not cost + value.
+        market_value = 10 * 170.0
+        self.assertEqual(market_value + d["equity_cost"], 200.0)
+        # ...and the return must be +13.3%, not +213%.
+        self.assertAlmostEqual(
+            (market_value + d["equity_cost"]) / abs(d["equity_cost"]) * 100,
+            13.333, places=2)
