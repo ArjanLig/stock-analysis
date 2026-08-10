@@ -8765,13 +8765,15 @@ with st.sidebar:
     st.markdown("---")
 
     if page in ("Portfolio", "Wheel Cost Basis", "Results"):
-        _active_broker = get_active_broker()
-        if _active_broker == "ibkr":
-            _broker_label = "Interactive Brokers"
-        elif _active_broker == "t212":
-            _broker_label = "Trading 212"
-        else:
-            _broker_label = "Tastytrade"
+        _broker_label = BROKER_NAMES.get(get_active_broker(), "Tastytrade")
+        # The Portfolio page has its own broker view, so name what is actually
+        # on screen — the sidebar reading "Tastytrade" above a combined table
+        # would be a label that contradicts the page.
+        if page == "Portfolio" and len(_connected) > 1:
+            # The widget's own key, not the copy the page writes afterwards:
+            # the sidebar renders before the page body, so the copy would show
+            # the previous selection for one interaction.
+            _broker_label = st.session_state.get("portfolio_view_select") or "Overview"
         st.markdown(f"### {_broker_label}")
         if st.button("Refresh Data", use_container_width=True, type="primary"):
             st.session_state.pop("portfolio_data", None)
@@ -10038,7 +10040,30 @@ elif page == "Portfolio":
         if d["shares_held"] > 0 or _has_open_options(d)
     }
 
+    # ── Broker view ──
+    # The combined picture answers "how am I doing"; the per-broker one answers
+    # "does this match what my broker shows me", which is the only way to check
+    # the combined figure is right. Both are worth keeping, so pick one rather
+    # than replacing the old view with the sum.
+    _view_brokers = [BROKER_NAMES[b] for b in connected_brokers()]
+    portfolio_view = "Overview"
+    if len(_view_brokers) > 1:
+        portfolio_view = st.segmented_control(
+            "Broker view",
+            ["Overview", *_view_brokers],
+            default=st.session_state.get("_portfolio_view", "Overview"),
+            key="portfolio_view_select",
+            label_visibility="collapsed",
+        ) or "Overview"
+        st.session_state["_portfolio_view"] = portfolio_view
+        if portfolio_view != "Overview":
+            held = {t: d for t, d in held.items()
+                    if d.get("broker") == portfolio_view}
+
     if not held:
+        if portfolio_view != "Overview":
+            st.info(f"No active positions at {portfolio_view}.")
+            st.stop()
         st.info("No active positions.")
         st.stop()
 
@@ -10299,6 +10324,12 @@ elif page == "Portfolio":
         except Exception as e:
             logger.warning("Account balances fetch failed: %s", e)
             _bal_by_broker, _bal_failures = {}, []
+        # Read from session_state, not the closure: this fragment re-runs on its
+        # own timer and must follow whichever broker view is on screen now.
+        _view = st.session_state.get("_portfolio_view", "Overview")
+        if _view != "Overview":
+            _bal_by_broker = {k: v for k, v in _bal_by_broker.items() if k == _view}
+            _bal_failures = [f for f in _bal_failures if f[0] == _view]
         if _bal_by_broker:
             net_liq = sum(b.get("net_liquidating_value") or 0.0
                           for b in _bal_by_broker.values())
