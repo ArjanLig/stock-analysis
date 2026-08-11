@@ -10308,13 +10308,23 @@ elif page == "Portfolio":
                 )
 
         # ── Target size ──
-        _new_pct = st.number_input(
-            "Full position size (% of portfolio)",
-            min_value=0.5, max_value=50.0, step=0.5,
-            value=target_pct, key="_target_pos_input",
-            help="One setting for the whole portfolio: what counts as a full "
-                 "position. A holding within 10% of it is treated as full.",
-        )
+        # Narrow column: a percentage never needs the full page width, and a
+        # stretched input reads as the main control on a card where it is a
+        # setting. The sentence beside it carries what the label had to drop.
+        _ts_left, _ts_right = st.columns([1, 3], vertical_alignment="bottom")
+        with _ts_left:
+            _new_pct = st.number_input(
+                "Full position %",
+                min_value=0.5, max_value=50.0, step=0.5, format="%.1f",
+                value=target_pct, key="_target_pos_input",
+                label_visibility="collapsed",
+            )
+        with _ts_right:
+            st.caption(
+                f"Full position = {target_pct:.1f}% of the portfolio "
+                f"(${dep['target']:,.0f}). Anything within 10% of that counts "
+                f"as full."
+            )
         if abs(_new_pct - target_pct) > 1e-9:
             st.session_state["_target_pos_pct"] = _new_pct
             _prefs_now = load_user_prefs(_sb_client)
