@@ -5,7 +5,7 @@ from datetime import date
 
 from portfolio_metrics import (compute_deployment, display_basis,
                                held_share_cost, has_option_legs,
-                               fifo_realized)
+                               fifo_realized, open_lots, relative_performance)
 
 
 def _pos(mv, symbol=None):
@@ -278,6 +278,81 @@ class TestFifoRealized(unittest.TestCase):
         """History can start mid-position. Booking the whole proceeds as profit
         would invent a gain out of a missing purchase."""
         self.assertEqual(fifo_realized([_eq(5, 50.0, action="Sell to Close")]), [])
+
+
+class TestOpenLots(unittest.TestCase):
+    def test_lots_keep_their_purchase_date(self):
+        """Relative performance is measured from the day the money went in, so
+        a lot without its date cannot be compared to anything."""
+        trades = [_eq(10, 50.0, d=date(2025, 1, 6)),
+                  _eq(5, 80.0, d=date(2026, 3, 2))]
+        lots = open_lots(trades)
+        self.assertEqual([(lot["quantity"], lot["price"], lot["date"]) for lot in lots],
+                         [(10, 50.0, date(2025, 1, 6)), (5, 80.0, date(2026, 3, 2))])
+
+    def test_a_sale_removes_the_oldest_lot_and_its_date_with_it(self):
+        """After selling the 2025 lot the position is 2026 money, and its
+        performance should be measured from 2026."""
+        trades = [_eq(10, 50.0, d=date(2025, 1, 6)),
+                  _eq(5, 80.0, d=date(2026, 3, 2)),
+                  _eq(10, 60.0, action="Sell to Close", d=date(2026, 4, 1))]
+        lots = open_lots(trades)
+        self.assertEqual([lot["date"] for lot in lots], [date(2026, 3, 2)])
+
+
+class TestRelativePerformance(unittest.TestCase):
+    # SPY closes used by every case below
+    INDEX = {date(2025, 1, 6): 100.0, date(2026, 3, 2): 120.0,
+             date(2026, 8, 11): 150.0}
+
+    def test_a_single_lot_is_measured_against_the_index_over_its_own_window(self):
+        """Bought when SPY was 100, SPY now 150: the index did +50%. The stock
+        went 50 -> 90, or +80%. Beating it by 30 points."""
+        lots = [{"quantity": 10, "price": 50.0, "date": date(2025, 1, 6)}]
+        r = relative_performance(lots, 90.0, self.INDEX, date(2026, 8, 11))
+        self.assertAlmostEqual(r["position_return"], 80.0)
+        self.assertAlmostEqual(r["index_return"], 50.0)
+        self.assertAlmostEqual(r["alpha"], 30.0)
+
+    def test_two_lots_are_weighted_by_money_not_by_count(self):
+        """A $500 lot from 2025 and a $400 lot from 2026 each faced a different
+        index window. Averaging the two returns equally would let a small late
+        top-up drag the verdict on a large long-held position."""
+        lots = [{"quantity": 10, "price": 50.0, "date": date(2025, 1, 6)},
+                {"quantity": 5, "price": 80.0, "date": date(2026, 3, 2)}]
+        r = relative_performance(lots, 90.0, self.INDEX, date(2026, 8, 11))
+        # index: +50% on 500 of cost, +25% on 400 -> 38.9% weighted
+        self.assertAlmostEqual(r["index_return"], 38.89, places=1)
+        # position: 90 vs a 60.0 weighted cost -> +50%
+        self.assertAlmostEqual(r["position_return"], 50.0, places=1)
+        self.assertAlmostEqual(r["alpha"], 11.11, places=1)
+
+    def test_the_index_close_falls_back_to_the_nearest_earlier_day(self):
+        """Buy on a Saturday and there is no close for that date. Skipping the
+        lot would silently drop it from the comparison."""
+        lots = [{"quantity": 1, "price": 50.0, "date": date(2025, 1, 8)}]
+        r = relative_performance(lots, 75.0, self.INDEX, date(2026, 8, 11))
+        self.assertAlmostEqual(r["index_return"], 50.0)
+
+    def test_a_lot_older_than_the_index_history_is_reported_not_guessed(self):
+        """Anchoring it to the oldest close we happen to have would understate
+        the index and hand the position free alpha."""
+        lots = [{"quantity": 1, "price": 50.0, "date": date(2020, 1, 1)}]
+        r = relative_performance(lots, 75.0, self.INDEX, date(2026, 8, 11))
+        self.assertIsNone(r["alpha"])
+        self.assertEqual(r["uncovered_cost"], 50.0)
+
+    def test_days_held_is_money_weighted(self):
+        """So a card can say when a comparison is too young to mean anything."""
+        lots = [{"quantity": 10, "price": 50.0, "date": date(2025, 1, 6)},
+                {"quantity": 5, "price": 80.0, "date": date(2026, 3, 2)}]
+        r = relative_performance(lots, 90.0, self.INDEX, date(2026, 8, 11))
+        self.assertEqual(r["days_held"], round((500 * 582 + 400 * 162) / 900))
+
+    def test_no_lots_yields_nothing_rather_than_zero(self):
+        """Zero alpha reads as "kept pace"; there is nothing to keep pace."""
+        r = relative_performance([], 90.0, self.INDEX, date(2026, 8, 11))
+        self.assertIsNone(r["alpha"])
 
 
 if __name__ == "__main__":

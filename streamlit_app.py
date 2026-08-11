@@ -48,16 +48,16 @@ from gather_data import (
 from broker_adapter import (
     fetch_current_prices, fetch_account_balances,
     fetch_net_liq_history, fetch_benchmark_returns,
-    fetch_ticker_profiles, fetch_yearly_transfers, fetch_margin_interest, fetch_margin_requirements,
-    fetch_greeks_and_bwd, fetch_option_chain,
+    fetch_ticker_profiles, fetch_yearly_transfers, fetch_margin_requirements,
+    fetch_option_chain,
     fetch_earnings_dates, has_active_broker, get_active_broker,
     fetch_benchmark_monthly_returns,
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
 )
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
-                               held_share_cost, fifo_realized,
-                               DEFAULT_TARGET_POS_PCT)
+                               held_share_cost, fifo_realized, open_lots,
+                               relative_performance, DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -10662,206 +10662,114 @@ elif page == "Portfolio":
     with st.container(key="deployment_block"):
         _deployment_overview()
 
-    # ── Portfolio Greeks, BWD & Margin Interest ──
-    gk = None
-    bwd = None
-    mi = None
+    # ── Contribution & Relative performance ──
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def _cached_index_closes(symbol="SPY", years=5):
+        return gather_data.fetch_daily_closes(symbol, years)
+
+    _perf_rows = []
+    _index_closes = {}
     try:
-        from concurrent.futures import ThreadPoolExecutor
-        # Combined greeks+BWD uses one DXLink streamer (avoids concurrent
-        # websocket conflicts); margin interest runs in parallel (no streamer).
-        executor = ThreadPoolExecutor(max_workers=2)
-        f_combo = executor.submit(fetch_greeks_and_bwd)
-        f_mi = executor.submit(fetch_margin_interest)
-        try:
-            gk, bwd = f_combo.result(timeout=30)
-        except Exception as e:
-            if not _is_auth_error(e):
-                logger.warning("Greeks/BWD fetch failed: %s", e)
-                log_error_with_trace("PORTFOLIO_ERROR", e, page="Portfolio", metadata={"component": "greeks_bwd"})
-            else:
-                logger.debug("Greeks/BWD skipped — broker auth expired")
-            gk, bwd = None, None
-        try:
-            mi = f_mi.result(timeout=10)
-        except Exception as e:
-            if not _is_auth_error(e):
-                logger.debug("Margin interest fetch failed: %s", e)
-                log_error("PORTFOLIO_ERROR", str(e), page="Portfolio", metadata={"component": "margin_interest"})
-            mi = None
-        executor.shutdown(wait=False, cancel_futures=True)
+        _index_closes = _cached_index_closes()
     except Exception as e:
-        if not _is_auth_error(e):
-            logger.warning("Risk dashboard data fetch failed: %s", e)
-            log_error_with_trace("PORTFOLIO_ERROR", e, page="Portfolio", metadata={"component": "risk_dashboard"})
+        logger.warning("Index history unavailable: %s", e)
 
-    cash = st.session_state.get("_margin_cash", 0.0)
-    debt = abs(cash) if cash < 0 else 0.0
-    has_greeks = gk and gk["positions"]
-    has_bwd = bwd and bwd["spy_price"] > 0
-    has_interest = debt > 0 or (mi and mi["total"] < 0)
-    _broker_active = has_active_broker()
-    greeks_unavailable = not has_greeks and _broker_active
-    bwd_unavailable = not has_bwd and _broker_active
-
-    # Map fetch_greeks_and_bwd diagnostic → user-visible label.
-    def _diag_label(diag, kind):
-        diag = diag or {}
-        outcome = diag.get("outcome", "unknown")
-        if outcome == "no_positions":
-            return ("No positions", "")
-        if outcome == "no_options":
-            if kind == "greeks":
-                return ("No option positions", "Live Greeks only apply to options")
-            return ("Live data unavailable", "Couldn't fetch SPY price")
-        if outcome == "symbol_conversion_failed":
-            return ("Couldn't parse option symbols", "Internal issue — please report")
-        if outcome == "stream_unreachable":
-            err = diag.get("streamer_error") or "TastyTrade DXLink connection failed"
-            return ("Live feed unreachable", err)
-        if outcome == "stream_silent":
-            if kind == "greeks":
-                return ("No live Greeks received", "Stream connected but returned nothing — try refresh")
-            return ("No live quotes received", "Stream connected but returned nothing — try refresh")
-        if outcome == "stream_partial":
-            return ("Partial live data", "Some symbols missing — try refresh")
-        if outcome == "exception":
-            err = diag.get("streamer_error") or "Internal error"
-            return ("Couldn't load", err)
-        # Unmapped outcome — don't assert "market closed" as the cause (it
-        # often isn't). State it's unexpected and list market hours only as
-        # one possibility. fetch_greeks_and_bwd should always set a specific
-        # outcome; reaching here means a code path that needs investigating.
-        return ("Live data unavailable",
-                "Couldn't determine the cause — try refresh. Live Greeks also need "
-                "US market hours (9:30 AM – 4:00 PM ET).")
-
-    _cards = []
-    if has_greeks or greeks_unavailable:
-        _cards.append("greeks")
-    if has_bwd or bwd_unavailable:
-        _cards.append("bwd")
-    if has_interest:
-        _cards.append("interest")
-
-    if _cards:
-        # Build card HTML fragments
-        _card_htmls = []
-
-        if has_greeks:
-            tot = gk["totals"]
-            theta = tot["theta"]
-            delta = tot["delta"]
-            vega = tot["vega"]
-            theta_color = T['accent'] if theta >= 0 else T['red']
-            _card_htmls.append(
-                f'<div class="hero-card">'
-                f'<h4>Portfolio Greeks</h4>'
-                f'<div style="text-align:center;margin-bottom:16px">'
-                f'  <span style="font-size:1.6rem;font-weight:700;color:{theta_color}">${theta:,.0f}</span>'
-                f'  <span style="font-size:0.85rem;color:{T["text_muted"]}">theta / day</span>'
-                f'</div>'
-                f'<div class="stat-row">'
-                f'<span class="stat-pill">Delta <b>{delta:,.0f}</b>'
-                f'  <span style="font-size:0.7rem;color:{T["text_muted"]}">$ per $1 move</span></span>'
-                f'<span class="stat-pill">Vega <b>${vega:,.0f}</b>'
-                f'  <span style="font-size:0.7rem;color:{T["text_muted"]}">per 1%% IV</span></span>'
-                f'</div>'
-                f'</div>'
+    _today = date.today()
+    for _tk, _d in held.items():
+        _sym = _d.get("symbol", _tk)
+        _mv = _d.get("market_value") or 0.0
+        # Contribution is in dollars: a 40% gain on a 1% position moved nothing.
+        _contrib = _mv + (_d.get("equity_cost") or 0.0) + (_d.get("option_pl") or 0.0)
+        _rel = None
+        if _index_closes and _d.get("trades"):
+            _rel = relative_performance(
+                open_lots(_d["trades"]), _d.get("current_price") or 0.0,
+                _index_closes, _today,
             )
-        elif greeks_unavailable:
-            _g_title, _g_sub = _diag_label((gk or {}).get("diagnostic"), "greeks")
-            _card_htmls.append(
-                f'<div class="hero-card">'
-                f'<h4>Portfolio Greeks</h4>'
-                f'<div style="text-align:center;margin-bottom:16px">'
-                f'  <span style="font-size:1.1rem;color:{T["text_muted"]}">{_g_title}</span>'
-                f'</div>'
-                f'<div style="text-align:center;font-size:0.83rem;color:{T["text_muted"]}">'
-                f'{_g_sub}</div>'
-                f'</div>'
-            )
+        _perf_rows.append({
+            "ticker": _sym, "broker": _d.get("broker", ""),
+            "contribution": _contrib, "market_value": _mv, "rel": _rel,
+        })
 
-        if has_bwd:
-            _bwd_total = bwd["portfolio_bwd"]
-            _spy_p = bwd["spy_price"]
-            _dollar_1pct = bwd["dollar_per_1pct"]
-            _nlv = st.session_state.get("_net_liq", 0)
-            _port_pct = (_dollar_1pct / _nlv * 100) if _nlv > 0 else 0
-            _pct_color = T['red'] if _port_pct > 0 else T['accent']
+    _by_contrib = sorted(_perf_rows, key=lambda r: r["contribution"], reverse=True)
+    _rated = [r for r in _perf_rows if r["rel"] and r["rel"]["alpha"] is not None]
+    _behind = sorted([r for r in _rated if r["rel"]["alpha"] < 0],
+                     key=lambda r: r["rel"]["alpha"])
 
-            _td = f'padding:4px 8px;border-bottom:1px solid {T["divider"]}'
-            _bwd_rows = ""
-            for bp in bwd["positions"]:
-                _bp_loss = -bp["dollar_per_1pct"]
-                _bp_color = T['red'] if _bp_loss < 0 else T['accent']
-                _bwd_rows += (
-                    f'<tr>'
-                    f'<td style="{_td}">{bp["ticker"]}</td>'
-                    f'<td style="{_td};text-align:right">{bp["beta"]:.2f}</td>'
-                    f'<td style="{_td};text-align:right">{bp["bwd"]:+,.1f}</td>'
-                    f'<td style="{_td};text-align:right;color:{_bp_color}">${_bp_loss:+,.0f}</td>'
-                    f'</tr>'
-                )
-            _card_htmls.append(
-                f'<div class="hero-card">'
-                f'<h4>Beta-Weighted Delta</h4>'
-                f'<div style="text-align:center;margin-bottom:16px">'
-                f'  <span style="font-size:1.6rem;font-weight:700;color:{_pct_color}">-{_port_pct:.2f}%</span>'
-                f'  <span style="font-size:0.85rem;color:{T["text_muted"]}">if S&P 500 drops 1%</span>'
-                f'</div>'
-                f'<div class="stat-row">'
-                f'<span class="stat-pill">P/L <b style="color:{_pct_color}">-${abs(_dollar_1pct):,.0f}</b></span>'
-                f'<span class="stat-pill">BWD <b>{_bwd_total:+,.1f}</b></span>'
-                f'<span class="stat-pill">SPY <b>${_spy_p:,.0f}</b></span>'
-                f'</div>'
-                f'<details style="margin-top:8px">'
-                f'<summary style="cursor:pointer;font-size:0.8rem;color:{T["text_muted"]}">Breakdown</summary>'
-                f'<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-top:6px">'
-                f'<thead><tr style="color:{T["text_muted"]};font-size:0.7rem;text-transform:uppercase">'
-                f'<th style="text-align:left;padding:3px 8px;border-bottom:1px solid {T["border_medium"]}">Ticker</th>'
-                f'<th style="text-align:right;padding:3px 8px;border-bottom:1px solid {T["border_medium"]}">Beta</th>'
-                f'<th style="text-align:right;padding:3px 8px;border-bottom:1px solid {T["border_medium"]}">BWD</th>'
-                f'<th style="text-align:right;padding:3px 8px;border-bottom:1px solid {T["border_medium"]}">P/L</th>'
-                f'</tr></thead>'
-                f'<tbody>{_bwd_rows}</tbody>'
-                f'</table>'
-                f'</details>'
-                f'</div>'
-            )
-        elif bwd_unavailable:
-            _b_title, _b_sub = _diag_label((bwd or {}).get("diagnostic"), "bwd")
-            _card_htmls.append(
-                f'<div class="hero-card">'
-                f'<h4>Beta-Weighted Delta</h4>'
-                f'<div style="text-align:center;margin-bottom:16px">'
-                f'  <span style="font-size:1.1rem;color:{T["text_muted"]}">{_b_title}</span>'
-                f'</div>'
-                f'<div style="text-align:center;font-size:0.83rem;color:{T["text_muted"]}">'
-                f'{_b_sub}</div>'
-                f'</div>'
-            )
+    def _row_html(label, value, color):
+        return (
+            f'<div style="display:flex;justify-content:space-between;'
+            f'padding:5px 0;border-top:1px solid {T["divider"]}">'
+            f'<span style="color:{T["text"]}">{label}</span>'
+            f'<span style="font-weight:600;color:{color}">{value}</span>'
+            f'</div>'
+        )
 
-        if has_interest:
-            cur_mo = abs(mi["current_month"]) if mi else 0
-            ytd = abs(mi["ytd"]) if mi else 0
-            total_int = abs(mi["total"]) if mi else 0
-            _card_htmls.append(
-                f'<div class="hero-card">'
-                f'<h4>Margin Interest</h4>'
-                f'<div style="text-align:center;margin-bottom:16px">'
-                f'  <span style="font-size:1.6rem;font-weight:700;color:{T["red"]}">${debt:,.0f}</span>'
-                f'  <span style="font-size:0.85rem;color:{T["text_muted"]}">margin debt</span>'
-                f'</div>'
-                f'<div class="stat-row">'
-                f'<span class="stat-pill">This Month <b style="color:{T["red"]}">-${cur_mo:,.0f}</b></span>'
-                f'<span class="stat-pill">YTD <b style="color:{T["red"]}">-${ytd:,.0f}</b></span>'
-                f'<span class="stat-pill">All Time <b style="color:{T["red"]}">-${total_int:,.0f}</b></span>'
-                f'</div>'
-                f'</div>'
-            )
+    _card_htmls = []
 
-        # Render as single HTML grid
+    # Contribution: what actually moved the portfolio, in money.
+    _movers = [r for r in _by_contrib if abs(r["contribution"]) >= 0.005]
+    if _movers:
+        _top = _movers[:3]
+        _bottom = [r for r in _movers[-3:] if r not in _top]
+        _total_contrib = sum(r["contribution"] for r in _perf_rows)
+        _rows = "".join(
+            _row_html(r["ticker"], f'${r["contribution"]:+,.0f}',
+                      T["accent"] if r["contribution"] >= 0 else T["red"])
+            for r in _top + list(reversed(_bottom))
+        )
+        _card_htmls.append(
+            f'<div class="hero-card">'
+            f'<h4>Contribution</h4>'
+            f'<div style="text-align:center;margin-bottom:12px">'
+            f'<span style="font-size:1.8rem;font-weight:700;'
+            f'color:{T["accent"] if _total_contrib >= 0 else T["red"]}">'
+            f'${_total_contrib:+,.0f}</span>'
+            f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
+            f'open positions, unrealized</div></div>'
+            f'{_rows}'
+            f'</div>'
+        )
+
+    # Relative performance: is each name earning its place against the index?
+    if _rated:
+        _rows = "".join(
+            _row_html(
+                f'{r["ticker"]}'
+                + ('<span style="font-size:0.7rem;color:' + T["text_muted"]
+                   + '"> · too early</span>' if r["rel"]["days_held"] < 90 else ''),
+                f'{r["rel"]["alpha"]:+.0f} pts',
+                T["accent"] if r["rel"]["alpha"] >= 0 else T["red"],
+            )
+            for r in sorted(_rated, key=lambda r: r["rel"]["alpha"], reverse=True)
+        )
+        _n_behind = len(_behind)
+        _summary_color = T["red"] if _n_behind > len(_rated) / 2 else T["accent"]
+        _uncovered = sum(1 for r in _perf_rows
+                         if r["rel"] and r["rel"]["alpha"] is None)
+        _no_dates = len(_perf_rows) - len(_rated) - _uncovered
+        _missing = _uncovered + _no_dates
+        _foot = (
+            f'<div style="font-size:0.72rem;color:{T["text_muted"]};margin-top:8px">'
+            f'Price return since each purchase, against SPY over the same days. '
+            f'Dividends counted on neither side.'
+            + (f' {_missing} position(s) have no purchase date to measure from.'
+               if _missing else '')
+            + '</div>'
+        )
+        _card_htmls.append(
+            f'<div class="hero-card">'
+            f'<h4>vs S&amp;P 500</h4>'
+            f'<div style="text-align:center;margin-bottom:12px">'
+            f'<span style="font-size:1.8rem;font-weight:700;color:{_summary_color}">'
+            f'{_n_behind} of {len(_rated)}</span>'
+            f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
+            f'behind the index since you bought</div></div>'
+            f'{_rows}{_foot}'
+            f'</div>'
+        )
+
+    if _card_htmls:
         st.markdown(
             f'<div class="greeks-grid">{"".join(_card_htmls)}</div>',
             unsafe_allow_html=True,

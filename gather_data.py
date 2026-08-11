@@ -813,6 +813,34 @@ def fetch_stock_price(ticker):
         return 0, 0, 0
 
 
+def fetch_daily_closes(ticker, years=5):
+    """Daily closing prices as {date: close}, newest year(s) first available.
+
+    One call covers every entry date in a portfolio, which is why this returns
+    the whole series rather than taking a date: comparing each holding to the
+    index over its own window would otherwise be one request per position.
+    """
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+        f"?interval=1d&range={int(years)}y"
+    )
+    try:
+        data = _http_get_json(url, YAHOO_HEADERS)
+        result = data["chart"]["result"][0]
+        timestamps = result["timestamp"]
+        closes = result["indicators"]["quote"][0]["close"]
+    except Exception as e:
+        print(f"  WARNING: daily closes unavailable for {ticker}: {e}")
+        return {}
+
+    out = {}
+    for ts, close in zip(timestamps, closes):
+        if close is None:
+            continue
+        out[datetime.fromtimestamp(ts).date()] = close
+    return out
+
+
 def fetch_historical_prices(ticker, years):
     """Fetch historical year-end stock prices from Yahoo Finance chart API.
 

@@ -96,6 +96,85 @@ def fifo_realized(trades):
     return sales
 
 
+def open_lots(trades):
+    """The share lots still held, oldest first: [{quantity, price, date}].
+
+    Same FIFO walk as everything else here, but keeping each lot's purchase
+    date — relative performance is measured from the day the money went in, and
+    a lot without its date cannot be compared to anything.
+    """
+    lots = []
+    for t, qty, price, is_buy in _equity_lots(trades):
+        if is_buy:
+            lots.append({"quantity": qty, "price": price, "date": t.get("date")})
+            continue
+        remaining = qty
+        while remaining > 0 and lots:
+            take = min(lots[0]["quantity"], remaining)
+            lots[0]["quantity"] -= take
+            remaining -= take
+            if lots[0]["quantity"] <= 0:
+                lots.pop(0)
+    return lots
+
+
+def _close_on_or_before(closes, day):
+    """The index close for `day`, or the nearest earlier one.
+
+    Buy on a Saturday and there is no close for that date; skipping the lot
+    would drop it from the comparison without saying so.
+    """
+    if not closes or day is None:
+        return None
+    if day in closes:
+        return closes[day]
+    earlier = [d for d in closes if d <= day]
+    return closes[max(earlier)] if earlier else None
+
+
+def relative_performance(lots, current_price, index_closes, today):
+    """How the position has done against the index, per lot, money-weighted.
+
+    Each lot faced its own stretch of market, so a January purchase and a
+    March top-up are compared to different index windows and then weighted by
+    cost. Averaging the two returns equally would let a small late top-up
+    decide the verdict on a large long-held position.
+
+    Price return on both sides — dividends are counted in neither, so the
+    comparison stays like-for-like.
+
+    A lot older than the index history we hold is reported through
+    `uncovered_cost` rather than anchored to the oldest close available, which
+    would understate the index and hand the position free alpha.
+    """
+    cost = index_value = weighted_days = uncovered = 0.0
+    for lot in lots:
+        lot_cost = lot["quantity"] * lot["price"]
+        start = _close_on_or_before(index_closes, lot.get("date"))
+        if not start or not lot.get("date"):
+            uncovered += lot_cost
+            continue
+        cost += lot_cost
+        index_value += lot_cost * (index_closes[max(index_closes)] / start)
+        weighted_days += lot_cost * (today - lot["date"]).days
+
+    if cost <= 0:
+        return {"position_return": None, "index_return": None, "alpha": None,
+                "days_held": None, "uncovered_cost": uncovered}
+
+    shares = sum(lot["quantity"] for lot in lots
+                 if _close_on_or_before(index_closes, lot.get("date")))
+    position_return = (current_price * shares / cost - 1) * 100
+    index_return = (index_value / cost - 1) * 100
+    return {
+        "position_return": position_return,
+        "index_return": index_return,
+        "alpha": position_return - index_return,
+        "days_held": round(weighted_days / cost),
+        "uncovered_cost": uncovered,
+    }
+
+
 def held_share_cost(trades):
     """FIFO cost of the shares still held: (total_cost, shares).
 
