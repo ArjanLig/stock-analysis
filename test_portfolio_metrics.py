@@ -2,7 +2,7 @@
 
 import unittest
 
-from portfolio_metrics import compute_deployment
+from portfolio_metrics import compute_deployment, display_basis
 
 
 def _pos(mv, symbol=None):
@@ -118,6 +118,25 @@ class TestBelowBuyPrice(unittest.TestCase):
                                prices={"A": 90.0}, buy_prices={})
         self.assertEqual(d["below_buy"], [])
         self.assertEqual(d["valued_count"], 0)
+
+
+class TestDisplayBasis(unittest.TestCase):
+    """Turning a signed cash flow into a price you can read off a column."""
+
+    def test_cash_paid_out_becomes_a_positive_price(self):
+        """8 NFLX at 67.73 costs -541.82 in cash; the cost basis is 67.73, not
+        -67.73. The portfolio table printed the raw cash figure and so showed a
+        negative price in the Wheel Basis column."""
+        self.assertAlmostEqual(display_basis(-67.727), 67.727)
+
+    def test_premiums_beyond_the_share_cost_leave_a_negative_basis(self):
+        """Collect more in premium than the shares cost and the basis really is
+        below zero — you are net paid to hold them. abs() would have reported
+        +5.00 here, which reads as a cost and inverts the meaning."""
+        self.assertAlmostEqual(display_basis(5.0), -5.0)
+
+    def test_zero_stays_zero(self):
+        self.assertEqual(display_basis(0.0), 0.0)
 
 
 if __name__ == "__main__":

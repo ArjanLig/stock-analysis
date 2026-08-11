@@ -17,6 +17,20 @@ FILL_BAND = 0.90
 DEFAULT_TARGET_POS_PCT = 5.0
 
 
+def display_basis(net_cash_per_share):
+    """Turn a signed per-share cash flow into the price a column should show.
+
+    Cost basis is carried through the app as cash: buying shares is money out,
+    so it is negative, and premiums collected push it back up. A column headed
+    "Wheel Basis" wants the price, which is the negation.
+
+    Negation, not abs(): once premiums exceed what the shares cost, the basis
+    really is below zero — you have been paid to hold them. abs() would print
+    that as a cost and invert the meaning of the one case worth spotting.
+    """
+    return -net_cash_per_share
+
+
 def compute_deployment(held, net_liq, cash, target_pct,
                        prices=None, buy_prices=None):
     """Summarise how much of the portfolio is committed and what is left.

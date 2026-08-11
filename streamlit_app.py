@@ -55,7 +55,7 @@ from broker_adapter import (
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
 )
 import plotly.graph_objects as go
-from portfolio_metrics import compute_deployment, DEFAULT_TARGET_POS_PCT
+from portfolio_metrics import compute_deployment, display_basis, DEFAULT_TARGET_POS_PCT
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -10432,7 +10432,14 @@ elif page == "Portfolio":
         # Premie, Days and Ann. % would sit there empty or — worse — show a
         # figure reconstructed from trades that don't exist. Offer them only
         # when there is a wheel to describe.
-        _has_wheels = any(d.get("wheels") for d in held.values())
+        # Option legs, not cycles. detect_wheels returns a cycle for any share
+        # position — a plain buy sits in an "active" one — so testing for
+        # cycles said every Tastytrade account wheels. NFLX is eight shares
+        # bought once with no option ever written against them.
+        _has_wheels = any(
+            "Option" in (t.get("instrument_type") or "")
+            for d in held.values() for t in d.get("trades", [])
+        )
         _wheel_only = ["Wheel Basis", "Break-even", "Ann. %", "Premie", "Days"]
 
         all_cols = ["Shares", "Cost Basis", "Wheel Basis", "Break-even", "Current Price",
@@ -10512,7 +10519,7 @@ elif page == "Portfolio":
                 # legs): the purchase price lives on the position itself rather
                 # than being reconstructed from wheel trades that don't exist,
                 # which is why Cost Basis read $0.00 for every T212 row.
-                purchase_price = data.get("purchase_price") or abs(wheel_cps)
+                purchase_price = data.get("purchase_price") or display_basis(wheel_cps)
 
             unrealized = data["market_value"] + wheel_equity_cost if last_wheel else data["market_value"] + data["equity_cost"]
             days_held = (date.today() - last_wheel["start"]).days if last_wheel else 0
@@ -10529,7 +10536,7 @@ elif page == "Portfolio":
                 ann_return = 0.0
 
             shares = data["shares_held"]
-            break_even = abs(wheel_cps) if last_wheel and shares else purchase_price
+            break_even = display_basis(wheel_cps) if last_wheel and shares else purchase_price
 
             symbol = data.get("symbol", ticker)
             rows.append({
@@ -10542,7 +10549,10 @@ elif page == "Portfolio":
                 "Broker": data.get("broker", ""),
                 "Shares": shares,
                 "Cost Basis": purchase_price,
-                "Wheel Basis": wheel_cps,
+                # display_basis, not the raw figure: wheel_cps is signed cash
+                # (money out is negative), so the column printed a NEGATIVE
+                # price — NFLX at 67.73 read as $-67.73.
+                "Wheel Basis": display_basis(wheel_cps),
                 "Break-even": break_even,
                 "Current Price": cur,
                 "Day %": day_change_pct,
@@ -11556,7 +11566,7 @@ elif page == "Wheel Cost Basis":
                 f'      <img class="tk-logo" src="{logo_url}" onerror="this.style.display=\'none\'">'
                 f'      <p class="tk-name">{ticker} @ {buy_price:,.2f}</p>'
                 f'    </div>'
-                f'    <p class="tk-sub">(Adjusted: {abs(adj_cost):,.2f})</p>'
+                f'    <p class="tk-sub">(Adjusted: {display_basis(adj_cost):,.2f})</p>'
                 f'    <p class="tk-sub">Current Price</p>'
                 f'    <p class="tk-sub" style="color:{day_color}; font-weight:500">'
                 f'      {cur_price:,.2f} ({day_chg:+.2f}%)</p>'
