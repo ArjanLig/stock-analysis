@@ -3609,13 +3609,15 @@ st.markdown(f"""
         background: var(--grid) !important;
         color: var(--text) !important;
     }}
-    /* Centre the label (and its help "?") over the pill, otherwise a centred
-       control sits under a left-aligned caption. */
+    /* Centre the label over the pill, otherwise a centred control sits under
+       a left-aligned caption. */
     .st-key-deployment_block .stNumberInput [data-testid="stWidgetLabel"] {{
         justify-content: center;
+        width: 100%;
     }}
     .st-key-deployment_block .stNumberInput [data-testid="stWidgetLabel"] p {{
         text-align: center;
+        width: 100%;
     }}
     .st-key-deployment_block .hero-card {{
         background: none;
@@ -10334,10 +10336,6 @@ elif page == "Portfolio":
                 "Full position %",
                 min_value=0.5, max_value=50.0, step=0.5, format="%.1f",
                 value=target_pct, key="_target_pos_input",
-                help=f"One setting for the whole portfolio: what counts as a "
-                     f"full position. At {target_pct:.1f}% that is "
-                     f"${dep['target']:,.0f}, and anything within 10% of it is "
-                     f"treated as full.",
             )
         if abs(_new_pct - target_pct) > 1e-9:
             st.session_state["_target_pos_pct"] = _new_pct
