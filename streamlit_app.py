@@ -48,13 +48,14 @@ from gather_data import (
 from broker_adapter import (
     fetch_current_prices, fetch_account_balances,
     fetch_net_liq_history, fetch_benchmark_returns,
-    fetch_ticker_profiles, fetch_yearly_transfers, fetch_margin_interest, fetch_margin_for_position, fetch_margin_requirements,
+    fetch_ticker_profiles, fetch_yearly_transfers, fetch_margin_interest, fetch_margin_requirements,
     fetch_greeks_and_bwd, fetch_option_chain,
     fetch_earnings_dates, has_active_broker, get_active_broker,
     fetch_benchmark_monthly_returns,
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
 )
 import plotly.graph_objects as go
+from portfolio_metrics import compute_deployment, DEFAULT_TARGET_POS_PCT
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -3570,16 +3571,16 @@ st.markdown(f"""
     }}
 
     /* Margin overview — single continuous white block */
-    .st-key-margin_block {{
+    .st-key-deployment_block {{
         background: var(--card);
         border-radius: 24px;
         border-top: 3px solid var(--accent);
         padding: 32px;
         box-shadow: var(--shadow);
     }}
-    .st-key-margin_block .stTextInput > div > div > input,
-    .st-key-margin_block .stNumberInput > div > div > input,
-    .st-key-margin_block .stNumberInput input[type="number"] {{
+    .st-key-deployment_block .stTextInput > div > div > input,
+    .st-key-deployment_block .stNumberInput > div > div > input,
+    .st-key-deployment_block .stNumberInput input[type="number"] {{
         background: var(--bg-secondary) !important;
         color: var(--text) !important;
         -webkit-text-fill-color: var(--text) !important;
@@ -3587,19 +3588,19 @@ st.markdown(f"""
         border-radius: 12px !important;
         box-shadow: none !important;
     }}
-    .st-key-margin_block .stTextInput > div > div {{
+    .st-key-deployment_block .stTextInput > div > div {{
         border: none !important;
     }}
-    .st-key-margin_block .stTextInput input::placeholder {{
+    .st-key-deployment_block .stTextInput input::placeholder {{
         -webkit-text-fill-color: var(--text-muted) !important;
         color: var(--text-muted) !important;
     }}
-    .st-key-margin_block .stNumberInput button {{
+    .st-key-deployment_block .stNumberInput button {{
         color: var(--text) !important;
         background: var(--bg-secondary) !important;
         border-color: var(--border-medium) !important;
     }}
-    .st-key-margin_block .hero-card {{
+    .st-key-deployment_block .hero-card {{
         background: none;
         border-top: none;
         border-radius: 0;
@@ -10083,6 +10084,12 @@ elif page == "Portfolio":
     # ticker is held at two brokers, and no quote or profile API knows it.
     held_tickers = sorted({d.get("symbol", t) for t, d in held.items()})
 
+    if "_target_pos_pct" not in st.session_state:
+        st.session_state["_target_pos_pct"] = float(
+            load_user_prefs(_sb_client).get("target_position_pct")
+            or DEFAULT_TARGET_POS_PCT
+        )
+
     # ── Margin / Buying Power (with integrated simulator) ──
     # These fetch whichever broker is active, so the active broker has to be
     # part of the cache key. Without it, switching broker kept serving the
@@ -10100,220 +10107,200 @@ elif page == "Portfolio":
     def _cached_margin_requirements(broker):
         return fetch_margin_requirements()
 
-    def _margin_overview():
-        st.markdown("")
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _cached_buy_prices(user_id):
+        """Watchlist buy prices, keyed by ticker.
+
+        Only the names that have been valued end up here; a position with no
+        entry is left out of the below-buy count rather than assumed fine.
+        """
         try:
-            bal = _cached_account_balances(get_active_broker())
+            return {
+                item["ticker"].upper(): item["buy_price"]
+                for item in list_watchlist(_sb_client, user_id=user_id)
+                if item.get("buy_price")
+            }
+        except Exception as e:
+            logger.debug("Watchlist buy prices unavailable: %s", e)
+            return {}
+
+    def _deployment_overview():
+        """How much of the portfolio is committed, and what is left to buy with.
+
+        Replaces the old Margin Overview. Buying power answered "how much could
+        I borrow"; this answers "how much have I got left", which is the
+        question that decides whether there is anything to add with when prices
+        fall. The assignment-risk line survives from the old card: shares put to
+        you consume exactly the cash this card is about.
+        """
+        st.markdown("")
+
+        try:
+            _bals, _ = _cached_all_balances()
         except Exception as e:
             logger.warning("Account balances fetch failed: %s", e)
-            bal = None
+            _bals = {}
 
-        if not bal:
+        _view = st.session_state.get("_portfolio_view", "Overview")
+        if _view != "Overview":
+            _bals = {k: v for k, v in _bals.items() if k == _view}
+        if not _bals:
             return
 
-        net_liq = bal["net_liquidating_value"]
-        maint_excess = bal["maintenance_excess"]
-        bp = bal["derivative_buying_power"]
-        used_bp = bal["used_derivative_buying_power"]
-        total_bp = bp + used_bp
+        net_liq = sum(b.get("net_liquidating_value") or 0.0 for b in _bals.values())
+        cash = sum(b.get("cash_balance") or 0.0 for b in _bals.values())
 
-        # ── Compute assignment exposure from open short options ──
+        # Downstream cards (margin interest, beta-weighted delta) are still
+        # single-broker, so they keep reading the active broker's figures.
+        try:
+            _abal = _cached_account_balances(get_active_broker())
+            st.session_state["_margin_cash"] = _abal["cash_balance"]
+            st.session_state["_net_liq"] = _abal["net_liquidating_value"]
+        except Exception as e:
+            logger.debug("Active-broker balances unavailable: %s", e)
+
+        target_pct = float(st.session_state.get("_target_pos_pct", DEFAULT_TARGET_POS_PCT))
+
+        _prices = st.session_state.get("portfolio_prices", {}) or {}
+        dep = compute_deployment(
+            held, net_liq, cash, target_pct,
+            prices={t: (p or {}).get("price") for t, p in _prices.items()},
+            buy_prices=_cached_buy_prices(
+                (st.session_state.get("user") or {}).get("id")
+            ),
+        )
+
+        # ── Assignment exposure from open short puts and naked calls ──
+        # Kept from the old card: an assignment turns into shares at the strike,
+        # which is dry powder spent whether or not you meant to spend it.
         total_assignment = 0.0
-        total_assign_margin = 0.0
         assignment_entries = []
-        portfolio = st.session_state.get("portfolio_data", {})
-        prices_cache = st.session_state.get("portfolio_prices", {})
-
-        for ticker, data in portfolio.items():
-            opts = _find_open_options(data["trades"])
-            for opt in opts:
+        for ticker, data in held.items():
+            for opt in _find_open_options(data.get("trades", [])):
                 if opt["cp"] == "P":
-                    shares = opt["quantity"] * 100
-                    exposure = opt["strike"] * shares
-                    # Fetch margin requirement for holding assigned shares
-                    _amk = f"_assign_margin_{ticker.upper()}_{shares}"
-                    if _amk not in st.session_state:
-                        _amr = fetch_margin_for_position(ticker, shares)
-                        st.session_state[_amk] = _amr
-                    _amr = st.session_state[_amk]
-                    margin = abs(_amr["change_in_margin"]) if _amr else exposure * 0.50
-                    total_assignment += exposure
-                    total_assign_margin += margin
-                    _apct = margin / exposure * 100 if exposure > 0 else 0
-                    assignment_entries.append(f'{opt["quantity"]}x {ticker} ${opt["strike"]:.0f}P = ${margin:,.0f} ({_apct:.0f}%)')
+                    exposure = opt["strike"] * opt["quantity"] * 100
                 elif opt["cp"] == "C" and opt["type"] != "CC":
-                    # Naked short calls only — covered calls don't need extra margin
-                    shares = opt["quantity"] * 100
-                    cur_price = prices_cache.get(ticker, {}).get("price", 0) if prices_cache else 0
-                    exposure = cur_price * shares
-                    _amk = f"_assign_margin_{ticker.upper()}_{shares}"
-                    if _amk not in st.session_state:
-                        _amr = fetch_margin_for_position(ticker, shares)
-                        st.session_state[_amk] = _amr
-                    _amr = st.session_state[_amk]
-                    margin = abs(_amr["change_in_margin"]) if _amr else exposure * 0.50
-                    total_assignment += exposure
-                    total_assign_margin += margin
-                    _apct = margin / exposure * 100 if exposure > 0 else 0
-                    assignment_entries.append(f'{opt["quantity"]}x {ticker} ${opt["strike"]:.0f}C = ${margin:,.0f} ({_apct:.0f}%)')
+                    _cp = (_prices.get(data.get("symbol", ticker)) or {}).get("price", 0)
+                    exposure = _cp * opt["quantity"] * 100
+                else:
+                    continue
+                total_assignment += exposure
+                assignment_entries.append(
+                    f'{opt["quantity"]}x {data.get("symbol", ticker)} '
+                    f'${opt["strike"]:.0f}{opt["cp"]}'
+                )
 
-        # ── Compute simulation impact from session state ──
-        if "sim_rows" not in st.session_state:
-            st.session_state["sim_rows"] = 1
-
-        total_sim_cost = 0.0
-        total_sim_margin = 0.0
-        sim_entries = []
-
-        for i in range(st.session_state["sim_rows"]):
-            ticker = sanitize_ticker(st.session_state.get(f"sim_tick_{i}", "") or "")
-            try:
-                shares = int(st.session_state.get(f"sim_sh_{i}", "100"))
-            except (ValueError, TypeError):
-                shares = 0
-            try:
-                price = float(st.session_state.get(f"sim_pr_{i}", "0"))
-            except (ValueError, TypeError):
-                price = 0.0
-            if ticker and price > 0 and shares > 0:
-                cost = price * shares
-                _margin_key = f"_sim_margin_{ticker.upper()}_{shares}"
-                if _margin_key not in st.session_state:
-                    _mr = fetch_margin_for_position(ticker, shares)
-                    st.session_state[_margin_key] = _mr
-                _mr = st.session_state[_margin_key]
-                margin = abs(_mr["change_in_margin"]) if _mr else cost * 0.50
-                total_sim_cost += cost
-                total_sim_margin += margin
-                _pct = margin / cost * 100 if cost > 0 else 0
-                sim_entries.append(f'{shares}x {ticker.upper()} @ ${price:,.2f} ({_pct:.0f}%)')
-
-        # ── Compute final values (base + simulation + assignment) ──
-        show_used = used_bp + total_sim_margin + total_assign_margin
-        show_bp = bp - total_sim_margin - total_assign_margin
-        show_excess = maint_excess - total_sim_margin - total_assign_margin
-        show_usage = (show_used / total_bp * 100) if total_bp > 0 else 0
-        show_drop = (show_excess / net_liq * 100) if net_liq > 0 else 0
-
-        # Margin call line: point on bar where maintenance excess = 0
-        margin_call_pct = ((show_used + show_excess) / total_bp * 100) if total_bp > 0 else 100
-
-        if show_usage < 50:
-            bar_color = T['accent']
-            status = "Cash"
-        elif show_usage < 75:
-            bar_color = "#f2cc8f"
-            status = "Margin"
-        else:
-            bar_color = T['red']
-            status = "High Leverage"
-
-        # Simulation subtitle
-        sim_note = ""
-        if total_sim_cost > 0:
-            sim_label = " + ".join(sim_entries)
-            sim_note = (
-                f'<div style="margin-bottom:12px;padding:8px 12px;background:{T["info_bg"]};border-radius:8px;'
-                f'border:1px dashed {T["border_medium"]};font-size:0.85rem">'
-                f'<span style="color:{T["text_muted"]}">Simulating: </span>'
-                f'<b>{sim_label}</b>'
-                f'<span style="color:{T["text_muted"]}"> = ${total_sim_cost:,.0f} — margin ${total_sim_margin:,.0f}</span>'
-                f'</div>'
-            )
-
-        # Assignment risk info block
         assign_note = ""
         if total_assignment > 0:
-            assign_label = " | ".join(assignment_entries)
+            _after = cash - total_assignment
+            _after_txt = (
+                f'leaves ${_after:,.0f}' if _after >= 0
+                else f'${abs(_after):,.0f} more than the cash on hand'
+            )
             assign_note = (
                 f'<div style="margin-bottom:12px;padding:8px 12px;background:{T["info_bg"]};border-radius:8px;'
                 f'border:1px dashed {T["border_medium"]};font-size:0.85rem">'
-                f'<span style="color:{T["text_muted"]}">Assignment Risk: </span>'
-                f'<b style="color:{T["text"]}">{assign_label}</b>'
-                f'<span style="color:{T["text_muted"]}"> — margin ${total_assign_margin:,.0f}</span>'
+                f'<span style="color:{T["text_muted"]}">If assigned: </span>'
+                f'<b style="color:{T["text"]}">{" | ".join(assignment_entries)}</b>'
+                f'<span style="color:{T["text_muted"]}"> = ${total_assignment:,.0f} — {_after_txt}</span>'
                 f'</div>'
+            )
+
+        # Colour follows the powder, not the deployment: this card exists to
+        # say whether there is anything left to buy the next drawdown with.
+        _dry_pct = dep["dry_powder_pct"]
+        if _dry_pct >= 15:
+            bar_color, status = T["accent"], "Dry powder"
+        elif _dry_pct >= 7:
+            bar_color, status = "#f2cc8f", "Getting thin"
+        else:
+            bar_color, status = T["red"], "Fully committed"
+
+        _dep_w = min(max(dep["deployed_pct"], 0), 100)
+        _full_w = min(max(dep["fully_deployed_pct"] - dep["deployed_pct"], 0), 100 - _dep_w)
+
+        _n_held = len(held)
+        _pos_line = f'{dep["full_count"]} of {_n_held} positions full'
+        if dep["partial"]:
+            _pos_line += f' · {len(dep["partial"])} with room (${dep["top_up_cost"]:,.0f} to fill)'
+
+        if not dep["partial"]:
+            _cash_line = (
+                f'Nothing to top up — cash funds '
+                f'{dep["new_positions_affordable"]:.1f} new full positions'
+            )
+        elif dep["cash_covers_top_ups"]:
+            _cash_line = (
+                f'Cash fills every partial and funds '
+                f'{dep["new_positions_affordable"]:.1f} more full positions'
+            )
+        else:
+            _cash_line = (
+                f'Cash covers ${dep["dry_powder"]:,.0f} of the '
+                f'${dep["top_up_cost"]:,.0f} needed to fill them'
+            )
+
+        _buy_line = ""
+        if dep["below_buy"]:
+            _buy_line = (
+                f'<span class="stat-pill">Below buy price '
+                f'<b>{len(dep["below_buy"])}</b> of {dep["valued_count"]} valued</span>'
             )
 
         st.markdown(
             f'<div class="hero-card">'
-            # Named, because margin has no combined form: it is one account's
-            # buying power even when the table above it covers two.
-            f'<h4>Margin Overview — {BROKER_NAMES.get(get_active_broker(), "Tastytrade")}</h4>'
+            f'<h4>Deployment</h4>'
             f'{assign_note}'
-            f'{sim_note}'
             f'<div style="margin:16px 0">'
             f'  <div style="display:flex;justify-content:space-between;margin-bottom:6px">'
-            f'    <span style="font-size:0.85rem;color:{T["text_muted"]}">BP Used: ${show_used:,.0f} / ${total_bp:,.0f}</span>'
-            f'    <span style="font-size:0.85rem;font-weight:600;color:{bar_color}">{status} ({show_usage:.0f}%) · <span style="color:{T["red"]}">MC at {margin_call_pct:.0f}%</span></span>'
+            f'    <span style="font-size:0.85rem;color:{T["text_muted"]}">'
+            f'Invested ${dep["invested"]:,.0f} / ${net_liq:,.0f}</span>'
+            f'    <span style="font-size:0.85rem;font-weight:600;color:{bar_color}">'
+            f'{status} ({dep["deployed_pct"]:.0f}% deployed)</span>'
             f'  </div>'
-            f'  <div style="position:relative;height:28px">'
-            f'    <div style="position:absolute;top:8px;left:0;right:0;background:{T["grid"]};border-radius:8px;height:12px;overflow:hidden">'
-            f'      <div style="background:{bar_color};width:{min(show_usage, 100):.0f}%;height:100%;border-radius:8px;'
-            f'           transition:width 0.3s ease"></div>'
-            f'    </div>'
-            f'    <div style="position:absolute;left:50%;top:0;height:28px;display:flex;flex-direction:column;align-items:center;transform:translateX(-50%)">'
-            f'      <div style="width:2px;height:28px;background:#f2cc8f"></div>'
-            f'    </div>'
-            f'    <div style="position:absolute;left:75%;top:0;height:28px;display:flex;flex-direction:column;align-items:center;transform:translateX(-50%)">'
-            f'      <div style="width:2px;height:28px;background:{T["red"]}"></div>'
-            f'    </div>'
+            f'  <div style="background:{T["grid"]};border-radius:8px;height:12px;overflow:hidden;display:flex">'
+            f'    <div style="background:{bar_color};width:{_dep_w:.1f}%;height:100%"></div>'
+            f'    <div style="background:{bar_color};opacity:0.35;width:{_full_w:.1f}%;height:100%"></div>'
             f'  </div>'
-            f'  <div style="position:relative;height:16px;font-size:0.7rem;color:{T["text_muted"]}">'
-            f'    <span style="position:absolute;left:50%;transform:translateX(-50%)">50%</span>'
-            f'    <span style="position:absolute;left:75%;transform:translateX(-50%)">75%</span>'
-            f'  </div>'
+            f'  <div style="margin-top:6px;font-size:0.75rem;color:{T["text_muted"]}">'
+            f'Solid = invested today · faded = where spending all cash would take you '
+            f'({dep["fully_deployed_pct"]:.0f}%)</div>'
             f'</div>'
+            f'<p style="margin:4px 0;font-size:0.9rem">{_pos_line}</p>'
+            f'<p style="margin:4px 0;font-size:0.9rem;color:{T["text_muted"]}">{_cash_line}</p>'
             f'<div class="stat-row">'
-            f'<span class="stat-pill">Buying Power <b>${show_bp:,.0f}</b></span>'
-            f'<span class="stat-pill">BP in Use <b>${show_used:,.0f}</b></span>'
-            f'<span class="stat-pill">Buffer <b>${show_excess:,.0f}</b></span>'
-            f'<span class="stat-pill">Margin Call at <b>-{show_drop:.0f}%</b></span>'
-            + (f'<span class="stat-pill">Assignment Margin <b>${total_assign_margin:,.0f}</b></span>' if total_assign_margin > 0 else '') +
+            f'<span class="stat-pill">Dry powder <b>${dep["dry_powder"]:,.0f}</b> '
+            f'({dep["dry_powder_pct"]:.0f}%)</span>'
+            f'<span class="stat-pill">Full position <b>${dep["target"]:,.0f}</b> '
+            f'({target_pct:.1f}%)</span>'
+            f'{_buy_line}'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
-        # ── Simulator inputs (below the overview bar) ──
-        st.markdown(f'<p style="font-weight:600;margin-top:24px;margin-bottom:4px;font-size:0.9rem;color:{T["text_muted"]};text-transform:uppercase;letter-spacing:0.03em">Simulate Positions</p>', unsafe_allow_html=True)
+        if dep["partial"]:
+            with st.expander(f'Positions with room ({len(dep["partial"])})'):
+                for _p in dep["partial"]:
+                    st.markdown(
+                        f'**{_p["ticker"]}** — ${_p["market_value"]:,.0f} '
+                        f'of ${dep["target"]:,.0f} · **${_p["gap"]:,.0f}** to fill'
+                    )
 
-        for i in range(st.session_state["sim_rows"]):
-            c1, c2, c3 = st.columns([1.2, 0.8, 0.8], gap="small")
-            with c1:
-                ticker = st.text_input("Ticker", placeholder="AAPL", key=f"sim_tick_{i}", label_visibility="collapsed")
-            with c2:
-                shares = st.text_input("Shares", value="100", placeholder="100", key=f"sim_sh_{i}", label_visibility="collapsed")
-            # Auto-fetch price when ticker is entered and price not yet set
-            price_key = f"sim_pr_{i}"
-            _sim_ticker_clean = sanitize_ticker(ticker) if ticker else None
-            if _sim_ticker_clean and st.session_state.get(price_key, "0") in ("0", "0.00", "") and rate_limited_lookup():
-                try:
-                    _sp = fetch_current_prices([_sim_ticker_clean])
-                    _spd = _sp.get(_sim_ticker_clean)
-                    if _spd and _spd["price"]:
-                        st.session_state[price_key] = f"{float(_spd['price']):.2f}"
-                except Exception as e:
-                    logger.debug("Sim price fetch failed for %s: %s", ticker, e)
-            with c3:
-                price = st.text_input("Price", value="0.00", key=price_key, label_visibility="collapsed")
-
-        _, btn_add, btn_reset, _ = st.columns([1, 1, 1, 1])
-        with btn_add:
-            if st.button("Add row", key="sim_add_row", type="primary", use_container_width=True):
-                st.session_state["sim_rows"] += 1
-                st.rerun()
-        with btn_reset:
-            if st.button("Reset", key="sim_reset", type="primary", use_container_width=True):
-                for i in range(st.session_state["sim_rows"]):
-                    st.session_state.pop(f"sim_tick_{i}", None)
-                    st.session_state.pop(f"sim_sh_{i}", None)
-                    st.session_state.pop(f"sim_pr_{i}", None)
-                st.session_state["sim_rows"] = 1
-                st.rerun()
-
-        # Store balance for other cards
-        st.session_state["_margin_cash"] = bal["cash_balance"]
-        st.session_state["_net_liq"] = bal["net_liquidating_value"]
+        # ── Target size ──
+        _new_pct = st.number_input(
+            "Full position size (% of portfolio)",
+            min_value=0.5, max_value=50.0, step=0.5,
+            value=target_pct, key="_target_pos_input",
+            help="One setting for the whole portfolio: what counts as a full "
+                 "position. A holding within 10% of it is treated as full.",
+        )
+        if abs(_new_pct - target_pct) > 1e-9:
+            st.session_state["_target_pos_pct"] = _new_pct
+            _prefs_now = load_user_prefs(_sb_client)
+            _prefs_now["target_position_pct"] = _new_pct
+            save_user_prefs(_sb_client, _prefs_now)
+            st.rerun()
 
     @st.fragment(run_every=timedelta(seconds=30))
     def _portfolio_cards():
@@ -10647,8 +10634,8 @@ elif page == "Portfolio":
     _portfolio_cards()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.container(key="margin_block"):
-        _margin_overview()
+    with st.container(key="deployment_block"):
+        _deployment_overview()
 
     # ── Portfolio Greeks, BWD & Margin Interest ──
     gk = None
