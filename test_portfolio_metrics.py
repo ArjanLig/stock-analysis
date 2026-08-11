@@ -1,9 +1,11 @@
 """Tests for the deployment / dry-powder figures on the portfolio page."""
 
 import unittest
+from datetime import date
 
 from portfolio_metrics import (compute_deployment, display_basis,
-                               held_share_cost, has_option_legs)
+                               held_share_cost, has_option_legs,
+                               fifo_realized)
 
 
 def _pos(mv, symbol=None):
@@ -140,9 +142,9 @@ class TestDisplayBasis(unittest.TestCase):
         self.assertEqual(display_basis(0.0), 0.0)
 
 
-def _eq(qty, price, action="Buy to Open", txn="Trade"):
+def _eq(qty, price, action="Buy to Open", txn="Trade", d=None):
     return {"instrument_type": "Equity", "quantity": qty, "price": price,
-            "action": action, "type": txn,
+            "action": action, "type": txn, "date": d or date(2026, 1, 1),
             "net_value": -qty * price if "Buy" in action else qty * price}
 
 
@@ -219,6 +221,63 @@ class TestHasOptionLegs(unittest.TestCase):
                                    "action": "Sell to Open", "type": "Trade",
                                    "net_value": 59.88}]
         self.assertTrue(has_option_legs(trades))
+
+
+class TestFifoRealized(unittest.TestCase):
+    """Realized equity P/L per sale, on the same lots the broker used."""
+
+    def test_a_sale_is_priced_against_the_oldest_lot(self):
+        """IBIT sold 20 at 36.595 while holding 100 @ 56.00 and 20 @ 35.8889.
+        FIFO takes them out of the 56.00 lot: 731.90 - 1120.00 = -388.10, which
+        is what Tastytrade booked. Running average cost gave -321.94 for the
+        same sale, so the app disagreed with the statement it was meant to
+        reconcile against."""
+        trades = [
+            _eq(100, 56.00, action="Buy to Open", txn="Receive Deliver"),
+            _eq(20, 35.8889),
+            _eq(20, 36.595, action="Sell to Close"),
+        ]
+        sales = fifo_realized(trades)
+        self.assertEqual(len(sales), 1)
+        self.assertAlmostEqual(sales[0]["realized"], -388.10, places=1)
+
+    def test_a_dividend_credit_is_not_a_sale(self):
+        """It arrives as a positive Equity row with no quantity. Treated as a
+        sale of nothing it booked its full value as equity profit — while the
+        same money was already counted in the dividend total."""
+        div = {"instrument_type": "Equity", "quantity": 0.0, "price": 0.0,
+               "action": "", "type": "Money Movement", "net_value": 0.91}
+        self.assertEqual(fifo_realized([_eq(1, 100.0), div]), [])
+
+    def test_a_dividend_debit_is_not_a_purchase(self):
+        """Adding it to cost with no shares raises the basis of every share
+        already held, so it leaked into later sales too."""
+        div = {"instrument_type": "Equity", "quantity": 0.0, "price": 0.0,
+               "action": "", "type": "Money Movement", "net_value": -0.27}
+        trades = [_eq(10, 100.0), div, _eq(10, 110.0, action="Sell to Close")]
+        self.assertAlmostEqual(fifo_realized(trades)[0]["realized"], 100.0)
+
+    def test_each_sale_is_reported_with_its_own_date(self):
+        """The monthly and weekly views bucket by date, so a sale has to carry
+        one rather than being folded into a running total."""
+        trades = [_eq(10, 50.0, d=date(2026, 1, 5)),
+                  _eq(4, 60.0, action="Sell to Close", d=date(2026, 3, 2)),
+                  _eq(6, 70.0, action="Sell to Close", d=date(2026, 4, 9))]
+        sales = fifo_realized(trades)
+        self.assertEqual([round(s["realized"], 2) for s in sales], [40.0, 120.0])
+        self.assertEqual([s["date"] for s in sales],
+                         [date(2026, 3, 2), date(2026, 4, 9)])
+
+    def test_a_sale_spanning_two_lots_prices_each_at_its_own_cost(self):
+        trades = [_eq(10, 50.0), _eq(10, 60.0),
+                  _eq(15, 70.0, action="Sell to Close")]
+        # 10 from the 50 lot (+200) and 5 from the 60 lot (+50)
+        self.assertAlmostEqual(fifo_realized(trades)[0]["realized"], 250.0)
+
+    def test_a_sale_with_no_lot_to_match_realizes_nothing(self):
+        """History can start mid-position. Booking the whole proceeds as profit
+        would invent a gain out of a missing purchase."""
+        self.assertEqual(fifo_realized([_eq(5, 50.0, action="Sell to Close")]), [])
 
 
 if __name__ == "__main__":

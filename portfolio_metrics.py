@@ -28,21 +28,17 @@ def has_option_legs(trades):
     return any("Option" in (t.get("instrument_type") or "") for t in trades)
 
 
-def held_share_cost(trades):
-    """FIFO cost of the shares still held: (total_cost, shares).
+def _equity_lots(trades):
+    """Yield (trade, quantity, price, is_buy) for real equity trades.
 
-    Summing every buy in the cycle answers "what did I pay for everything I
-    ever bought", which stops being the purchase price the moment part of the
-    position is sold. IBIT — assigned 100 at 56.00, added 20 at 35.89, sold 20
-    at 36.60 — came out at 52.65 for 120 shares of which 20 were gone. FIFO
-    retires the oldest lot first and gives 51.98, matching the broker.
+    Dividends and other cash movements arrive as Equity rows with no quantity.
+    They buy and sell nothing, and letting them through is how a dividend debit
+    ended up raising the cost basis of shares it never bought, while a dividend
+    credit was booked as equity profit that the dividend total already counted.
     """
-    lots = []  # [remaining_qty, price]
     for t in trades:
         if t.get("instrument_type") != "Equity":
             continue
-        # Dividends and other cash movements arrive as Equity rows with no
-        # quantity; they buy no shares and must not move the average.
         if (t.get("type") or "") == "Money Movement":
             continue
         qty = t.get("quantity") or 0.0
@@ -53,6 +49,64 @@ def held_share_cost(trades):
             is_buy = (t.get("net_value") or 0.0) < 0      # assignment in
         else:
             is_buy = "Buy" in (t.get("action") or "")
+        yield t, qty, price, is_buy
+
+
+def fifo_realized(trades):
+    """Realized P/L per equity sale, oldest lot first.
+
+    Returns [{"date", "quantity", "realized"}] in trade order.
+
+    FIFO because that is the lot relief the broker applied: Tastytrade booked
+    IBIT's August sale at -388.10, and a running-average walk made it -321.94.
+    Two numbers for one sale means the app cannot be reconciled against the
+    statement it sits next to.
+
+    A sale with no lot to match against realizes nothing rather than booking
+    its whole proceeds as profit — history can start mid-position, and a
+    missing purchase is not a gain.
+    """
+    lots = []      # [remaining_qty, price]
+    sales = []
+    for t, qty, price, is_buy in _equity_lots(trades):
+        if is_buy:
+            lots.append([qty, price])
+            continue
+        remaining = qty
+        cost = 0.0
+        matched = 0.0
+        while remaining > 0 and lots:
+            take = min(lots[0][0], remaining)
+            cost += take * lots[0][1]
+            lots[0][0] -= take
+            remaining -= take
+            matched += take
+            if lots[0][0] <= 0:
+                lots.pop(0)
+        if not matched:
+            continue
+        # Proceeds for the shares actually matched, so a partially matched sale
+        # is not credited with cash from shares it could not account for.
+        proceeds = abs(t.get("net_value") or 0.0) * (matched / qty)
+        sales.append({
+            "date": t.get("date"),
+            "quantity": matched,
+            "realized": proceeds - cost,
+        })
+    return sales
+
+
+def held_share_cost(trades):
+    """FIFO cost of the shares still held: (total_cost, shares).
+
+    Summing every buy in the cycle answers "what did I pay for everything I
+    ever bought", which stops being the purchase price the moment part of the
+    position is sold. IBIT — assigned 100 at 56.00, added 20 at 35.89, sold 20
+    at 36.60 — came out at 52.65 for 120 shares of which 20 were gone. FIFO
+    retires the oldest lot first and gives 51.98, matching the broker.
+    """
+    lots = []  # [remaining_qty, price]
+    for _t, qty, price, is_buy in _equity_lots(trades):
         if is_buy:
             lots.append([qty, price])
             continue

@@ -56,7 +56,8 @@ from broker_adapter import (
 )
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
-                               held_share_cost, DEFAULT_TARGET_POS_PCT)
+                               held_share_cost, fifo_realized,
+                               DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -9145,47 +9146,31 @@ def _aggregate_month_trades(cost_basis, year, month):
         "has_options": False, "has_equity": False,
     })
 
+    def _ym(td):
+        if hasattr(td, "year"):
+            return td.year, td.month
+        _dt = datetime.strptime(str(td)[:10], "%Y-%m-%d")
+        return _dt.year, _dt.month
+
     for ticker, data in cost_basis.items():
-        # ── First: compute realized equity P/L via average cost basis ──
-        # Walk ALL equity trades chronologically to build running avg cost,
-        # then capture realized P/L for sells in target month.
+        # ── Realized equity P/L, FIFO ──
+        # The same lot relief the broker applies, so a month's figure can be
+        # laid next to the statement. A running average made IBIT's August
+        # sale -321.94 where Tastytrade booked -388.10.
         eq_trades = sorted(
             [t for t in data.get("trades", []) if t.get("instrument_type") == "Equity"],
             key=lambda t: t["date"],
         )
-        _running_shares = 0.0
-        _running_cost = 0.0  # total cost of shares held (positive = money spent)
         _month_equity_pl = 0.0
         _had_equity_trade = False
+        for _sale in fifo_realized(eq_trades):
+            if _ym(_sale["date"]) == (year, month):
+                _month_equity_pl += _sale["realized"]
+                _had_equity_trade = True
+        # A purchase makes the month an equity month too, even with no sale.
         for t in eq_trades:
-            nv = t.get("net_value", 0.0)
-            qty = abs(t.get("quantity", 0.0))
-            td = t["date"]
-            if hasattr(td, "year"):
-                t_year, t_month = td.year, td.month
-            else:
-                _dt = datetime.strptime(str(td)[:10], "%Y-%m-%d")
-                t_year, t_month = _dt.year, _dt.month
-
-            if nv < 0:
-                # Buy: increase position and cost
-                _running_shares += qty
-                _running_cost += abs(nv)
-            elif nv > 0 and _running_shares > 0:
-                # Sell: compute realized P/L based on avg cost
-                avg_cost = _running_cost / _running_shares if _running_shares > 0 else 0
-                sell_qty = min(qty, _running_shares)
-                realized = nv - (avg_cost * sell_qty)
-                _running_shares -= sell_qty
-                _running_cost -= avg_cost * sell_qty
-                if _running_cost < 0:
-                    _running_cost = 0
-                # Only count if this sell is in the target month
-                if t_year == year and t_month == month:
-                    _month_equity_pl += realized
-                    _had_equity_trade = True
-            # Mark buys in target month too (for has_equity flag)
-            if t_year == year and t_month == month and nv < 0:
+            if (t.get("net_value", 0.0) < 0 and t.get("quantity")
+                    and _ym(t["date"]) == (year, month)):
                 _had_equity_trade = True
 
         if _had_equity_trade:
@@ -9348,34 +9333,20 @@ def _aggregate_week_trades(cost_basis, wk_start, wk_end):
 
     _traded_tickers = set()
     for ticker, data in cost_basis.items():
-        # ── Realized equity P/L via average cost basis ──
+        # ── Realized equity P/L, FIFO (same engine as the monthly view) ──
         eq_trades = sorted(
             [t for t in data.get("trades", []) if t.get("instrument_type") == "Equity"],
             key=lambda t: t["date"],
         )
-        _running_shares = 0.0
-        _running_cost = 0.0
         _wk_equity_pl = 0.0
         _had_equity_trade = False
+        for _sale in fifo_realized(eq_trades):
+            if wk_start_d <= _to_date(_sale["date"]) <= wk_end_d:
+                _wk_equity_pl += _sale["realized"]
+                _had_equity_trade = True
         for t in eq_trades:
-            nv = t.get("net_value", 0.0)
-            qty = abs(t.get("quantity", 0.0))
-            t_date = _to_date(t["date"])
-            if nv < 0:
-                _running_shares += qty
-                _running_cost += abs(nv)
-            elif nv > 0 and _running_shares > 0:
-                avg_cost = _running_cost / _running_shares if _running_shares > 0 else 0
-                sell_qty = min(qty, _running_shares)
-                realized = nv - (avg_cost * sell_qty)
-                _running_shares -= sell_qty
-                _running_cost -= avg_cost * sell_qty
-                if _running_cost < 0:
-                    _running_cost = 0
-                if wk_start_d <= t_date <= wk_end_d:
-                    _wk_equity_pl += realized
-                    _had_equity_trade = True
-            if wk_start_d <= t_date <= wk_end_d and nv < 0:
+            if (t.get("net_value", 0.0) < 0 and t.get("quantity")
+                    and wk_start_d <= _to_date(t["date"]) <= wk_end_d):
                 _had_equity_trade = True
 
         if _had_equity_trade:
