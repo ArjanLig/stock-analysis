@@ -6,7 +6,7 @@ from datetime import date
 from portfolio_metrics import (compute_deployment, display_basis,
                                held_share_cost, has_option_legs,
                                fifo_realized, open_lots, relative_performance,
-                               material_movers)
+                               material_movers, valuation_stance)
 
 
 def _pos(mv, symbol=None):
@@ -393,6 +393,47 @@ class TestMaterialMovers(unittest.TestCase):
 
     def test_no_positions_at_all(self):
         self.assertEqual(material_movers([]), ([], [], 0))
+
+
+class TestValuationStance(unittest.TestCase):
+    BAND = dict(fv_low=140.38, fv_mid=186.60, fv_high=220.16)
+
+    def test_above_the_band_is_the_one_that_asks_a_question(self):
+        """NVDA at 223.96 against a 140-220 band. The point of the column: the
+        thesis has played out, so holding is now a fresh decision rather than
+        the continuation of an old one."""
+        v = valuation_stance(223.96, **self.BAND)
+        self.assertEqual(v["stance"], "above_band")
+        self.assertAlmostEqual(v["vs_mid"], 20.0, places=1)
+
+    def test_below_the_band_is_where_more_money_could_go(self):
+        # PEP at 139.02 against 164 - 211.
+        v = valuation_stance(139.02, 164.48, 187.95, 211.41)
+        self.assertEqual(v["stance"], "below_band")
+
+    def test_inside_the_band_is_no_signal_either_way(self):
+        v = valuation_stance(592.10, 518.14, 609.58, 701.02)
+        self.assertEqual(v["stance"], "in_band")
+
+    def test_a_negative_fair_value_is_refused(self):
+        """AXP, VLO, ABBV, BROS and AXON all carry negative fair values in the
+        watchlist. Rendering "price is 350% above fair value" off a broken DCF
+        would put a sell signal on screen that no one intended."""
+        self.assertIsNone(valuation_stance(341.83, -117.83, -138.62, -159.41))
+
+    def test_an_unordered_band_is_refused(self):
+        """low above high means the numbers were not what they claim to be."""
+        self.assertIsNone(valuation_stance(100.0, 90.0, 80.0, 70.0))
+
+    def test_a_missing_valuation_is_refused(self):
+        self.assertIsNone(valuation_stance(100.0, None, None, None))
+        self.assertIsNone(valuation_stance(0.0, 90.0, 100.0, 110.0))
+
+    def test_a_wildly_distant_valuation_is_refused(self):
+        """GEV trades at 1,133 against a stored fair value of 33 — a split or a
+        broken model, not a 34x overvaluation. Printing it would drown every
+        real signal in the column."""
+        self.assertIsNone(valuation_stance(1132.67, 28.07, 33.03, 37.98))
 
 
 if __name__ == "__main__":

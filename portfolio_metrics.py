@@ -130,6 +130,43 @@ def material_movers(rows, limit=3, portfolio_value=None):
     return winners, losers, len(rows) - len(winners) - len(losers)
 
 
+# Beyond this multiple of your own fair value, the number is not a valuation
+# disagreement — it is a stale model or an unadjusted split. GEV sits at 1,133
+# against a stored 33. Printing "34x overvalued" would drown every real signal
+# in the column, so such a row is treated as having no valuation at all.
+IMPLAUSIBLE_FV_MULTIPLE = 5.0
+
+
+def valuation_stance(price, fv_low, fv_mid, fv_high):
+    """Where the price sits against your own fair-value band, or None.
+
+    Returns {"stance": "below_band" | "in_band" | "above_band", "vs_mid": pct}.
+
+    None whenever the band cannot be trusted: a missing valuation, a negative
+    fair value (AXP, VLO, ABBV, BROS and AXON all carry one), an out-of-order
+    band, or a price a multiple away from it. A hold-or-sell column has to be
+    silent where it does not know, because a wrong signal here is acted on.
+    """
+    if not price or price <= 0:
+        return None
+    if not (fv_low and fv_mid and fv_high):
+        return None
+    if min(fv_low, fv_mid, fv_high) <= 0:
+        return None
+    if not fv_low <= fv_mid <= fv_high:
+        return None
+    if price > fv_mid * IMPLAUSIBLE_FV_MULTIPLE or price * IMPLAUSIBLE_FV_MULTIPLE < fv_mid:
+        return None
+
+    if price > fv_high:
+        stance = "above_band"
+    elif price < fv_low:
+        stance = "below_band"
+    else:
+        stance = "in_band"
+    return {"stance": stance, "vs_mid": (price / fv_mid - 1) * 100}
+
+
 def open_lots(trades):
     """The share lots still held, oldest first: [{quantity, price, date}].
 

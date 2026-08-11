@@ -58,7 +58,7 @@ import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
                                relative_performance, material_movers,
-                               DEFAULT_TARGET_POS_PCT)
+                               valuation_stance, DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -10100,21 +10100,33 @@ elif page == "Portfolio":
         return fetch_margin_requirements()
 
     @st.cache_data(ttl=300, show_spinner=False)
-    def _cached_buy_prices(user_id):
-        """Watchlist buy prices, keyed by ticker.
+    def _cached_valuations(user_id):
+        """The watchlist keyed by ticker: fair-value band, buy price, updated.
 
-        Only the names that have been valued end up here; a position with no
-        entry is left out of the below-buy count rather than assumed fine.
+        One query serves both the deployment card and the hold-or-sell column;
+        a name absent from here has no valuation, which is left visible rather
+        than assumed fine.
         """
         try:
-            return {
-                item["ticker"].upper(): item["buy_price"]
-                for item in list_watchlist(_sb_client, user_id=user_id)
-                if item.get("buy_price")
-            }
+            return {item["ticker"].upper(): item
+                    for item in list_watchlist(_sb_client, user_id=user_id)}
         except Exception as e:
-            logger.debug("Watchlist buy prices unavailable: %s", e)
+            logger.debug("Watchlist valuations unavailable: %s", e)
             return {}
+
+    def _val_age(updated_iso):
+        """Days since that ticker's valuation was last recomputed, or None.
+
+        A hold-or-sell call made on a fair value from months ago is a decision
+        about old work, so the age belongs next to the number it qualifies.
+        """
+        if not updated_iso:
+            return None
+        try:
+            _d = datetime.fromisoformat(str(updated_iso).replace("Z", "+00:00"))
+            return (datetime.now(_d.tzinfo) - _d).days
+        except Exception:
+            return None
 
     def _deployment_overview():
         """How much of the portfolio is committed, and what is left to buy with.
@@ -10157,9 +10169,9 @@ elif page == "Portfolio":
         dep = compute_deployment(
             held, net_liq, cash, target_pct,
             prices={t: (p or {}).get("price") for t, p in _prices.items()},
-            buy_prices=_cached_buy_prices(
+            buy_prices={t: v["buy_price"] for t, v in _cached_valuations(
                 (st.session_state.get("user") or {}).get("id")
-            ),
+            ).items() if v.get("buy_price")},
         )
 
         # ── Assignment exposure from open short puts and naked calls ──
@@ -10420,6 +10432,21 @@ elif page == "Portfolio":
                     "Premie", "Days", "Weight", "Margin", "Margin %"]
         default_cols = ["Shares", "Cost Basis", "Wheel Basis", "Current Price", "Day %",
                         "Mkt Value", "Unrealized P/L", "Return %", "Weight"]
+        # The hold-or-sell pair. Only offered when at least one holding has a
+        # usable valuation, so an account with no DCF work behind it does not
+        # get two columns of dashes.
+        _valuations = _cached_valuations((st.session_state.get("user") or {}).get("id"))
+        _stances = {}
+        for _t, _d in held.items():
+            _wl = _valuations.get((_d.get("symbol") or _t).upper()) or {}
+            _stances[_t] = valuation_stance(
+                _d.get("current_price"), _wl.get("fv_low"),
+                _wl.get("fv_mid"), _wl.get("fv_high"),
+            )
+        if any(_stances.values()):
+            for _c in ("vs Fair Value", "Val age"):
+                all_cols.insert(all_cols.index("Weight"), _c)
+                default_cols.insert(default_cols.index("Weight"), _c)
         if not _has_wheels:
             all_cols = [c for c in all_cols if c not in _wheel_only]
             default_cols = [c for c in default_cols if c not in _wheel_only]
@@ -10431,6 +10458,8 @@ elif page == "Portfolio":
             all_cols.insert(0, "Broker")
             default_cols.insert(0, "Broker")
         sort_options = ["Ticker", "Weight", "Day %", "Return %", "Unrealized P/L", "Mkt Value", "Ann. %", "Margin %"]
+        if any(_stances.values()):
+            sort_options.append("vs Fair Value")
 
         with st.container(key="toolbar_inline"):
             col_left, col_right = st.columns(2)
@@ -10536,6 +10565,13 @@ elif page == "Portfolio":
                 "Ann. %": ann_return,
                 "Premie": wheel_option_pl if last_wheel else 0.0,
                 "Days": days_held,
+                # None where the band cannot be trusted, so the cell reads "—"
+                # rather than a signal built on a broken DCF.
+                "vs Fair Value": (_stances.get(ticker) or {}).get("vs_mid"),
+                "_stance": (_stances.get(ticker) or {}).get("stance"),
+                "Val age": _val_age(
+                    (_valuations.get(symbol.upper()) or {}).get("updated")
+                ),
             })
 
         # ── Per-position margin requirements ──
@@ -10556,13 +10592,29 @@ elif page == "Portfolio":
         if sort_by == "Ticker":
             rows.sort(key=lambda r: r["Ticker"])
         else:
-            rows.sort(key=lambda r: r.get(sort_by, 0), reverse=True)
+            # A row with no valuation sorts last rather than raising: None is
+            # "we don't know", not the smallest number.
+            rows.sort(key=lambda r: (r.get(sort_by) is not None, r.get(sort_by) or 0),
+                      reverse=True)
 
         # ── Format helpers ──
         color_cols_set = {"Unrealized P/L", "Day %", "Return %", "Ann. %"}
 
-        def _fmt_cell(col, val):
+        def _fmt_cell(col, val, row=None):
             cls = ""
+            if val is None:
+                return "—", ""
+            if col == "vs Fair Value":
+                # Coloured by decision, not by direction: above your own band is
+                # red because it asks whether to still hold, even though it got
+                # there by going up.
+                _st = (row or {}).get("_stance")
+                cls = (" pf-red" if _st == "above_band"
+                       else " pf-green" if _st == "below_band" else "")
+                return f"{val:+.0f}%", cls
+            if col == "Val age":
+                return (f"{val}d" if val < 400 else "stale"), (
+                    " pf-red" if val > 120 else "")
             if col in color_cols_set:
                 cls = " pf-green" if val > 0 else " pf-red" if val < 0 else ""
             if col in ("Cost Basis", "Wheel Basis", "Break-even", "Current Price"):
@@ -10599,7 +10651,7 @@ elif page == "Portfolio":
         for row in rows:
             cells = ""
             for col in selected:
-                fval, cls = _fmt_cell(col, row[col])
+                fval, cls = _fmt_cell(col, row[col], row)
                 cells += (
                     f'<div class="pf-cell">'
                     f'<span class="pf-label">{col}</span>'
@@ -10656,6 +10708,33 @@ elif page == "Portfolio":
 
         cards_html += '</div>'
         st.markdown(cards_html, unsafe_allow_html=True)
+
+        # ── The decision line ──
+        # Selling is only a decision once there is somewhere for the money to
+        # go, so the count of holdings that have run past your own band sits
+        # next to the count of watchlist names trading under their buy price.
+        _rich = [r["Ticker"] for r in rows if r.get("_stance") == "above_band"]
+        _held_syms = {(d.get("symbol") or t).upper() for t, d in held.items()}
+        _candidates = [
+            v for k, v in _valuations.items()
+            if k not in _held_syms and v.get("buy_price") and v.get("stock_price")
+            and v["buy_price"] > 0 and v["stock_price"] < v["buy_price"]
+        ]
+        if _rich or _candidates:
+            _left = (f'<b>{len(_rich)}</b> holding(s) above your fair value'
+                     + (f' — {", ".join(_rich)}' if _rich else ''))
+            _right = (f'<b>{len(_candidates)}</b> watchlist name(s) under their buy price'
+                      + (f' — {", ".join(sorted(v["ticker"] for v in _candidates)[:6])}'
+                         if _candidates else ''))
+            st.markdown(
+                f'<div style="margin-top:14px;padding:10px 14px;background:{T["info_bg"]};'
+                f'border-radius:8px;border:1px dashed {T["border_medium"]};font-size:0.85rem">'
+                f'{_left}<br>{_right}'
+                f'<div style="font-size:0.72rem;color:{T["text_muted"]};margin-top:6px">'
+                f'Watchlist prices are from each name\'s last valuation run, not live.'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
 
     _portfolio_cards()
 
