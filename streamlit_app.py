@@ -10788,22 +10788,28 @@ elif page == "Portfolio":
     _behind = sorted([r for r in _rated if r["rel"]["alpha"] < 0],
                      key=lambda r: r["rel"]["alpha"])
 
+    # Cells of ONE grid, not a grid per row. A row of its own could only ever
+    # align with itself: the 1fr column is resolved against that row's
+    # container, so "146d" and "250d" sized their track differently from "70d"
+    # and the last rows sat inset. Shared column tracks is what a grid is for.
+    _cell = f'border-top:1px solid {T["divider"]};padding:5px 0'
+
     def _row_html(label, value, color, mid=""):
-        # A grid with fixed columns rather than flex: the ticker, the holding
-        # period and the figure each keep their own column, so rows do not
-        # shift as the text either side of them changes width. tabular-nums
-        # stops the digits themselves from jittering between rows.
         return (
-            f'<div style="display:grid;grid-template-columns:1fr 52px 74px;'
-            f'align-items:baseline;column-gap:10px;'
-            f'padding:5px 0;border-top:1px solid {T["divider"]}">'
-            f'<span style="color:{T["text"]};overflow:hidden;'
-            f'text-overflow:ellipsis;white-space:nowrap">{label}</span>'
-            f'<span style="text-align:right;font-size:0.75rem;'
+            f'<span style="{_cell};color:{T["text"]};overflow:hidden;'
+            f'text-overflow:ellipsis;white-space:nowrap;text-align:left">{label}</span>'
+            f'<span style="{_cell};text-align:right;font-size:0.75rem;'
             f'font-variant-numeric:tabular-nums;color:{T["text_muted"]}">{mid}</span>'
-            f'<span style="text-align:right;font-weight:600;'
+            f'<span style="{_cell};text-align:right;font-weight:600;'
             f'font-variant-numeric:tabular-nums;color:{color}">{value}</span>'
-            f'</div>'
+        )
+
+    def _rows_grid(cells):
+        # tabular-nums on the numeric columns keeps the digits from jittering
+        # between rows once the tracks themselves stop moving.
+        return (
+            f'<div style="display:grid;grid-template-columns:1fr auto auto;'
+            f'column-gap:12px;align-items:baseline">{cells}</div>'
         )
 
     _card_htmls = []
@@ -10836,7 +10842,7 @@ elif page == "Portfolio":
             f'${_total_contrib:+,.0f}</span>'
             f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
             f'open positions, unrealized</div></div>'
-            f'{_rows}{_foot}'
+            f'{_rows_grid(_rows)}{_foot}'
             f'</div>'
         )
 
@@ -10876,7 +10882,7 @@ elif page == "Portfolio":
             f'{_n_behind} of {len(_rated)}</span>'
             f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
             f'behind the index since you bought</div></div>'
-            f'{_rows}{_foot}'
+            f'{_rows_grid(_rows)}{_foot}'
             f'</div>'
         )
 
