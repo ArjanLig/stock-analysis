@@ -6,7 +6,7 @@ from datetime import date
 from portfolio_metrics import (compute_deployment, display_basis,
                                held_share_cost, has_option_legs,
                                fifo_realized, open_lots, relative_performance,
-                               material_movers, valuation_stance,
+                               valuation_stance,
                                lots_cover)
 
 
@@ -355,45 +355,6 @@ class TestRelativePerformance(unittest.TestCase):
         """Zero alpha reads as "kept pace"; there is nothing to keep pace."""
         r = relative_performance([], 90.0, self.INDEX, date(2026, 8, 11))
         self.assertIsNone(r["alpha"])
-
-
-class TestMaterialMovers(unittest.TestCase):
-    def _rows(self, **kw):
-        return [{"ticker": k, "contribution": v} for k, v in kw.items()]
-
-    def test_a_rounding_error_does_not_get_a_place_among_the_losers(self):
-        """RDDT at -23 was shown beside PEP at -2,598 purely for being third
-        from the bottom. Three names implies three that matter."""
-        rows = self._rows(MSFT=240, NVDA=145, META=81, RDDT=-23,
-                          IBIT=-1617, PEP=-2598)
-        _winners, losers, dropped = material_movers(rows)
-        self.assertEqual([r["ticker"] for r in losers], ["PEP", "IBIT"])
-        self.assertNotIn("RDDT", [r["ticker"] for r in losers])
-        self.assertEqual(dropped, 1)
-
-    def test_the_biggest_movers_come_first(self):
-        rows = self._rows(A=100, B=300, C=-500, D=-200)
-        winners, losers, _ = material_movers(rows)
-        self.assertEqual([r["ticker"] for r in winners], ["B", "A"])
-        self.assertEqual([r["ticker"] for r in losers], ["C", "D"])
-
-    def test_at_most_three_a_side(self):
-        rows = self._rows(A=100, B=200, C=300, D=400, E=500)
-        winners, _, dropped = material_movers(rows)
-        self.assertEqual([r["ticker"] for r in winners], ["E", "D", "C"])
-        self.assertEqual(dropped, 2)
-
-    def test_everything_immaterial_leaves_nothing_rather_than_a_token_row(self):
-        """A quiet week is a quiet week; promoting the largest of three trivial
-        moves invents a story. Judging that needs the portfolio's size — with
-        only the moves to go on, each dollar is still a third of the total."""
-        winners, losers, dropped = material_movers(
-            self._rows(A=1, B=-1, C=2), portfolio_value=100_000)
-        self.assertEqual((winners, losers), ([], []))
-        self.assertEqual(dropped, 3)
-
-    def test_no_positions_at_all(self):
-        self.assertEqual(material_movers([]), ([], [], 0))
 
 
 class TestValuationStance(unittest.TestCase):

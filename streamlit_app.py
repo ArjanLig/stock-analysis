@@ -57,7 +57,7 @@ from broker_adapter import (
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
-                               relative_performance, material_movers,
+                               relative_performance,
                                valuation_stance, lots_cover,
                                DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
@@ -10716,32 +10716,6 @@ elif page == "Portfolio":
         cards_html += '</div>'
         st.markdown(cards_html, unsafe_allow_html=True)
 
-        # ── The decision line ──
-        # Selling is only a decision once there is somewhere for the money to
-        # go, so the count of holdings that have run past your own band sits
-        # next to the count of watchlist names trading under their buy price.
-        _rich = [r["Ticker"] for r in rows if r.get("_stance") == "above_band"]
-        _held_syms = {(d.get("symbol") or t).upper() for t, d in held.items()}
-        _candidates = [
-            v for k, v in _valuations.items()
-            if k not in _held_syms and v.get("buy_price") and v.get("stock_price")
-            and v["buy_price"] > 0 and v["stock_price"] < v["buy_price"]
-        ]
-        if _rich or _candidates:
-            _left = (f'<b>{len(_rich)}</b> holding(s) above your fair value'
-                     + (f' — {", ".join(_rich)}' if _rich else ''))
-            _right = (f'<b>{len(_candidates)}</b> watchlist name(s) under their buy price'
-                      + (f' — {", ".join(sorted(v["ticker"] for v in _candidates)[:6])}'
-                         if _candidates else ''))
-            st.markdown(
-                f'<div style="margin-top:14px;padding:10px 14px;background:{T["info_bg"]};'
-                f'border-radius:8px;border:1px dashed {T["border_medium"]};font-size:0.85rem">'
-                f'{_left}<br>{_right}'
-                f'<div style="font-size:0.72rem;color:{T["text_muted"]};margin-top:6px">'
-                f'Watchlist prices are from each name\'s last valuation run, not live.'
-                f'</div></div>',
-                unsafe_allow_html=True,
-            )
 
     _portfolio_cards()
 
@@ -10784,6 +10758,7 @@ elif page == "Portfolio":
         })
 
     _by_contrib = sorted(_perf_rows, key=lambda r: r["contribution"], reverse=True)
+    _pf_value = sum(r["market_value"] for r in _perf_rows)
     _rated = [r for r in _perf_rows if r["rel"] and r["rel"]["alpha"] is not None]
     _behind = sorted([r for r in _rated if r["rel"]["alpha"] < 0],
                      key=lambda r: r["rel"]["alpha"])
@@ -10814,24 +10789,18 @@ elif page == "Portfolio":
 
     _card_htmls = []
 
-    # Contribution: what actually moved the portfolio, in money. Chosen by
-    # size, not by rank — a fixed bottom three put RDDT's -23 beside PEP's
-    # -2,598 for being third from the bottom, which reads as three names that
-    # matter.
-    _winners, _losers, _immaterial = material_movers(
-        _perf_rows, portfolio_value=sum(r["market_value"] for r in _perf_rows)
-    )
-    if _winners or _losers:
+    # Contribution: what actually moved the portfolio, in money. Every position,
+    # ranked. A curated top and bottom three implied three names that mattered
+    # and put RDDT's -23 beside PEP's -2,598; a complete ranked list makes the
+    # same point without the implication, and the sizes speak for themselves.
+    if _perf_rows:
         _total_contrib = sum(r["contribution"] for r in _perf_rows)
         _rows = "".join(
             _row_html(r["ticker"], f'${r["contribution"]:+,.0f}',
-                      T["accent"] if r["contribution"] >= 0 else T["red"])
-            for r in _winners + _losers
-        )
-        _foot = (
-            f'<div style="font-size:0.72rem;color:{T["text_muted"]};margin-top:8px">'
-            f'{_immaterial} more position(s), too small to move the total.</div>'
-            if _immaterial else ''
+                      T["accent"] if r["contribution"] >= 0 else T["red"],
+                      mid=f'{r["market_value"] / _pf_value * 100:.0f}%'
+                          if _pf_value else "")
+            for r in _by_contrib
         )
         _card_htmls.append(
             f'<div class="hero-card">'
@@ -10841,8 +10810,8 @@ elif page == "Portfolio":
             f'color:{T["accent"] if _total_contrib >= 0 else T["red"]}">'
             f'${_total_contrib:+,.0f}</span>'
             f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
-            f'open positions, unrealized</div></div>'
-            f'{_rows_grid(_rows)}{_foot}'
+            f'open positions, unrealized &nbsp;·&nbsp; middle column is weight</div></div>'
+            f'{_rows_grid(_rows)}'
             f'</div>'
         )
 
