@@ -8740,7 +8740,11 @@ with st.sidebar:
     if st.session_state.get("t212_credentials"):
         _connected.append(("Trading 212", "t212"))
 
-    if len(_connected) >= 2:
+    # Not on the Portfolio page: its own Overview / per-broker tabs decide what
+    # is shown there, and two controls for one thing invites picking the one
+    # that doesn't apply. Elsewhere the switcher is the only way to say which
+    # account the option chain, deposit history and margin figures belong to.
+    if len(_connected) >= 2 and page != "Portfolio":
         _broker_options = [label for label, _ in _connected]
         _broker_keys = [key for _, key in _connected]
         _current = get_active_broker()
@@ -10059,6 +10063,14 @@ elif page == "Portfolio":
         if portfolio_view != "Overview":
             held = {t: d for t, d in held.items()
                     if d.get("broker") == portfolio_view}
+            # Margin, Greeks and beta-weighted delta lower down the page have
+            # no combined form — they read the active broker. Point that at the
+            # broker the tab names, or the bottom of the page would describe a
+            # different account than the top.
+            _picked = next((k for k, v in BROKER_NAMES.items()
+                            if v == portfolio_view), None)
+            if _picked and st.session_state.get("active_broker") != _picked:
+                st.session_state["active_broker"] = _picked
 
     if not held:
         if portfolio_view != "Overview":
@@ -10072,8 +10084,12 @@ elif page == "Portfolio":
     held_tickers = sorted({d.get("symbol", t) for t, d in held.items()})
 
     # ── Margin / Buying Power (with integrated simulator) ──
+    # These fetch whichever broker is active, so the active broker has to be
+    # part of the cache key. Without it, switching broker kept serving the
+    # previous one's margin and buying power for the rest of the TTL — the
+    # numbers changed brokers on screen only after a minute of staleness.
     @st.cache_data(ttl=60, show_spinner=False)
-    def _cached_account_balances():
+    def _cached_account_balances(broker):
         return fetch_account_balances()
 
     @st.cache_data(ttl=60, show_spinner=False)
@@ -10081,13 +10097,13 @@ elif page == "Portfolio":
         return fetch_all_balances()
 
     @st.cache_data(ttl=120, show_spinner=False)
-    def _cached_margin_requirements():
+    def _cached_margin_requirements(broker):
         return fetch_margin_requirements()
 
     def _margin_overview():
         st.markdown("")
         try:
-            bal = _cached_account_balances()
+            bal = _cached_account_balances(get_active_broker())
         except Exception as e:
             logger.warning("Account balances fetch failed: %s", e)
             bal = None
@@ -10220,7 +10236,9 @@ elif page == "Portfolio":
 
         st.markdown(
             f'<div class="hero-card">'
-            f'<h4>Margin Overview</h4>'
+            # Named, because margin has no combined form: it is one account's
+            # buying power even when the table above it covers two.
+            f'<h4>Margin Overview — {BROKER_NAMES.get(get_active_broker(), "Tastytrade")}</h4>'
             f'{assign_note}'
             f'{sim_note}'
             f'<div style="margin:16px 0">'
@@ -10509,7 +10527,7 @@ elif page == "Portfolio":
 
         # ── Per-position margin requirements ──
         try:
-            _margin_reqs = _cached_margin_requirements()
+            _margin_reqs = _cached_margin_requirements(get_active_broker())
         except Exception as e:
             logger.debug("Margin requirements fetch failed: %s", e)
             _margin_reqs = {}
