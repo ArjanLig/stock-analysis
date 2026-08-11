@@ -3570,7 +3570,7 @@ st.markdown(f"""
         align-items: center;
     }}
 
-    /* Margin overview — single continuous white block */
+    /* Deployment card — single continuous white block */
     .st-key-deployment_block {{
         background: var(--card);
         border-radius: 24px;
@@ -3578,27 +3578,36 @@ st.markdown(f"""
         padding: 32px;
         box-shadow: var(--shadow);
     }}
-    .st-key-deployment_block .stTextInput > div > div > input,
-    .st-key-deployment_block .stNumberInput > div > div > input,
-    .st-key-deployment_block .stNumberInput input[type="number"] {{
+    /* The target-size stepper as ONE pill. Streamlit gives the input and the
+       -/+ block their own border and radius, which on a card reads as two
+       controls with a seam between them. Border on the container, nothing on
+       the parts. */
+    .st-key-deployment_block [data-testid="stNumberInputContainer"] {{
         background: var(--bg-secondary) !important;
-        color: var(--text) !important;
-        -webkit-text-fill-color: var(--text) !important;
         border: 1px solid var(--border-medium) !important;
-        border-radius: 12px !important;
+        border-radius: 999px !important;
+        overflow: hidden;
         box-shadow: none !important;
     }}
-    .st-key-deployment_block .stTextInput > div > div {{
+    .st-key-deployment_block .stNumberInput input {{
+        background: transparent !important;
+        color: var(--text) !important;
+        -webkit-text-fill-color: var(--text) !important;
         border: none !important;
-    }}
-    .st-key-deployment_block .stTextInput input::placeholder {{
-        -webkit-text-fill-color: var(--text-muted) !important;
-        color: var(--text-muted) !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        font-weight: 600;
+        padding-left: 16px;
     }}
     .st-key-deployment_block .stNumberInput button {{
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: var(--text-muted) !important;
+    }}
+    .st-key-deployment_block .stNumberInput button:hover {{
+        background: var(--grid) !important;
         color: var(--text) !important;
-        background: var(--bg-secondary) !important;
-        border-color: var(--border-medium) !important;
     }}
     .st-key-deployment_block .hero-card {{
         background: none;
