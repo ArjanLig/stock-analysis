@@ -57,7 +57,8 @@ from broker_adapter import (
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
-                               relative_performance, DEFAULT_TARGET_POS_PCT)
+                               relative_performance, material_movers,
+                               DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -10707,16 +10708,24 @@ elif page == "Portfolio":
 
     _card_htmls = []
 
-    # Contribution: what actually moved the portfolio, in money.
-    _movers = [r for r in _by_contrib if abs(r["contribution"]) >= 0.005]
-    if _movers:
-        _top = _movers[:3]
-        _bottom = [r for r in _movers[-3:] if r not in _top]
+    # Contribution: what actually moved the portfolio, in money. Chosen by
+    # size, not by rank — a fixed bottom three put RDDT's -23 beside PEP's
+    # -2,598 for being third from the bottom, which reads as three names that
+    # matter.
+    _winners, _losers, _immaterial = material_movers(
+        _perf_rows, portfolio_value=sum(r["market_value"] for r in _perf_rows)
+    )
+    if _winners or _losers:
         _total_contrib = sum(r["contribution"] for r in _perf_rows)
         _rows = "".join(
             _row_html(r["ticker"], f'${r["contribution"]:+,.0f}',
                       T["accent"] if r["contribution"] >= 0 else T["red"])
-            for r in _top + list(reversed(_bottom))
+            for r in _winners + _losers
+        )
+        _foot = (
+            f'<div style="font-size:0.72rem;color:{T["text_muted"]};margin-top:8px">'
+            f'{_immaterial} more position(s), too small to move the total.</div>'
+            if _immaterial else ''
         )
         _card_htmls.append(
             f'<div class="hero-card">'
@@ -10727,17 +10736,19 @@ elif page == "Portfolio":
             f'${_total_contrib:+,.0f}</span>'
             f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
             f'open positions, unrealized</div></div>'
-            f'{_rows}'
+            f'{_rows}{_foot}'
             f'</div>'
         )
 
     # Relative performance: is each name earning its place against the index?
     if _rated:
         _rows = "".join(
+            # The holding period rather than a verdict on it: a reader can
+            # discount three weeks of relative performance without being told
+            # to, and "too early" was landing on five of seven positions.
             _row_html(
-                f'{r["ticker"]}'
-                + ('<span style="font-size:0.7rem;color:' + T["text_muted"]
-                   + '"> · too early</span>' if r["rel"]["days_held"] < 90 else ''),
+                f'{r["ticker"]}<span style="font-size:0.7rem;color:'
+                f'{T["text_muted"]}"> · {r["rel"]["days_held"]}d</span>',
                 f'{r["rel"]["alpha"]:+.0f} pts',
                 T["accent"] if r["rel"]["alpha"] >= 0 else T["red"],
             )

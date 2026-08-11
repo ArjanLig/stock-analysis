@@ -96,6 +96,40 @@ def fifo_realized(trades):
     return sales
 
 
+# A position has to account for this share of everything that moved before it
+# earns a line of its own. Below it, a name is there for its rank rather than
+# its effect — RDDT's -23 sat next to PEP's -2,598 purely for being third from
+# the bottom, and three names implies three that matter.
+MATERIAL_SHARE = 0.01
+
+# ...and this share of the portfolio, in absolute terms. A purely relative
+# floor cannot recognise a quiet week: when nothing moved, each of three
+# one-dollar moves is still a third of everything that moved.
+MATERIAL_OF_PORTFOLIO = 0.001
+
+
+def material_movers(rows, limit=3, portfolio_value=None):
+    """Split contribution rows into (winners, losers, dropped_count).
+
+    Both lists are ordered by size and hold at most `limit` names. Anything too
+    small to have changed the portfolio is left out and counted instead, so the
+    card can say what it is not showing rather than implying it showed
+    everything.
+    """
+    if not rows:
+        return [], [], 0
+    moved = sum(abs(r["contribution"]) for r in rows)
+    floor = moved * MATERIAL_SHARE
+    if portfolio_value:
+        floor = max(floor, portfolio_value * MATERIAL_OF_PORTFOLIO)
+    material = [r for r in rows if abs(r["contribution"]) >= floor]
+    winners = sorted([r for r in material if r["contribution"] > 0],
+                     key=lambda r: r["contribution"], reverse=True)[:limit]
+    losers = sorted([r for r in material if r["contribution"] < 0],
+                    key=lambda r: r["contribution"])[:limit]
+    return winners, losers, len(rows) - len(winners) - len(losers)
+
+
 def open_lots(trades):
     """The share lots still held, oldest first: [{quantity, price, date}].
 
