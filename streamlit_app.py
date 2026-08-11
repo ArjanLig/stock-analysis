@@ -3570,12 +3570,11 @@ st.markdown(f"""
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        /* Top-aligned and full-width, so two cards side by side line up: the
-           rows start at the same height and their columns sit at the same
-           edges. Centring did the opposite — each card's table shrank to its
-           own content and floated in the middle of its own box. */
+        /* Top-aligned so both cards' headings start at the same height, but
+           horizontally centred: the tables read better as a centred block than
+           stretched to the card's edges. */
         justify-content: flex-start;
-        align-items: stretch;
+        align-items: center;
     }}
 
     /* Deployment card — single continuous white block */
@@ -10783,18 +10782,31 @@ elif page == "Portfolio":
             f'font-variant-numeric:tabular-nums;color:{color}">{value}</span>'
         )
 
+    def _help_icon(text):
+        """A "?" carrying its explanation in the native tooltip.
+
+        st.help isn't reachable from inside raw card HTML, and a title
+        attribute needs no script.
+        """
+        import html as _html
+        _t = _html.escape(text, quote=True)
+        return (
+            f'<span title="{_t}" style="cursor:help;margin-left:6px;'
+            f'font-size:0.7rem;font-weight:600;color:{T["text_muted"]};'
+            f'border:1px solid {T["border_medium"]};border-radius:50%;'
+            f'padding:0 5px;vertical-align:middle">?</span>'
+        )
+
     def _rows_grid(cells):
-        # Capped and centred rather than spanning the card: at full width the
-        # ticker and its figure were pushed to opposite edges with a gap
-        # between them. Both cards use the same cap and both cards are the same
-        # width, so the columns still line up with each other.
+        # Sized to its content and centred by the card's flexbox. Columns are
+        # auto rather than 1fr so the table does not stretch: the ticker and
+        # its figure belong next to each other, not on opposite edges.
         #
         # tabular-nums on the numeric columns keeps the digits from jittering
         # between rows once the tracks themselves stop moving.
         return (
-            f'<div style="display:grid;grid-template-columns:1fr auto auto;'
-            f'width:100%;max-width:300px;margin:0 auto;'
-            f'column-gap:12px;align-items:baseline">{cells}</div>'
+            f'<div style="display:grid;grid-template-columns:auto auto auto;'
+            f'column-gap:14px;align-items:baseline">{cells}</div>'
         )
 
     _card_htmls = []
@@ -10845,23 +10857,24 @@ elif page == "Portfolio":
                          if r["rel"] and r["rel"]["alpha"] is None)
         _no_dates = len(_perf_rows) - len(_rated) - _uncovered
         _missing = _uncovered + _no_dates
-        _foot = (
-            f'<div style="font-size:0.72rem;color:{T["text_muted"]};margin-top:8px">'
-            f'Price return since each purchase, against SPY over the same days. '
-            f'Dividends counted on neither side.'
-            + (f' {_missing} position(s) have no purchase date to measure from.'
-               if _missing else '')
-            + '</div>'
+        # The caveats belong with the card, not under it: three lines of grey
+        # type at the bottom made the two cards different heights and pushed
+        # the reader past the numbers to reach them.
+        _note = (
+            "Price return since each purchase, against SPY over the same days. "
+            "Dividends counted on neither side."
+            + (f" {_missing} position(s) have no purchase date to measure from."
+               if _missing else "")
         )
         _card_htmls.append(
             f'<div class="hero-card">'
-            f'<h4>vs S&amp;P 500</h4>'
+            f'<h4>vs S&amp;P 500{_help_icon(_note)}</h4>'
             f'<div style="text-align:center;margin-bottom:12px">'
             f'<span style="font-size:1.8rem;font-weight:700;color:{_summary_color}">'
             f'{_n_behind} of {len(_rated)}</span>'
             f'<div style="font-size:0.75rem;color:{T["text_muted"]}">'
             f'behind the index since you bought</div></div>'
-            f'{_rows_grid(_rows)}{_foot}'
+            f'{_rows_grid(_rows)}'
             f'</div>'
         )
 
