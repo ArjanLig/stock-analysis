@@ -3609,6 +3609,14 @@ st.markdown(f"""
         background: var(--grid) !important;
         color: var(--text) !important;
     }}
+    /* Centre the label (and its help "?") over the pill, otherwise a centred
+       control sits under a left-aligned caption. */
+    .st-key-deployment_block .stNumberInput [data-testid="stWidgetLabel"] {{
+        justify-content: center;
+    }}
+    .st-key-deployment_block .stNumberInput [data-testid="stWidgetLabel"] p {{
+        text-align: center;
+    }}
     .st-key-deployment_block .hero-card {{
         background: none;
         border-top: none;
@@ -10317,22 +10325,19 @@ elif page == "Portfolio":
                 )
 
         # ── Target size ──
-        # Narrow column: a percentage never needs the full page width, and a
-        # stretched input reads as the main control on a card where it is a
-        # setting. The sentence beside it carries what the label had to drop.
-        _ts_left, _ts_right = st.columns([1, 3], vertical_alignment="bottom")
-        with _ts_left:
+        # Centred and narrow: it is a setting, not the point of the card. The
+        # explanation lives in the label's help tooltip rather than beside it,
+        # where a standing sentence competed with the figures above.
+        _, _ts_mid, _ = st.columns([1.5, 1, 1.5])
+        with _ts_mid:
             _new_pct = st.number_input(
                 "Full position %",
                 min_value=0.5, max_value=50.0, step=0.5, format="%.1f",
                 value=target_pct, key="_target_pos_input",
-                label_visibility="collapsed",
-            )
-        with _ts_right:
-            st.caption(
-                f"Full position = {target_pct:.1f}% of the portfolio "
-                f"(${dep['target']:,.0f}). Anything within 10% of that counts "
-                f"as full."
+                help=f"One setting for the whole portfolio: what counts as a "
+                     f"full position. At {target_pct:.1f}% that is "
+                     f"${dep['target']:,.0f}, and anything within 10% of it is "
+                     f"treated as full.",
             )
         if abs(_new_pct - target_pct) > 1e-9:
             st.session_state["_target_pos_pct"] = _new_pct
