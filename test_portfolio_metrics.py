@@ -2,7 +2,8 @@
 
 import unittest
 
-from portfolio_metrics import compute_deployment, display_basis
+from portfolio_metrics import (compute_deployment, display_basis,
+                               held_share_cost, has_option_legs)
 
 
 def _pos(mv, symbol=None):
@@ -137,6 +138,87 @@ class TestDisplayBasis(unittest.TestCase):
 
     def test_zero_stays_zero(self):
         self.assertEqual(display_basis(0.0), 0.0)
+
+
+def _eq(qty, price, action="Buy to Open", txn="Trade"):
+    return {"instrument_type": "Equity", "quantity": qty, "price": price,
+            "action": action, "type": txn,
+            "net_value": -qty * price if "Buy" in action else qty * price}
+
+
+class TestHeldShareCost(unittest.TestCase):
+    """Cost of the shares still held, FIFO.
+
+    Each expected value below is Tastytrade's own average-open-price for the
+    position on 2026-08-11, so these are checked against the broker rather than
+    against our own arithmetic.
+    """
+
+    def test_a_single_lot(self):
+        # NFLX: bought 8 @ 67.727 on 2026-07-20, never touched since.
+        cost, shares = held_share_cost([_eq(8, 67.727)])
+        self.assertEqual(shares, 8)
+        self.assertAlmostEqual(cost / shares, 67.727, places=3)
+
+    def test_two_lots_average(self):
+        # MSFT: 1 @ 359.39 and 1 @ 400.2435 -> TT reports 379.81675.
+        cost, shares = held_share_cost([_eq(1, 359.39), _eq(1, 400.2435)])
+        self.assertAlmostEqual(cost / shares, 379.81675, places=4)
+
+    def test_a_sale_retires_the_oldest_lot_first(self):
+        """IBIT: assigned 100 @ 56.00, bought 20 @ 35.8889, sold 20 @ 36.595.
+
+        FIFO takes the 20 out of the 56.00 lot, leaving 80 @ 56 + 20 @ 35.89 =
+        51.978 — exactly what Tastytrade reports. Averaging every buy in the
+        cycle instead gave 52.65, a purchase price for 120 shares of which 20
+        are gone.
+        """
+        trades = [
+            _eq(100, 56.00, action="Buy to Open", txn="Receive Deliver"),
+            _eq(20, 35.8889),
+            _eq(20, 36.595, action="Sell to Close"),
+        ]
+        cost, shares = held_share_cost(trades)
+        self.assertEqual(shares, 100)
+        self.assertAlmostEqual(cost / shares, 51.97778, places=4)
+
+    def test_dividends_are_not_lots(self):
+        """A dividend arrives as an Equity row with no quantity. Counting it
+        would shift the purchase price of shares it never bought."""
+        div = {"instrument_type": "Equity", "quantity": 0.0, "price": 0.0,
+               "action": "", "type": "Money Movement", "net_value": 0.91,
+               "label": "Dividend"}
+        cost, shares = held_share_cost([_eq(1, 100.0), div])
+        self.assertEqual(shares, 1)
+        self.assertAlmostEqual(cost, 100.0)
+
+    def test_selling_everything_leaves_nothing(self):
+        cost, shares = held_share_cost(
+            [_eq(10, 50.0), _eq(10, 55.0, action="Sell to Close")])
+        self.assertEqual(shares, 0)
+        self.assertEqual(cost, 0.0)
+
+    def test_selling_more_than_held_does_not_go_negative(self):
+        """History can start mid-position; a sell with no matching lot must not
+        invent a negative holding."""
+        cost, shares = held_share_cost([_eq(5, 50.0, action="Sell to Close")])
+        self.assertEqual(shares, 0)
+        self.assertEqual(cost, 0.0)
+
+
+class TestHasOptionLegs(unittest.TestCase):
+    def test_a_plain_buy_is_not_a_wheel(self):
+        """NFLX and MSFT were bought outright and never had an option written
+        against them. Presenting an adjusted 'wheel' basis for them describes a
+        trade that never happened."""
+        self.assertFalse(has_option_legs([_eq(8, 67.727)]))
+
+    def test_any_option_leg_makes_it_one(self):
+        trades = [_eq(100, 56.0), {"instrument_type": "Equity Option",
+                                   "quantity": 1, "price": 0.61,
+                                   "action": "Sell to Open", "type": "Trade",
+                                   "net_value": 59.88}]
+        self.assertTrue(has_option_legs(trades))
 
 
 if __name__ == "__main__":

@@ -55,7 +55,8 @@ from broker_adapter import (
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
 )
 import plotly.graph_objects as go
-from portfolio_metrics import compute_deployment, display_basis, DEFAULT_TARGET_POS_PCT
+from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
+                               held_share_cost, DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -10482,47 +10483,48 @@ elif page == "Portfolio":
         # ── Build rows ──
         rows = []
         for ticker, data in held.items():
+            _trades = data.get("trades", [])
             wheels = data.get("wheels", [])
-            last_wheel = wheels[-1] if wheels else None
+            _cycle = wheels[-1] if wheels else None
+            # A cycle is not a wheel. detect_wheels opens one for any share
+            # position, so NFLX (eight shares, no option ever) and MSFT were
+            # given an adjusted basis and a premium column for a trade that was
+            # never made.
+            last_wheel = _cycle if _cycle and has_option_legs(_trades) else None
 
-            purchase_price = 0.0
             wheel_equity_cost = 0.0
             wheel_option_pl = 0.0
-            wheel_shares = 0
-            total_buy_price = 0.0
+
+            # FIFO cost of the shares still held, from the whole history rather
+            # than the current cycle's buys. Averaging every buy in the cycle
+            # stopped being the purchase price as soon as part of the position
+            # was sold: IBIT read 52.65 for 120 shares of which 20 were gone.
+            _cost, _lot_shares = held_share_cost(_trades)
+            purchase_price = (_cost / _lot_shares) if _lot_shares else 0.0
+            if not purchase_price:
+                purchase_price = data.get("purchase_price") or display_basis(
+                    data["cost_per_share"]
+                )
 
             if last_wheel:
                 for t in last_wheel["trades"]:
                     if t["instrument_type"] == "Equity":
-                        wheel_equity_cost += t["net_value"]
-                        action = t.get("action", "")
-                        txn_type = t.get("type", "")
-                        qty = t["quantity"]
-                        price = t["price"] if t["price"] else abs(t["net_value"]) / qty if qty else 0.0
-                        if txn_type == "Receive Deliver":
-                            if t["net_value"] < 0:
-                                wheel_shares += qty
-                                total_buy_price += price * qty
-                        elif "Buy" in action:
-                            wheel_shares += qty
-                            total_buy_price += price * qty
+                        # Dividends arrive as Equity rows too; they are income,
+                        # not part of what the shares cost.
+                        if (t.get("type") or "") != "Money Movement":
+                            wheel_equity_cost += t["net_value"]
                     elif "Option" in t["instrument_type"]:
                         wheel_option_pl += t["net_value"]
 
-                if wheel_shares > 0:
-                    purchase_price = total_buy_price / wheel_shares
                 shares = data["shares_held"]
                 wheel_cps = (wheel_equity_cost + wheel_option_pl) / shares if shares else 0.0
             else:
-                wheel_cps = data["cost_per_share"]
-                # A plain holding (Trading 212, or any broker without option
-                # legs): the purchase price lives on the position itself rather
-                # than being reconstructed from wheel trades that don't exist,
-                # which is why Cost Basis read $0.00 for every T212 row.
-                purchase_price = data.get("purchase_price") or display_basis(wheel_cps)
+                wheel_cps = -purchase_price
 
             unrealized = data["market_value"] + wheel_equity_cost if last_wheel else data["market_value"] + data["equity_cost"]
-            days_held = (date.today() - last_wheel["start"]).days if last_wheel else 0
+            # The cycle start is the purchase date whether or not options were
+            # written, so a plain holding keeps a real holding period.
+            days_held = (date.today() - _cycle["start"]).days if _cycle else 0
 
             prev = data.get("previous_close", 0)
             cur = data["current_price"]
@@ -11508,32 +11510,26 @@ elif page == "Wheel Cost Basis":
         cur_price = data["current_price"]
         prev_close = data.get("previous_close", cur_price)
 
-        # Calculate buy price and adjusted cost from last wheel
-        last_wheel = wheels[-1] if wheels else None
-        buy_price = 0.0
+        # Buy price and adjusted cost. A cycle is not a wheel — detect_wheels
+        # opens one for any share position — so a ticker that never had an
+        # option written against it gets a purchase price and no adjusted
+        # basis, rather than a "wheel" figure for a trade never made.
+        _card_trades = data.get("trades", [])
+        is_wheel = has_option_legs(_card_trades)
+        last_wheel = wheels[-1] if wheels and is_wheel else None
+
+        _cost, _lot_shares = held_share_cost(_card_trades)
+        buy_price = (_cost / _lot_shares) if _lot_shares else 0.0
         adj_cost = data["cost_per_share"]
         wheel_equity = 0.0
         wheel_option = 0.0
-        w_shares = 0
-        w_buy_total = 0.0
         if last_wheel:
             for t in last_wheel["trades"]:
                 if t["instrument_type"] == "Equity":
-                    wheel_equity += t["net_value"]
-                    action = t.get("action", "")
-                    txn_type = t.get("type", "")
-                    qty = t["quantity"]
-                    p = t["price"] if t["price"] else abs(t["net_value"]) / qty if qty else 0.0
-                    if txn_type == "Receive Deliver" and t["net_value"] < 0:
-                        w_shares += qty
-                        w_buy_total += p * qty
-                    elif "Buy" in action:
-                        w_shares += qty
-                        w_buy_total += p * qty
+                    if (t.get("type") or "") != "Money Movement":
+                        wheel_equity += t["net_value"]
                 elif "Option" in t["instrument_type"]:
                     wheel_option += t["net_value"]
-            if w_shares > 0:
-                buy_price = w_buy_total / w_shares
             if shares > 0:
                 adj_cost = (wheel_equity + wheel_option) / shares
 
@@ -11566,7 +11562,11 @@ elif page == "Wheel Cost Basis":
                 f'      <img class="tk-logo" src="{logo_url}" onerror="this.style.display=\'none\'">'
                 f'      <p class="tk-name">{ticker} @ {buy_price:,.2f}</p>'
                 f'    </div>'
-                f'    <p class="tk-sub">(Adjusted: {display_basis(adj_cost):,.2f})</p>'
+                # Only where an option was actually written: for an outright
+            # purchase the adjusted basis IS the purchase price, and printing
+            # it twice implies a premium that was never collected.
+            + (f'    <p class="tk-sub">(Adjusted: {display_basis(adj_cost):,.2f})</p>'
+               if is_wheel else '') +
                 f'    <p class="tk-sub">Current Price</p>'
                 f'    <p class="tk-sub" style="color:{day_color}; font-weight:500">'
                 f'      {cur_price:,.2f} ({day_chg:+.2f}%)</p>'

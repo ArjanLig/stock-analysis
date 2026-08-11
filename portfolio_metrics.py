@@ -17,6 +17,61 @@ FILL_BAND = 0.90
 DEFAULT_TARGET_POS_PCT = 5.0
 
 
+def has_option_legs(trades):
+    """True when this ticker has ever had an option written against it.
+
+    A wheel is shares plus options. detect_wheels returns a cycle for any share
+    position — a plain buy sits in an "active" one — so a cycle is not evidence
+    of a wheel. Without this, an outright purchase like NFLX or MSFT was given
+    an adjusted basis and a premium column describing a trade never made.
+    """
+    return any("Option" in (t.get("instrument_type") or "") for t in trades)
+
+
+def held_share_cost(trades):
+    """FIFO cost of the shares still held: (total_cost, shares).
+
+    Summing every buy in the cycle answers "what did I pay for everything I
+    ever bought", which stops being the purchase price the moment part of the
+    position is sold. IBIT — assigned 100 at 56.00, added 20 at 35.89, sold 20
+    at 36.60 — came out at 52.65 for 120 shares of which 20 were gone. FIFO
+    retires the oldest lot first and gives 51.98, matching the broker.
+    """
+    lots = []  # [remaining_qty, price]
+    for t in trades:
+        if t.get("instrument_type") != "Equity":
+            continue
+        # Dividends and other cash movements arrive as Equity rows with no
+        # quantity; they buy no shares and must not move the average.
+        if (t.get("type") or "") == "Money Movement":
+            continue
+        qty = t.get("quantity") or 0.0
+        if not qty:
+            continue
+        price = t.get("price") or (abs(t.get("net_value") or 0.0) / qty)
+        if (t.get("type") or "") == "Receive Deliver":
+            is_buy = (t.get("net_value") or 0.0) < 0      # assignment in
+        else:
+            is_buy = "Buy" in (t.get("action") or "")
+        if is_buy:
+            lots.append([qty, price])
+            continue
+        # A sale retires the oldest lots. History can start mid-position, so a
+        # sale with nothing to match against simply finds no lot rather than
+        # driving the holding negative.
+        remaining = qty
+        while remaining > 0 and lots:
+            take = min(lots[0][0], remaining)
+            lots[0][0] -= take
+            remaining -= take
+            if lots[0][0] <= 0:
+                lots.pop(0)
+
+    shares = sum(lot[0] for lot in lots)
+    cost = sum(lot[0] * lot[1] for lot in lots)
+    return cost, shares
+
+
 def display_basis(net_cash_per_share):
     """Turn a signed per-share cash flow into the price a column should show.
 
