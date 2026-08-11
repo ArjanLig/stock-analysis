@@ -10784,11 +10784,17 @@ elif page == "Portfolio":
         )
 
     def _rows_grid(cells):
+        # Capped and centred rather than spanning the card: at full width the
+        # ticker and its figure were pushed to opposite edges with a gap
+        # between them. Both cards use the same cap and both cards are the same
+        # width, so the columns still line up with each other.
+        #
         # tabular-nums on the numeric columns keeps the digits from jittering
         # between rows once the tracks themselves stop moving.
         return (
             f'<div style="display:grid;grid-template-columns:1fr auto auto;'
-            f'width:100%;column-gap:12px;align-items:baseline">{cells}</div>'
+            f'width:100%;max-width:300px;margin:0 auto;'
+            f'column-gap:12px;align-items:baseline">{cells}</div>'
         )
 
     _card_htmls = []
