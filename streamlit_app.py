@@ -3570,8 +3570,12 @@ st.markdown(f"""
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        align-items: center;
+        /* Top-aligned and full-width, so two cards side by side line up: the
+           rows start at the same height and their columns sit at the same
+           edges. Centring did the opposite — each card's table shrank to its
+           own content and floated in the middle of its own box. */
+        justify-content: flex-start;
+        align-items: stretch;
     }}
 
     /* Deployment card — single continuous white block */
@@ -10784,7 +10788,7 @@ elif page == "Portfolio":
         # between rows once the tracks themselves stop moving.
         return (
             f'<div style="display:grid;grid-template-columns:1fr auto auto;'
-            f'column-gap:12px;align-items:baseline">{cells}</div>'
+            f'width:100%;column-gap:12px;align-items:baseline">{cells}</div>'
         )
 
     _card_htmls = []
