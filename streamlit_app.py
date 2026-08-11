@@ -10788,12 +10788,21 @@ elif page == "Portfolio":
     _behind = sorted([r for r in _rated if r["rel"]["alpha"] < 0],
                      key=lambda r: r["rel"]["alpha"])
 
-    def _row_html(label, value, color):
+    def _row_html(label, value, color, mid=""):
+        # A grid with fixed columns rather than flex: the ticker, the holding
+        # period and the figure each keep their own column, so rows do not
+        # shift as the text either side of them changes width. tabular-nums
+        # stops the digits themselves from jittering between rows.
         return (
-            f'<div style="display:flex;justify-content:space-between;'
+            f'<div style="display:grid;grid-template-columns:1fr 52px 74px;'
+            f'align-items:baseline;column-gap:10px;'
             f'padding:5px 0;border-top:1px solid {T["divider"]}">'
-            f'<span style="color:{T["text"]}">{label}</span>'
-            f'<span style="font-weight:600;color:{color}">{value}</span>'
+            f'<span style="color:{T["text"]};overflow:hidden;'
+            f'text-overflow:ellipsis;white-space:nowrap">{label}</span>'
+            f'<span style="text-align:right;font-size:0.75rem;'
+            f'font-variant-numeric:tabular-nums;color:{T["text_muted"]}">{mid}</span>'
+            f'<span style="text-align:right;font-weight:600;'
+            f'font-variant-numeric:tabular-nums;color:{color}">{value}</span>'
             f'</div>'
         )
 
@@ -10838,10 +10847,10 @@ elif page == "Portfolio":
             # discount three weeks of relative performance without being told
             # to, and "too early" was landing on five of seven positions.
             _row_html(
-                f'{r["ticker"]}<span style="font-size:0.7rem;color:'
-                f'{T["text_muted"]}"> · {r["rel"]["days_held"]}d</span>',
+                r["ticker"],
                 f'{r["rel"]["alpha"]:+.0f} pts',
                 T["accent"] if r["rel"]["alpha"] >= 0 else T["red"],
+                mid=f'{r["rel"]["days_held"]}d',
             )
             for r in sorted(_rated, key=lambda r: r["rel"]["alpha"], reverse=True)
         )
