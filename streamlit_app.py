@@ -10280,12 +10280,32 @@ elif page == "Portfolio":
         )
 
         if dep["partial"]:
+            # A table, not markdown lines: Streamlit reads a pair of dollar
+            # signs on one line as LaTeX, so "$355 of $1,440" came out as
+            # italic maths. Amounts also line up when they share a column.
+            _pt_head = f'padding:4px 8px;color:{T["text_muted"]};font-weight:600'
+            _pt_num = f'padding:4px 8px;text-align:right;border-top:1px solid {T["divider"]}'
+            _pt_txt = f'padding:4px 8px;border-top:1px solid {T["divider"]}'
+            _pt_rows = "".join(
+                f'<tr>'
+                f'<td style="{_pt_txt}"><b>{_p["ticker"]}</b></td>'
+                f'<td style="{_pt_num};color:{T["text_muted"]}">${_p["market_value"]:,.0f}</td>'
+                f'<td style="{_pt_num};color:{T["text_muted"]}">${dep["target"]:,.0f}</td>'
+                f'<td style="{_pt_num}"><b>${_p["gap"]:,.0f}</b></td>'
+                f'</tr>'
+                for _p in dep["partial"]
+            )
             with st.expander(f'Positions with room ({len(dep["partial"])})'):
-                for _p in dep["partial"]:
-                    st.markdown(
-                        f'**{_p["ticker"]}** — ${_p["market_value"]:,.0f} '
-                        f'of ${dep["target"]:,.0f} · **${_p["gap"]:,.0f}** to fill'
-                    )
+                st.markdown(
+                    f'<table style="width:100%;border-collapse:collapse;font-size:0.9rem">'
+                    f'<thead><tr>'
+                    f'<th style="{_pt_head};text-align:left">Ticker</th>'
+                    f'<th style="{_pt_head};text-align:right">Now</th>'
+                    f'<th style="{_pt_head};text-align:right">Target</th>'
+                    f'<th style="{_pt_head};text-align:right">To fill</th>'
+                    f'</tr></thead><tbody>{_pt_rows}</tbody></table>',
+                    unsafe_allow_html=True,
+                )
 
         # ── Target size ──
         _new_pct = st.number_input(
