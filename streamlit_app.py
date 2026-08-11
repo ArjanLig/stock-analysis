@@ -3576,6 +3576,14 @@ st.markdown(f"""
         justify-content: flex-start;
         align-items: center;
     }}
+    /* The heading and the summary centre against the CARD; only the row table
+       below them is sized by its content. Without this they centre against
+       their own width, which sits off to one side of the card. */
+    .greeks-grid .hero-card > h4,
+    .greeks-grid .hero-card > div:not([style*="grid"]) {{
+        align-self: stretch;
+        text-align: center;
+    }}
 
     /* Deployment card — single continuous white block */
     .st-key-deployment_block {{
@@ -10790,11 +10798,17 @@ elif page == "Portfolio":
         """
         import html as _html
         _t = _html.escape(text, quote=True)
+        # Zero-width wrapper: the icon renders beside the title but is not
+        # counted when the title is centred, so "vs S&P 500" sits on the card's
+        # centre line rather than pushed left by its own help icon.
         return (
+            f'<span style="display:inline-block;width:0;overflow:visible;'
+            f'white-space:nowrap">'
             f'<span title="{_t}" style="cursor:help;margin-left:6px;'
             f'font-size:0.7rem;font-weight:600;color:{T["text_muted"]};'
             f'border:1px solid {T["border_medium"]};border-radius:50%;'
             f'padding:0 5px;vertical-align:middle">?</span>'
+            f'</span>'
         )
 
     def _rows_grid(cells):
