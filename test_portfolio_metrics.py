@@ -6,7 +6,8 @@ from datetime import date
 from portfolio_metrics import (compute_deployment, display_basis,
                                held_share_cost, has_option_legs,
                                fifo_realized, open_lots, relative_performance,
-                               material_movers, valuation_stance)
+                               material_movers, valuation_stance,
+                               lots_cover)
 
 
 def _pos(mv, symbol=None):
@@ -434,6 +435,35 @@ class TestValuationStance(unittest.TestCase):
         broken model, not a 34x overvaluation. Printing it would drown every
         real signal in the column."""
         self.assertIsNone(valuation_stance(1132.67, 28.07, 33.03, 37.98))
+
+
+class TestLotsCover(unittest.TestCase):
+    """Whether the trade history accounts for the shares actually held.
+
+    A broker's history can start after the position did — a transfer in, or an
+    API that only returns recent orders. Deriving a FIFO cost basis from
+    partial lots would produce a confident, wrong purchase price, which is
+    worse than showing the broker's average.
+    """
+
+    def test_matching_share_counts_are_covered(self):
+        self.assertTrue(lots_cover(100.0, 100))
+
+    def test_fractional_shares_survive_the_comparison(self):
+        self.assertTrue(lots_cover(23.73, 23.73))
+
+    def test_history_that_misses_shares_is_not_covered(self):
+        self.assertFalse(lots_cover(80.0, 100))
+
+    def test_history_with_more_shares_than_held_is_not_covered(self):
+        """A sale missing from the history leaves lots that were closed."""
+        self.assertFalse(lots_cover(120.0, 100))
+
+    def test_no_history_at_all_is_not_covered(self):
+        self.assertFalse(lots_cover(0.0, 100))
+
+    def test_a_closed_position_needs_no_lots(self):
+        self.assertTrue(lots_cover(0.0, 0))
 
 
 if __name__ == "__main__":

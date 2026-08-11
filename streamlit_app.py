@@ -58,7 +58,8 @@ import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
                                relative_performance, material_movers,
-                               valuation_stance, DEFAULT_TARGET_POS_PCT)
+                               valuation_stance, lots_cover,
+                               DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -10501,7 +10502,13 @@ elif page == "Portfolio":
             # stopped being the purchase price as soon as part of the position
             # was sold: IBIT read 52.65 for 120 shares of which 20 were gone.
             _cost, _lot_shares = held_share_cost(_trades)
-            purchase_price = (_cost / _lot_shares) if _lot_shares else 0.0
+            # Only trust the lots when they account for the shares actually
+            # held. A history that starts after the position did (a transfer
+            # in, or an API returning only recent orders) would otherwise give
+            # a confident wrong purchase price — worse than the broker's own
+            # average.
+            _lots_ok = lots_cover(_lot_shares, data["shares_held"]) and _lot_shares
+            purchase_price = (_cost / _lot_shares) if _lots_ok else 0.0
             if not purchase_price:
                 purchase_price = data.get("purchase_price") or display_basis(
                     data["cost_per_share"]
@@ -10761,10 +10768,15 @@ elif page == "Portfolio":
         # Contribution is in dollars: a 40% gain on a 1% position moved nothing.
         _contrib = _mv + (_d.get("equity_cost") or 0.0) + (_d.get("option_pl") or 0.0)
         _rel = None
-        if _index_closes and _d.get("trades"):
+        _lots = open_lots(_d.get("trades") or [])
+        # Same guard as the cost basis: measuring a position against the index
+        # from lots that do not add up to it compares the wrong money over the
+        # wrong window.
+        if _index_closes and _lots and lots_cover(
+            sum(lot["quantity"] for lot in _lots), _d.get("shares_held")
+        ):
             _rel = relative_performance(
-                open_lots(_d["trades"]), _d.get("current_price") or 0.0,
-                _index_closes, _today,
+                _lots, _d.get("current_price") or 0.0, _index_closes, _today,
             )
         _perf_rows.append({
             "ticker": _sym, "broker": _d.get("broker", ""),

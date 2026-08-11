@@ -9,6 +9,7 @@ no order/write endpoints are called. Live environment only.
 import base64
 import logging
 import time
+from datetime import datetime
 
 import requests
 
@@ -90,6 +91,10 @@ def _clean(code: str, creds: dict) -> dict:
 def fetch_portfolio_data(creds: dict):
     """Return (cost_basis_by_symbol, account_id) from T212 positions."""
     positions = _get("/equity/positions", creds, min_interval=1.0)
+    # Fill history, so a T212 holding carries the same dated lots a Tastytrade
+    # one does. Everything downstream — FIFO basis, realized P/L, performance
+    # against the index — reads trades and cannot tell the brokers apart.
+    trades_by_symbol = fetch_trades(creds)
     cost_basis = {}
     for pos in positions or []:
         # /equity/positions nests the instrument and names its money fields
@@ -140,7 +145,7 @@ def fetch_portfolio_data(creds: dict):
             "total_pl": pl,
             "adjusted_cost": cost,
             "cost_per_share": -avg,      # negative, same convention as above
-            "trades": [],
+            "trades": trades_by_symbol.get(symbol, []),
             "wheels": [],
             # No option legs and no wheel cycles — a plain holding. The
             # portfolio page reads this to pick the buy-and-hold column set
@@ -178,6 +183,79 @@ def fetch_portfolio_data(creds: dict):
     info = _get("/equity/account/info", creds, min_interval=5.0)
     account_id = str(info.get("id") or "")
     return cost_basis, account_id
+
+
+def fetch_trades(creds: dict) -> dict:
+    """Return {symbol: [trade, ...]} from T212 fill history, oldest first.
+
+    Same trade shape Tastytrade produces, so the FIFO lot engine, the cost
+    basis and the index comparison all work on T212 positions without knowing
+    which broker they came from. Without it a T212 holding has an average price
+    and no history — no purchase date to measure against the index, and no way
+    to tell one buy from two. WEBN was bought twice.
+
+    A failure returns {} rather than propagating: the positions still render
+    with the broker's average price, minus the history.
+    """
+    out: dict = {}
+    path = "/equity/history/orders?limit=50"
+    pages = 0
+    try:
+        while path and pages < 40:      # backstop against a cursor that loops
+            body = _get(path, creds, min_interval=6.0) or {}
+            for item in body.get("items") or []:
+                trade = _fill_to_trade(item, creds)
+                if trade:
+                    out.setdefault(trade.pop("_symbol"), []).append(trade)
+            path = body.get("nextPagePath")
+            pages += 1
+    except Exception as e:
+        logger.warning("T212 order history unavailable: %s", e)
+        return {}
+
+    # Oldest first: FIFO retires the oldest lot, and the broker's ordering is
+    # not something to take on trust.
+    for trades in out.values():
+        trades.sort(key=lambda t: t["date"])
+    return out
+
+
+def _fill_to_trade(item: dict, creds: dict):
+    """Turn one history entry into a trade dict, or None if it has no fill."""
+    order = item.get("order") or {}
+    fill = item.get("fill") or {}
+    qty = fill.get("quantity")
+    price = fill.get("price")
+    filled_at = fill.get("filledAt")
+    if not qty or price is None or not filled_at:
+        return None
+
+    info = _clean(order.get("ticker") or "", creds)
+    rate = gather_data.fetch_fx_rate(info["currency"] or "")
+    fx = rate if rate is not None and info["currency"] not in ("", "USD") else 1.0
+    price = price * fx
+
+    is_buy = (order.get("side") or "").upper() != "SELL"
+    try:
+        day = datetime.fromisoformat(filled_at.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+    return {
+        "_symbol": info["symbol"],
+        "date": day,
+        "label": "Stock Buy" if is_buy else "Stock Sell",
+        "type": "Trade",
+        "sub_type": "Buy to Open" if is_buy else "Sell to Close",
+        "description": f'{"Bought" if is_buy else "Sold"} {qty} {info["symbol"]} @ {price:.2f}',
+        "symbol": info["symbol"],
+        "action": "Buy to Open" if is_buy else "Sell to Close",
+        "quantity": float(qty),
+        "price": price,
+        # Signed the way the rest of the app reads it: cash out is negative.
+        "net_value": -(qty * price) if is_buy else (qty * price),
+        "instrument_type": "Equity",
+    }
 
 
 def fetch_account_balances(creds: dict) -> dict:

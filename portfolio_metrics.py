@@ -167,6 +167,22 @@ def valuation_stance(price, fv_low, fv_mid, fv_high):
     return {"stance": stance, "vs_mid": (price / fv_mid - 1) * 100}
 
 
+# Share counts are floats and T212 deals in fractions, so an exact comparison
+# would fail on rounding alone.
+SHARE_TOLERANCE = 0.01
+
+
+def lots_cover(lot_shares, shares_held):
+    """True when the trade history accounts for the shares actually held.
+
+    A broker's history can start after the position did — a transfer in, or an
+    API that only returns recent orders. A FIFO basis derived from partial lots
+    is a confident wrong purchase price, which is worse than falling back to
+    the broker's own average.
+    """
+    return abs((lot_shares or 0.0) - (shares_held or 0.0)) <= SHARE_TOLERANCE
+
+
 def open_lots(trades):
     """The share lots still held, oldest first: [{quantity, price, date}].
 

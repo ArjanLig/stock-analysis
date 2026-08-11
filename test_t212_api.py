@@ -22,6 +22,10 @@ _META = [
      "isin": "US0378331005"},
     {"ticker": "ASML_NL_EQ", "shortName": "ASML", "currencyCode": "EUR",
      "isin": "NL0010273215"},
+    # A real T212 code that suffix-stripping cannot decode: the Amundi ETF is
+    # "WEBN1d_EQ", which strips to "WEBN1d". Only the metadata carries "WEBN".
+    {"ticker": "WEBN1d_EQ", "shortName": "WEBN", "currencyCode": "EUR",
+     "isin": "IE0003XJA0J9"},
 ]
 
 
@@ -468,3 +472,110 @@ class TestUsdNormalisation(unittest.TestCase):
                 d = t212_api.fetch_portfolio_data(_CREDS)[0]["ASML"]
         self.assertEqual(d["currency"], "EUR")
         self.assertAlmostEqual(d["purchase_price"], 600.0)
+
+
+_ORDERS = {
+    "items": [
+        {"order": {"ticker": "WEBN1d_EQ", "side": "BUY",
+                   "instrument": {"ticker": "WEBN1d_EQ", "name": "Amundi",
+                                  "isin": "IE0003XJA0J9", "currency": "EUR"}},
+         "fill": {"quantity": 10.0, "price": 12.00,
+                  "filledAt": "2026-05-04T09:12:31.000+02:00",
+                  "walletImpact": {"currency": "EUR", "netValue": -120.0}}},
+        {"order": {"ticker": "WEBN1d_EQ", "side": "BUY",
+                   "instrument": {"ticker": "WEBN1d_EQ", "name": "Amundi",
+                                  "isin": "IE0003XJA0J9", "currency": "EUR"}},
+         "fill": {"quantity": 13.73, "price": 13.00,
+                  "filledAt": "2026-06-18T11:02:00.000+02:00",
+                  "walletImpact": {"currency": "EUR", "netValue": -178.49}}},
+        {"order": {"ticker": "AAPL_US_EQ", "side": "SELL",
+                   "instrument": {"ticker": "AAPL_US_EQ", "name": "Apple",
+                                  "isin": "US0378331005", "currency": "USD"}},
+         "fill": {"quantity": 2.0, "price": 200.0,
+                  "filledAt": "2026-07-01T15:30:00.000+02:00",
+                  "walletImpact": {"currency": "EUR", "netValue": 346.0}}},
+    ],
+    "nextPagePath": None,
+}
+
+
+class TestTrades(unittest.TestCase):
+    """T212 fills become the same trade shape Tastytrade produces.
+
+    Without them a T212 position has an average price and no history, so it
+    cannot be measured against the index, given a FIFO basis, or told apart
+    from a single purchase — and WEBN was bought twice.
+    """
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+        gather_data._FX_CACHE.clear()
+
+    def _trades(self, rate=1.0):
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path.startswith("/equity/history/orders"):
+                return _ORDERS
+            raise AssertionError(path)
+        with patch("t212_api._get", side_effect=_router), \
+             patch("gather_data.fetch_fx_rate", return_value=rate):
+            return t212_api.fetch_trades(_CREDS)
+
+    def test_each_fill_becomes_a_dated_lot(self):
+        webn = self._trades()["WEBN"]
+        self.assertEqual([t["quantity"] for t in webn], [10.0, 13.73])
+        self.assertEqual([t["date"].isoformat() for t in webn],
+                         ["2026-05-04", "2026-06-18"])
+        self.assertEqual([t["instrument_type"] for t in webn], ["Equity"] * 2)
+
+    def test_a_buy_costs_cash_and_a_sale_returns_it(self):
+        """net_value carries the app's sign convention, since every downstream
+        walk reads the sign to tell a purchase from a sale."""
+        webn = self._trades()["WEBN"]
+        self.assertLess(webn[0]["net_value"], 0)
+        self.assertIn("Buy", webn[0]["action"])
+        aapl = self._trades()["AAPL"][0]
+        self.assertGreater(aapl["net_value"], 0)
+        self.assertIn("Sell", aapl["action"])
+
+    def test_prices_are_converted_like_the_positions_are(self):
+        """A EUR fill next to a USD cost basis would misplace the lot by the
+        whole FX difference."""
+        webn = self._trades(rate=1.15)["WEBN"]
+        self.assertAlmostEqual(webn[0]["price"], 13.80)
+        self.assertAlmostEqual(webn[0]["net_value"], -138.00)
+
+    def test_trades_arrive_oldest_first(self):
+        """FIFO retires the oldest lot, so the order the broker returns them in
+        cannot be trusted to be the order they happened in."""
+        webn = self._trades()["WEBN"]
+        self.assertEqual(webn, sorted(webn, key=lambda t: t["date"]))
+
+    def test_pagination_follows_the_next_page(self):
+        seen = []
+
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            seen.append(path)
+            if len(seen) == 1:
+                return {"items": _ORDERS["items"][:1],
+                        "nextPagePath": "/equity/history/orders?cursor=2"}
+            return {"items": _ORDERS["items"][1:], "nextPagePath": None}
+
+        with patch("t212_api._get", side_effect=_router), \
+             patch("gather_data.fetch_fx_rate", return_value=1.0):
+            out = t212_api.fetch_trades(_CREDS)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(len(out["WEBN"]), 2)
+
+    def test_an_unreachable_history_yields_nothing_rather_than_failing(self):
+        """The positions themselves still render; they just keep the broker's
+        average price and no purchase date."""
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            raise RuntimeError("429")
+        with patch("t212_api._get", side_effect=_router):
+            self.assertEqual(t212_api.fetch_trades(_CREDS), {})
