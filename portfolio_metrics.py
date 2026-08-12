@@ -187,18 +187,21 @@ def hindsight(trades, current_price):
 
     shares = 0.0
     shares_sold = proceeds = 0.0
+    closed_on = None
     for t, qty, price, is_buy in _equity_lots(trades):
         if is_buy:
             # Going from flat back to invested starts a new position, so
             # anything sold before it belonged to a different one.
             if shares <= 0:
                 shares_sold = proceeds = 0.0
+                closed_on = None
             shares += qty
             continue
         shares -= qty
         shares_sold += qty
         # The trade's own cash, so fees are counted the way they were paid.
         proceeds += abs(t.get("net_value") or 0.0) or (qty * price)
+        closed_on = t.get("date") or closed_on
     if not shares_sold:
         return None
     value_now = shares_sold * current_price
@@ -207,6 +210,9 @@ def hindsight(trades, current_price):
         "proceeds": proceeds,
         "value_now": value_now,
         "delta": value_now - proceeds,
+        # When it was sold. GOOGL reads $16,531 given up, which is true and
+        # unreadable without knowing that is a twenty-month-old decision.
+        "closed_on": closed_on,
     }
 
 

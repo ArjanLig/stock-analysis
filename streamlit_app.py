@@ -11643,7 +11643,12 @@ elif page == "Cost Basis":
                         f'<span style="color:{T["text_muted"]}"> vs '
                         f'${_hs["proceeds"]:,.0f} received — </span>'
                         f'<b style="color:{_c}">${abs(_d):,.0f} {_verb}</b>'
-                        f'</div>',
+                        # The horizon, because $16,531 given up reads very
+                        # differently for last week than for December 2024.
+                        + (f'<span style="color:{T["text_muted"]}"> · sold '
+                           f'{_hs["closed_on"]:%b %Y}</span>'
+                           if _hs.get("closed_on") else '')
+                        + '</div>',
                         unsafe_allow_html=True,
                     )
 

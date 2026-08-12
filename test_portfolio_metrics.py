@@ -491,6 +491,14 @@ class TestHindsight(unittest.TestCase):
         self.assertAlmostEqual(h["value_now"], 3375.0)
         self.assertLess(abs(h["delta"]), 50)
 
+    def test_the_closing_date_travels_with_the_figure(self):
+        """GOOGL was called away in December 2024 and reads $16,531 given up.
+        True, but a reader cannot judge that without knowing it is a twenty-
+        month-old decision rather than last week's."""
+        trades = [_eq(100, 180.0, d=date(2024, 8, 5)),
+                  _eq(100, 177.5, action="Sell to Close", d=date(2024, 12, 20))]
+        self.assertEqual(hindsight(trades, 342.75)["closed_on"], date(2024, 12, 20))
+
     def test_a_position_reopened_after_closing_reports_only_the_latest(self):
         trades = [_eq(10, 10.0), _eq(10, 20.0, action="Sell to Close"),
                   _eq(5, 30.0), _eq(5, 40.0, action="Sell to Close")]
