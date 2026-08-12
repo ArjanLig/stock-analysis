@@ -8,7 +8,7 @@ Live at [lazytheta.io](https://lazytheta.io)
 
 - **Portfolio** — Live portfolio overview with Greeks, Beta-Weighted Delta, margin requirements, and exposure analysis via Tastytrade API
 - **Watchlist** — DCF valuations using Damodaran methodology with automated SEC EDGAR data, peer comparison, and scenario analysis
-- **Wheel Cost Basis** — Track cost basis for wheel strategy (covered calls + cash-secured puts) with P/L per position
+- **Cost Basis** — Per-ticker cost basis and full trade history, for wheels (covered calls + cash-secured puts) and plain holdings alike, open and closed
 - **Results** — Performance tracking with net liquidation history, benchmark comparison, and yearly returns
 
 ## Built with

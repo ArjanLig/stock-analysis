@@ -3644,7 +3644,7 @@ st.markdown(f"""
         animation: none;
     }}
 
-    /* ── Ticker cards (Wheel Cost Basis) ── */
+    /* ── Ticker cards (Cost Basis) ── */
     [class*="st-key-wheel_card_"] {{
         background: var(--card);
         border-radius: 24px;
@@ -8720,7 +8720,7 @@ with st.sidebar:
         """Clear account page override when user clicks a main nav item."""
         st.session_state.pop("_account_page", None)
 
-    _all_pages = ["Portfolio", "Wheel Cost Basis", "Results", "Watchlist", "Cashflow Champions", "Option Finder"]
+    _all_pages = ["Portfolio", "Cost Basis", "Results", "Watchlist", "Cashflow Champions", "Option Finder"]
 
     # CSS to add a visual separator after "Results" (3rd item)
     st.markdown(
@@ -8775,11 +8775,11 @@ with st.sidebar:
     if st.session_state.get("t212_credentials"):
         _connected.append(("Trading 212", "t212"))
 
-    # Not on the Portfolio page: its own Overview / per-broker tabs decide what
-    # is shown there, and two controls for one thing invites picking the one
-    # that doesn't apply. Elsewhere the switcher is the only way to say which
-    # account the option chain, deposit history and margin figures belong to.
-    if len(_connected) >= 2 and page != "Portfolio":
+    # Not on the pages that carry their own Overview / per-broker tabs: two
+    # controls for one thing invites picking the one that doesn't apply.
+    # Elsewhere the switcher is the only way to say which account the option
+    # chain, deposit history and margin figures belong to.
+    if len(_connected) >= 2 and page not in ("Portfolio", "Cost Basis"):
         _broker_options = [label for label, _ in _connected]
         _broker_keys = [key for _, key in _connected]
         _current = get_active_broker()
@@ -8803,16 +8803,18 @@ with st.sidebar:
 
     st.markdown("---")
 
-    if page in ("Portfolio", "Wheel Cost Basis", "Results"):
+    if page in ("Portfolio", "Cost Basis", "Results"):
         _broker_label = BROKER_NAMES.get(get_active_broker(), "Tastytrade")
         # The Portfolio page has its own broker view, so name what is actually
         # on screen — the sidebar reading "Tastytrade" above a combined table
         # would be a label that contradicts the page.
-        if page == "Portfolio" and len(_connected) > 1:
+        if page in ("Portfolio", "Cost Basis") and len(_connected) > 1:
             # The widget's own key, not the copy the page writes afterwards:
             # the sidebar renders before the page body, so the copy would show
             # the previous selection for one interaction.
-            _broker_label = st.session_state.get("portfolio_view_select") or "Overview"
+            _broker_label = (st.session_state.get(f"broker_view_{page}")
+                             or st.session_state.get("_portfolio_view")
+                             or "Overview")
         st.markdown(f"### {_broker_label}")
         if st.button("Refresh Data", use_container_width=True, type="primary"):
             st.session_state.pop("portfolio_data", None)
@@ -8888,6 +8890,39 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════
 #  SHARED DATA LOADING FOR PORTFOLIO PAGES
 # ══════════════════════════════════════════════════════
+
+def _broker_view_control(page_key):
+    """Render the Overview / per-broker picker and return the choice.
+
+    Shared by the Portfolio and Cost Basis pages so the two never disagree
+    about which account is on screen. It replaces the sidebar's Active Broker
+    box on those pages: two controls for one thing invites picking the one that
+    doesn't apply.
+
+    The widget key is per page — Streamlit drops widget state for a widget that
+    isn't rendered — while `_portfolio_view` carries the choice between them so
+    switching pages keeps the same account selected.
+    """
+    names = [BROKER_NAMES[b] for b in connected_brokers()]
+    if len(names) < 2:
+        return "Overview"
+    view = st.segmented_control(
+        "Broker view",
+        ["Overview", *names],
+        default=st.session_state.get("_portfolio_view", "Overview"),
+        key=f"broker_view_{page_key}",
+        label_visibility="collapsed",
+    ) or "Overview"
+    st.session_state["_portfolio_view"] = view
+    if view != "Overview":
+        # Anything still single-broker further down the page (margin, Greeks,
+        # the option chain) reads the active broker, so point it at the account
+        # the tab names.
+        picked = next((k for k, v in BROKER_NAMES.items() if v == view), None)
+        if picked and st.session_state.get("active_broker") != picked:
+            st.session_state["active_broker"] = picked
+    return view
+
 
 def _load_portfolio_data():
     """Fetch and enrich portfolio data (cached in session_state, auto-refreshes every 5 min)."""
@@ -10054,28 +10089,10 @@ elif page == "Portfolio":
     # "does this match what my broker shows me", which is the only way to check
     # the combined figure is right. Both are worth keeping, so pick one rather
     # than replacing the old view with the sum.
-    _view_brokers = [BROKER_NAMES[b] for b in connected_brokers()]
-    portfolio_view = "Overview"
-    if len(_view_brokers) > 1:
-        portfolio_view = st.segmented_control(
-            "Broker view",
-            ["Overview", *_view_brokers],
-            default=st.session_state.get("_portfolio_view", "Overview"),
-            key="portfolio_view_select",
-            label_visibility="collapsed",
-        ) or "Overview"
-        st.session_state["_portfolio_view"] = portfolio_view
-        if portfolio_view != "Overview":
-            held = {t: d for t, d in held.items()
-                    if d.get("broker") == portfolio_view}
-            # Margin, Greeks and beta-weighted delta lower down the page have
-            # no combined form — they read the active broker. Point that at the
-            # broker the tab names, or the bottom of the page would describe a
-            # different account than the top.
-            _picked = next((k for k, v in BROKER_NAMES.items()
-                            if v == portfolio_view), None)
-            if _picked and st.session_state.get("active_broker") != _picked:
-                st.session_state["active_broker"] = _picked
+    portfolio_view = _broker_view_control("Portfolio")
+    if portfolio_view != "Overview":
+        held = {t: d for t, d in held.items()
+                if d.get("broker") == portfolio_view}
 
     if not held:
         if portfolio_view != "Overview":
@@ -11398,7 +11415,7 @@ elif page == "Option Finder":
 #  WHEEL COST BASIS PAGE — Detailed trade history
 # ══════════════════════════════════════════════════════
 
-elif page == "Wheel Cost Basis":
+elif page == "Cost Basis":
 
     if not has_active_broker():
         _render_connect_prompt()
@@ -11406,6 +11423,17 @@ elif page == "Wheel Cost Basis":
 
     st.markdown("")
     cost_basis = _load_portfolio_data()
+
+    # Same picker as the Portfolio page, and the same reason: a card here is
+    # meant to be laid next to the broker's own screen, which only works if you
+    # can narrow the page to that broker.
+    _cb_view = _broker_view_control("Cost Basis")
+    if _cb_view != "Overview":
+        cost_basis = {t: d for t, d in cost_basis.items()
+                      if d.get("broker") == _cb_view}
+        if not cost_basis:
+            st.info(f"No positions at {_cb_view}.")
+            st.stop()
 
     def _is_put(t):
         """Check if trade is put via OCC symbol, fallback to description."""
@@ -11556,13 +11584,18 @@ elif page == "Wheel Cost Basis":
             pl_badge = "pl-badge-green" if display_pl >= 0 else "pl-badge-red"
             pl_sign = "+$" if display_pl >= 0 else "-$"
 
-            logo_url = f"https://assets.parqet.com/logos/symbol/{ticker}"
+            # The bare symbol, not the dict key: with two brokers connected the
+            # key can carry a broker suffix, and no logo host knows
+            # "DECK (Trading 212)". The ISIN fallback is what makes the Amundi
+            # ETF show a logo at all.
+            _card_symbol = data.get("symbol", ticker)
+            logo_url = _logo_for(_card_symbol, data.get("isin"))
             st.markdown(
                 f'<div class="card-header">'
                 f'  <div class="card-left">'
                 f'    <div class="tk-title">'
                 f'      <img class="tk-logo" src="{logo_url}" onerror="this.style.display=\'none\'">'
-                f'      <p class="tk-name">{ticker} @ {buy_price:,.2f}</p>'
+                f'      <p class="tk-name">{_card_symbol} @ {buy_price:,.2f}</p>'
                 f'    </div>'
                 # Only where an option was actually written: for an outright
             # purchase the adjusted basis IS the purchase price, and printing
