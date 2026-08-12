@@ -464,13 +464,39 @@ class TestHindsight(unittest.TestCase):
         self.assertAlmostEqual(h["value_now"], 400.0)
         self.assertAlmostEqual(h["delta"], -200.0)
 
-    def test_several_sales_are_all_counted(self):
+    def test_several_sales_within_one_position_are_all_counted(self):
         trades = [_eq(10, 50.0), _eq(4, 60.0, action="Sell to Close"),
                   _eq(6, 70.0, action="Sell to Close")]
         h = hindsight(trades, 100.0)
         self.assertAlmostEqual(h["shares_sold"], 10)
         self.assertAlmostEqual(h["proceeds"], 660.0)
         self.assertAlmostEqual(h["value_now"], 1000.0)
+
+    def test_an_earlier_closed_position_is_not_rolled_in(self):
+        """TTD, from the real history: 100 sold in March 2024 closing one
+        position, then 250 bought back across 2025-26 and sold in August.
+        Counting all 350 as one block claimed $6,845 saved by selling — but
+        350 shares were never held at once, and the 2024 round trip was its own
+        position. Only the sales that closed the latest one count."""
+        trades = [
+            _eq(100, 82.00, action="Sell to Close", d=date(2024, 3, 28)),
+            _eq(100, 80.00, d=date(2025, 3, 4)),
+            _eq(100, 42.50, d=date(2025, 11, 26)),
+            _eq(50, 22.35, d=date(2026, 5, 8)),
+            _eq(250, 13.4929, action="Sell to Close", d=date(2026, 8, 6)),
+        ]
+        h = hindsight(trades, 13.50)
+        self.assertAlmostEqual(h["shares_sold"], 250)
+        self.assertAlmostEqual(h["proceeds"], 3373.2, places=0)
+        self.assertAlmostEqual(h["value_now"], 3375.0)
+        self.assertLess(abs(h["delta"]), 50)
+
+    def test_a_position_reopened_after_closing_reports_only_the_latest(self):
+        trades = [_eq(10, 10.0), _eq(10, 20.0, action="Sell to Close"),
+                  _eq(5, 30.0), _eq(5, 40.0, action="Sell to Close")]
+        h = hindsight(trades, 50.0)
+        self.assertAlmostEqual(h["shares_sold"], 5)
+        self.assertAlmostEqual(h["proceeds"], 200.0)
 
     def test_a_position_never_sold_has_no_counterfactual(self):
         """Nothing was given up, so there is no number to report — zero would

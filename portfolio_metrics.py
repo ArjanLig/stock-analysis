@@ -171,16 +171,31 @@ def hindsight(trades, current_price):
     what holding on would have added — positive means the sale gave something
     up, negative means it saved you.
 
+    Only the sales that closed the LATEST position count. TTD had 100 shares
+    sold in March 2024, then 250 bought back over the following year and sold
+    in August 2026. Adding those together claimed $6,845 saved by selling, but
+    350 shares were never held at once and the 2024 round trip was a separate
+    position: comparing them to one of today's prices compares two things that
+    never coexisted.
+
     None when nothing was sold (there is no counterfactual, and zero would read
     as "selling made no difference") or when the name cannot be priced today
     (guessing would put an invented gain on the card).
     """
     if not current_price or current_price <= 0:
         return None
+
+    shares = 0.0
     shares_sold = proceeds = 0.0
     for t, qty, price, is_buy in _equity_lots(trades):
         if is_buy:
+            # Going from flat back to invested starts a new position, so
+            # anything sold before it belonged to a different one.
+            if shares <= 0:
+                shares_sold = proceeds = 0.0
+            shares += qty
             continue
+        shares -= qty
         shares_sold += qty
         # The trade's own cash, so fees are counted the way they were paid.
         proceeds += abs(t.get("net_value") or 0.0) or (qty * price)
