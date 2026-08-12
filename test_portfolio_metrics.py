@@ -499,6 +499,15 @@ class TestHindsight(unittest.TestCase):
                   _eq(100, 177.5, action="Sell to Close", d=date(2024, 12, 20))]
         self.assertEqual(hindsight(trades, 342.75)["closed_on"], date(2024, 12, 20))
 
+    def test_a_short_that_was_covered_has_no_hindsight(self):
+        """Sell first, buy back later, and the "sale" opened the position
+        rather than closing one. "Held to today" describes shares you owned;
+        for a short it would report the opening trade as an exit and invent a
+        counterfactual that never existed."""
+        trades = [_eq(100, 50.0, action="Sell to Open"),
+                  _eq(100, 40.0, action="Buy to Close")]
+        self.assertIsNone(hindsight(trades, 30.0))
+
     def test_a_position_reopened_after_closing_reports_only_the_latest(self):
         trades = [_eq(10, 10.0), _eq(10, 20.0, action="Sell to Close"),
                   _eq(5, 30.0), _eq(5, 40.0, action="Sell to Close")]
