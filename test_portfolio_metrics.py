@@ -457,6 +457,16 @@ class TestHindsight(unittest.TestCase):
         self.assertAlmostEqual(h["proceeds"], 731.90, places=1)
         self.assertAlmostEqual(h["value_now"], 800.0)
         self.assertAlmostEqual(h["delta"], 68.10, places=1)
+        # The two prices being compared, so the card can show the trade rather
+        # than only its outcome.
+        self.assertAlmostEqual(h["sale_price"], 36.595, places=3)
+        self.assertAlmostEqual(h["price_now"], 40.00)
+
+    def test_the_sale_price_averages_a_position_sold_in_pieces(self):
+        trades = [_eq(10, 50.0), _eq(4, 60.0, action="Sell to Close"),
+                  _eq(6, 80.0, action="Sell to Close")]
+        h = hindsight(trades, 100.0)
+        self.assertAlmostEqual(h["sale_price"], 72.0)      # (240 + 480) / 10
 
     def test_a_sale_before_a_fall_saved_you(self):
         trades = [_eq(10, 50.0), _eq(10, 60.0, action="Sell to Close")]

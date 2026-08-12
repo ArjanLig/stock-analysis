@@ -11632,25 +11632,45 @@ elif page == "Cost Basis":
                 if _hs:
                     _d = _hs["delta"]
                     _c = T["red"] if _d > 0 else T["accent"]
-                    _verb = "given up by selling" if _d > 0 else "saved by selling"
-                    st.markdown(
-                        f'<div style="margin:-4px 0 10px 0;padding:8px 12px;'
-                        f'background:{T["info_bg"]};border-radius:8px;'
-                        f'border:1px dashed {T["border_medium"]};font-size:0.85rem">'
-                        f'<span style="color:{T["text_muted"]}">Held to today: </span>'
-                        f'<b style="color:{T["text"]}">{_hs["shares_sold"]:,.0f} shares '
-                        f'worth ${_hs["value_now"]:,.0f}</b>'
-                        f'<span style="color:{T["text_muted"]}"> vs '
-                        f'${_hs["proceeds"]:,.0f} received — </span>'
-                        f'<b style="color:{_c}">${abs(_d):,.0f} {_verb}</b>'
-                        # The horizon, because $16,531 given up reads very
-                        # differently for last week than for December 2024.
-                        + (f'<span style="color:{T["text_muted"]}"> · sold '
-                           f'{_hs["closed_on"]:%b %Y}</span>'
-                           if _hs.get("closed_on") else '')
-                        + '</div>',
-                        unsafe_allow_html=True,
-                    )
+                    _verb = "given up" if _d > 0 else "saved"
+                    _when = (f' · sold {_hs["closed_on"]:%b %Y}'
+                             if _hs.get("closed_on") else '')
+                    _move = ((_hs["price_now"] / _hs["sale_price"] - 1) * 100
+                             if _hs["sale_price"] else 0.0)
+                    with st.expander(
+                        f'Held to today  —  ${abs(_d):,.0f} {_verb}{_when}'
+                    ):
+                        _th = (f'padding:4px 8px;text-align:right;'
+                               f'color:{T["text_muted"]};font-weight:600')
+                        _td = ('padding:4px 8px;text-align:right;'
+                               'font-variant-numeric:tabular-nums')
+                        _bd = f'border-top:1px solid {T["divider"]}'
+                        st.markdown(
+                            f'<table style="width:100%;border-collapse:collapse;'
+                            f'font-size:0.85rem">'
+                            f'<thead><tr>'
+                            f'<th style="{_th};text-align:left"></th>'
+                            f'<th style="{_th}">Price</th>'
+                            f'<th style="{_th}">{_hs["shares_sold"]:,.0f} shares</th>'
+                            f'</tr></thead><tbody>'
+                            f'<tr>'
+                            f'<td style="{_td};{_bd};text-align:left">Sold at</td>'
+                            f'<td style="{_td};{_bd}">${_hs["sale_price"]:,.2f}</td>'
+                            f'<td style="{_td};{_bd}">${_hs["proceeds"]:,.0f}</td>'
+                            f'</tr><tr>'
+                            f'<td style="{_td};{_bd};text-align:left">Today</td>'
+                            f'<td style="{_td};{_bd}">${_hs["price_now"]:,.2f}</td>'
+                            f'<td style="{_td};{_bd}">${_hs["value_now"]:,.0f}</td>'
+                            f'</tr><tr>'
+                            f'<td style="{_td};{_bd};text-align:left;'
+                            f'font-weight:600">Difference</td>'
+                            f'<td style="{_td};{_bd};color:{_c};font-weight:600">'
+                            f'{_move:+.1f}%</td>'
+                            f'<td style="{_td};{_bd};color:{_c};font-weight:600">'
+                            f'${_d:+,.0f}</td>'
+                            f'</tr></tbody></table>',
+                            unsafe_allow_html=True,
+                        )
 
             if not all_trades:
                 return

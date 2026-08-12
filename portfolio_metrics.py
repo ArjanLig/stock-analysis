@@ -210,6 +210,10 @@ def hindsight(trades, current_price):
         "proceeds": proceeds,
         "value_now": value_now,
         "delta": value_now - proceeds,
+        # The two prices the comparison rests on. Averaged over the closing
+        # sales, so a position sold in pieces still reports one exit price.
+        "sale_price": proceeds / shares_sold,
+        "price_now": current_price,
         # When it was sold. GOOGL reads $16,531 given up, which is true and
         # unreadable without knowing that is a twenty-month-old decision.
         "closed_on": closed_on,
