@@ -59,6 +59,7 @@ from portfolio_metrics import (compute_deployment, display_basis, has_option_leg
                                held_share_cost, fifo_realized, open_lots,
                                relative_performance,
                                valuation_stance, lots_cover,
+                               average_buy_price, hindsight,
                                DEFAULT_TARGET_POS_PCT)
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
@@ -11549,7 +11550,11 @@ elif page == "Cost Basis":
         last_wheel = wheels[-1] if wheels and is_wheel else None
 
         _cost, _lot_shares = held_share_cost(_card_trades)
-        buy_price = (_cost / _lot_shares) if _lot_shares else 0.0
+        # Once the last share is sold there are no lots left, which is why a
+        # closed card read "@ 0.00". Fall back to what was paid across every
+        # purchase — that does not stop being a fact when you sell.
+        buy_price = ((_cost / _lot_shares) if _lot_shares
+                     else average_buy_price(_card_trades))
         adj_cost = data["cost_per_share"]
         wheel_equity = 0.0
         wheel_option = 0.0
@@ -11617,6 +11622,31 @@ elif page == "Cost Basis":
                 unsafe_allow_html=True,
             )
 
+            # ── What holding on would have been worth ──
+            # Only for closed positions: the question a closed card exists to
+            # answer is whether selling was right, and that needs today's price
+            # against what you actually got.
+            if shares == 0 and not _has_open_options(data):
+                _px = (_closed_prices.get(_card_symbol) or {}).get("price")
+                _hs = hindsight(_card_trades, _px or 0)
+                if _hs:
+                    _d = _hs["delta"]
+                    _c = T["red"] if _d > 0 else T["accent"]
+                    _verb = "given up by selling" if _d > 0 else "saved by selling"
+                    st.markdown(
+                        f'<div style="margin:-4px 0 10px 0;padding:8px 12px;'
+                        f'background:{T["info_bg"]};border-radius:8px;'
+                        f'border:1px dashed {T["border_medium"]};font-size:0.85rem">'
+                        f'<span style="color:{T["text_muted"]}">Held to today: </span>'
+                        f'<b style="color:{T["text"]}">{_hs["shares_sold"]:,.0f} shares '
+                        f'worth ${_hs["value_now"]:,.0f}</b>'
+                        f'<span style="color:{T["text_muted"]}"> vs '
+                        f'${_hs["proceeds"]:,.0f} received — </span>'
+                        f'<b style="color:{_c}">${abs(_d):,.0f} {_verb}</b>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
             if not all_trades:
                 return
 
@@ -11659,6 +11689,23 @@ elif page == "Cost Basis":
     # ── Split tickers into active / closed ──
     active_tickers = {t: d for t, d in cost_basis.items() if _is_active(d)}
     closed_tickers = {t: d for t, d in cost_basis.items() if not _is_active(d)}
+
+    # A closed position carries no price — _load_portfolio_data only quotes
+    # what is still held — and the whole point of the closed cards is what
+    # those shares would be worth today.
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _cached_closed_prices(symbols):
+        if not symbols:
+            return {}
+        try:
+            return fetch_current_prices(list(symbols))
+        except Exception as e:
+            logger.debug("Prices for closed positions unavailable: %s", e)
+            return {}
+
+    _closed_prices = _cached_closed_prices(tuple(sorted(
+        {(d.get("symbol") or t) for t, d in closed_tickers.items()}
+    )))
 
     def _render_grid(tickers):
         items = list(tickers.items())

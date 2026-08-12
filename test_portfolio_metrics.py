@@ -6,7 +6,8 @@ from datetime import date
 from portfolio_metrics import (compute_deployment, display_basis,
                                held_share_cost, has_option_legs,
                                fifo_realized, open_lots, relative_performance,
-                               valuation_stance,
+                               valuation_stance, average_buy_price,
+                               hindsight,
                                lots_cover)
 
 
@@ -425,6 +426,62 @@ class TestLotsCover(unittest.TestCase):
 
     def test_a_closed_position_needs_no_lots(self):
         self.assertTrue(lots_cover(0.0, 0))
+
+
+class TestAverageBuyPrice(unittest.TestCase):
+    def test_a_closed_position_still_has_a_price_it_was_bought_at(self):
+        """held_share_cost returns nothing once the last share is sold, which
+        left closed cards reading "IBIT @ 0.00". What you paid does not stop
+        being a fact when you sell."""
+        trades = [_eq(10, 50.0), _eq(10, 60.0),
+                  _eq(20, 70.0, action="Sell to Close")]
+        self.assertAlmostEqual(average_buy_price(trades), 55.0)
+
+    def test_it_averages_every_purchase_not_the_survivors(self):
+        trades = [_eq(10, 50.0), _eq(30, 70.0)]
+        self.assertAlmostEqual(average_buy_price(trades), 65.0)
+
+    def test_no_purchases_at_all(self):
+        self.assertEqual(average_buy_price([]), 0.0)
+
+
+class TestHindsight(unittest.TestCase):
+    """What holding on instead of selling would have been worth."""
+
+    def test_a_sale_into_a_rising_price_cost_you(self):
+        """Sold 20 at 36.60 for 732; at 40.00 today those shares would fetch
+        800, so the sale gave up 68."""
+        trades = [_eq(100, 56.0), _eq(20, 36.595, action="Sell to Close")]
+        h = hindsight(trades, 40.00)
+        self.assertAlmostEqual(h["shares_sold"], 20)
+        self.assertAlmostEqual(h["proceeds"], 731.90, places=1)
+        self.assertAlmostEqual(h["value_now"], 800.0)
+        self.assertAlmostEqual(h["delta"], 68.10, places=1)
+
+    def test_a_sale_before_a_fall_saved_you(self):
+        trades = [_eq(10, 50.0), _eq(10, 60.0, action="Sell to Close")]
+        h = hindsight(trades, 40.0)
+        self.assertAlmostEqual(h["value_now"], 400.0)
+        self.assertAlmostEqual(h["delta"], -200.0)
+
+    def test_several_sales_are_all_counted(self):
+        trades = [_eq(10, 50.0), _eq(4, 60.0, action="Sell to Close"),
+                  _eq(6, 70.0, action="Sell to Close")]
+        h = hindsight(trades, 100.0)
+        self.assertAlmostEqual(h["shares_sold"], 10)
+        self.assertAlmostEqual(h["proceeds"], 660.0)
+        self.assertAlmostEqual(h["value_now"], 1000.0)
+
+    def test_a_position_never_sold_has_no_counterfactual(self):
+        """Nothing was given up, so there is no number to report — zero would
+        read as "selling made no difference"."""
+        self.assertIsNone(hindsight([_eq(10, 50.0)], 100.0))
+
+    def test_no_price_means_no_claim(self):
+        """A delisted or unquoted name cannot be valued today, and guessing
+        would put an invented gain on the card."""
+        trades = [_eq(10, 50.0), _eq(10, 60.0, action="Sell to Close")]
+        self.assertIsNone(hindsight(trades, 0.0))
 
 
 if __name__ == "__main__":

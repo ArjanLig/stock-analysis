@@ -149,6 +149,52 @@ def lots_cover(lot_shares, shares_held):
     return abs((lot_shares or 0.0) - (shares_held or 0.0)) <= SHARE_TOLERANCE
 
 
+def average_buy_price(trades):
+    """Average price paid across every purchase, held or not.
+
+    held_share_cost() returns nothing once the last share is sold, so a closed
+    position had no price to show. What you paid does not stop being a fact
+    when you sell.
+    """
+    cost = shares = 0.0
+    for _t, qty, price, is_buy in _equity_lots(trades):
+        if is_buy:
+            cost += qty * price
+            shares += qty
+    return (cost / shares) if shares else 0.0
+
+
+def hindsight(trades, current_price):
+    """What the shares you sold would be worth today, or None.
+
+    Returns {"shares_sold", "proceeds", "value_now", "delta"}, where delta is
+    what holding on would have added — positive means the sale gave something
+    up, negative means it saved you.
+
+    None when nothing was sold (there is no counterfactual, and zero would read
+    as "selling made no difference") or when the name cannot be priced today
+    (guessing would put an invented gain on the card).
+    """
+    if not current_price or current_price <= 0:
+        return None
+    shares_sold = proceeds = 0.0
+    for t, qty, price, is_buy in _equity_lots(trades):
+        if is_buy:
+            continue
+        shares_sold += qty
+        # The trade's own cash, so fees are counted the way they were paid.
+        proceeds += abs(t.get("net_value") or 0.0) or (qty * price)
+    if not shares_sold:
+        return None
+    value_now = shares_sold * current_price
+    return {
+        "shares_sold": shares_sold,
+        "proceeds": proceeds,
+        "value_now": value_now,
+        "delta": value_now - proceeds,
+    }
+
+
 def open_lots(trades):
     """The share lots still held, oldest first: [{quantity, price, date}].
 
