@@ -9037,28 +9037,31 @@ def _load_portfolio_data():
     return cost_basis
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def _logo_for(symbol, isin=None):
-    """Logo URL for a position, falling back to its ISIN.
+def _logo_img(symbol, isin=None, css_class="pf-logo"):
+    """An <img> that tries the symbol, then the ISIN, then gives up.
 
-    Parqet indexes logos by symbol, but only resolves US-style tickers: the
-    Amundi ETF WEBN 404s there and renders as a blank square. The same fund
-    resolves fine under /logos/isin/IE0003XJA0J9, and T212 hands us the ISIN
-    with every position — so check the symbol once and fall back.
+    Parqet indexes logos by symbol but only resolves US-style tickers: the
+    Amundi ETF WEBN 404s there while /logos/isin/IE0003XJA0J9 serves it fine,
+    and T212 hands us the ISIN with every position.
 
-    Cached for a day; a logo URL that worked this morning still works tonight.
+    The fallback is the browser's own onerror rather than a HEAD request from
+    the server. Checking server-side meant one request per ticker, a day-long
+    cache to hide the cost, and — the reason WEBN stayed blank — a failed check
+    falling back to the very URL that 404s. The browser already knows whether
+    the image loaded.
     """
-    import requests
     symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
-    if not isin:
-        return symbol_url
-    try:
-        if requests.head(symbol_url, timeout=3, allow_redirects=True).status_code == 200:
-            return symbol_url
-    except Exception as e:
-        logger.debug("Logo HEAD failed for %s: %s", symbol, e)
-        return symbol_url
-    return f"https://assets.parqet.com/logos/isin/{isin}"
+    hide = "this.style.display='none'"
+    if isin:
+        # A function, not a string: assigning a string to .onerror in script
+        # does not compile it as a handler the way an inline attribute does, so
+        # a name whose ISIN also fails would have been left showing a broken
+        # image icon instead of nothing.
+        isin_url = f"https://assets.parqet.com/logos/isin/{isin}"
+        onerror = (f"this.onerror=function(){{{hide}}};this.src='{isin_url}'")
+    else:
+        onerror = f"this.onerror=null;{hide}"
+    return f'<img class="{css_class}" src="{symbol_url}" onerror="{onerror}">' 
 
 
 def _color_val(val):
@@ -10583,7 +10586,7 @@ elif page == "Portfolio":
                 # bare symbol and two brokers can supply the same one — looking
                 # anything up by symbol would then hit the wrong position.
                 "_key": ticker,
-                "Logo": _logo_for(symbol, data.get("isin")),
+                "Logo": _logo_img(symbol, data.get("isin")),
                 "Ticker": symbol,
                 "Broker": data.get("broker", ""),
                 "Shares": shares,
@@ -10696,7 +10699,7 @@ elif page == "Portfolio":
                 )
             card_inner = (
                 f'<div class="portfolio-card">'
-                f'<img class="pf-logo" src="{row["Logo"]}" onerror="this.style.display=\'none\'">'
+                f'{row["Logo"]}'
                 f'<span class="pf-ticker">{row["Ticker"]}</span>'
                 f'{cells}'
                 f'</div>'
@@ -11594,12 +11597,12 @@ elif page == "Cost Basis":
             # "DECK (Trading 212)". The ISIN fallback is what makes the Amundi
             # ETF show a logo at all.
             _card_symbol = data.get("symbol", ticker)
-            logo_url = _logo_for(_card_symbol, data.get("isin"))
+            _logo_tag = _logo_img(_card_symbol, data.get("isin"), "tk-logo")
             st.markdown(
                 f'<div class="card-header">'
                 f'  <div class="card-left">'
                 f'    <div class="tk-title">'
-                f'      <img class="tk-logo" src="{logo_url}" onerror="this.style.display=\'none\'">'
+                f'      {_logo_tag}'
                 f'      <p class="tk-name">{_card_symbol} @ {buy_price:,.2f}</p>'
                 f'    </div>'
                 # Only where an option was actually written: for an outright
@@ -11621,6 +11624,29 @@ elif page == "Cost Basis":
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+            if not all_trades:
+                return
+
+            if per_wheel:
+                for i, wheel in reversed(list(enumerate(wheels))):
+                    status = wheel["status"]
+                    w_pl = wheel["pl"]
+                    w_pl_sign = "+$" if w_pl >= 0 else "-$"
+                    w_start = wheel['start'].strftime("%d-%m-%Y") if hasattr(wheel['start'], 'strftime') else wheel['start']
+                    w_end = wheel['end'].strftime("%d-%m-%Y") if hasattr(wheel['end'], 'strftime') else wheel['end']
+                    if status == "completed":
+                        label = f"Wheel {i + 1} — {w_start} \u2192 {w_end}"
+                    elif status == "active":
+                        label = f"Wheel {i + 1} (active) — {w_start} \u2192 now"
+                    else:
+                        label = f"CSP Income — {w_start} \u2192 {w_end}"
+                    with st.expander(f"{label}  —  {w_pl_sign}{abs(w_pl):,.2f}"):
+                        _render_tabs(wheel["trades"], f"{ticker}_w{i}")
+            else:
+                n_total = len(all_trades)
+                with st.expander(f"Transactions ({n_total})"):
+                    _render_tabs(all_trades, f"{ticker}_all")
 
             # ── What holding on would have been worth ──
             # Only for closed positions: the question a closed card exists to
@@ -11671,29 +11697,6 @@ elif page == "Cost Basis":
                             f'</tr></tbody></table>',
                             unsafe_allow_html=True,
                         )
-
-            if not all_trades:
-                return
-
-            if per_wheel:
-                for i, wheel in reversed(list(enumerate(wheels))):
-                    status = wheel["status"]
-                    w_pl = wheel["pl"]
-                    w_pl_sign = "+$" if w_pl >= 0 else "-$"
-                    w_start = wheel['start'].strftime("%d-%m-%Y") if hasattr(wheel['start'], 'strftime') else wheel['start']
-                    w_end = wheel['end'].strftime("%d-%m-%Y") if hasattr(wheel['end'], 'strftime') else wheel['end']
-                    if status == "completed":
-                        label = f"Wheel {i + 1} — {w_start} \u2192 {w_end}"
-                    elif status == "active":
-                        label = f"Wheel {i + 1} (active) — {w_start} \u2192 now"
-                    else:
-                        label = f"CSP Income — {w_start} \u2192 {w_end}"
-                    with st.expander(f"{label}  —  {w_pl_sign}{abs(w_pl):,.2f}"):
-                        _render_tabs(wheel["trades"], f"{ticker}_w{i}")
-            else:
-                n_total = len(all_trades)
-                with st.expander(f"Transactions ({n_total})"):
-                    _render_tabs(all_trades, f"{ticker}_all")
 
     # ── Two-column card layout ──
     st.markdown(
@@ -12454,8 +12457,8 @@ elif page == "Results":
             active = any(w["status"] == "active" for w in wheels)
             wheel_str = str(completed) + (" +1 active" if active else "")
             rows.append({
-                "Logo": f"https://assets.parqet.com/logos/symbol/{ticker}",
-                "Ticker": ticker,
+                "Logo": _logo_img(data.get("symbol", ticker), data.get("isin")),
+                "Ticker": data.get("symbol", ticker),
                 "Wheels": wheel_str,
                 "Options P/L": data["option_pl"],
                 "Equity Cost": data["equity_cost"],
@@ -12477,7 +12480,7 @@ elif page == "Results":
                 )
             cards_html += (
                 f'<div class="portfolio-card">'
-                f'<img class="pf-logo" src="{row["Logo"]}" onerror="this.style.display=\'none\'">'
+                f'{row["Logo"]}'
                 f'<span class="pf-ticker">{row["Ticker"]}</span>'
                 f'{cells}'
                 f'</div>'

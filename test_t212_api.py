@@ -579,3 +579,76 @@ class TestTrades(unittest.TestCase):
             raise RuntimeError("429")
         with patch("t212_api._get", side_effect=_router):
             self.assertEqual(t212_api.fetch_trades(_CREDS), {})
+
+
+class TestClosedPositions(unittest.TestCase):
+    """A position sold in full leaves /equity/positions entirely.
+
+    Tastytrade reconstructs everything from transactions, so a closed name
+    still has a card. T212 hands back only what is currently held, so without
+    this a name you sold would vanish from the app the moment you sold it —
+    exactly when the closed-position view has something to say about it.
+    """
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+        gather_data._FX_CACHE.clear()
+
+    def _fetch(self):
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path == "/equity/positions":
+                return [
+                    {"instrument": {"ticker": "AAPL_US_EQ", "name": "Apple",
+                                    "isin": "US0378331005", "currency": "USD"},
+                     "quantity": 10, "averagePricePaid": 150.0,
+                     "currentPrice": 170.0,
+                     "walletImpact": {"currency": "USD", "totalCost": 1500.0,
+                                      "currentValue": 1700.0,
+                                      "unrealizedProfitLoss": 200.0}},
+                ]
+            if path.startswith("/equity/history/orders"):
+                return {"items": [
+                    {"order": {"ticker": "AAPL_US_EQ", "side": "BUY",
+                               "instrument": {"ticker": "AAPL_US_EQ",
+                                              "currency": "USD"}},
+                     "fill": {"quantity": 10.0, "price": 150.0,
+                              "filledAt": "2026-01-05T10:00:00.000Z"}},
+                    {"order": {"ticker": "ASML_NL_EQ", "side": "BUY",
+                               "instrument": {"ticker": "ASML_NL_EQ",
+                                              "currency": "EUR"}},
+                     "fill": {"quantity": 5.0, "price": 600.0,
+                              "filledAt": "2026-02-01T10:00:00.000Z"}},
+                    {"order": {"ticker": "ASML_NL_EQ", "side": "SELL",
+                               "instrument": {"ticker": "ASML_NL_EQ",
+                                              "currency": "EUR"}},
+                     "fill": {"quantity": 5.0, "price": 700.0,
+                              "filledAt": "2026-06-01T10:00:00.000Z"}},
+                ], "nextPagePath": None}
+            if path == "/equity/account/info":
+                return {"id": 42, "currencyCode": "USD"}
+            raise AssertionError(path)
+        with patch("t212_api._get", side_effect=_router), \
+             patch("gather_data.fetch_fx_rate", return_value=1.0):
+            return t212_api.fetch_portfolio_data(_CREDS)[0]
+
+    def test_a_fully_sold_name_still_appears(self):
+        self.assertIn("ASML", self._fetch())
+
+    def test_it_holds_no_shares_and_no_value(self):
+        """So the page files it under closed and never counts it as money."""
+        d = self._fetch()["ASML"]
+        self.assertEqual(d["shares_held"], 0)
+        self.assertEqual(d["equity_cost"], 0.0)
+        self.assertEqual(d["purchase_price"], 0.0)
+
+    def test_it_keeps_the_trades_that_tell_its_story(self):
+        d = self._fetch()["ASML"]
+        self.assertEqual(len(d["trades"]), 2)
+        self.assertEqual(d["total_pl"], 500.0)      # (700 - 600) x 5
+
+    def test_open_positions_are_untouched(self):
+        d = self._fetch()["AAPL"]
+        self.assertEqual(d["shares_held"], 10)
+        self.assertEqual(d["purchase_price"], 150.0)

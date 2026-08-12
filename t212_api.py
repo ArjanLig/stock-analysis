@@ -180,9 +180,49 @@ def fetch_portfolio_data(creds: dict):
             "account_value": wallet.get("currentValue"),
             "account_pl": wallet.get("unrealizedProfitLoss"),
         }
+    # Names that were traded but are no longer held. T212 returns only open
+    # positions, so a name you sold in full would disappear from the app the
+    # moment you sold it — which is exactly when there is something to say
+    # about it. Tastytrade reconstructs everything from transactions and keeps
+    # closed cards; this makes T212 behave the same.
+    for symbol, trades in trades_by_symbol.items():
+        if symbol in cost_basis:
+            continue
+        cost_basis[symbol] = {
+            "total_credits": 0,
+            "total_debits": 0,
+            "dividends": 0,
+            "shares_held": 0,
+            "option_pl": 0,
+            "equity_cost": 0.0,
+            "total_pl": sum(t["net_value"] for t in trades),
+            "adjusted_cost": 0.0,
+            "cost_per_share": 0.0,
+            "trades": trades,
+            "wheels": [],
+            "buy_and_hold": True,
+            "purchase_price": 0.0,
+            "broker_price": 0.0,
+            "currency": "USD",
+            "exchange": "",
+            "isin": _clean_isin(trades),
+            "account_currency": "",
+            "account_cost": None,
+            "account_value": None,
+            "account_pl": None,
+        }
+
     info = _get("/equity/account/info", creds, min_interval=5.0)
     account_id = str(info.get("id") or "")
     return cost_basis, account_id
+
+
+def _clean_isin(trades):
+    """ISIN off any of the ticker's fills, for the logo fallback."""
+    for t in trades:
+        if t.get("isin"):
+            return t["isin"]
+    return ""
 
 
 def fetch_trades(creds: dict) -> dict:
@@ -243,6 +283,7 @@ def _fill_to_trade(item: dict, creds: dict):
 
     return {
         "_symbol": info["symbol"],
+        "isin": (order.get("instrument") or {}).get("isin") or info["isin"],
         "date": day,
         "label": "Stock Buy" if is_buy else "Stock Sell",
         "type": "Trade",
