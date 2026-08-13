@@ -186,14 +186,14 @@ def hindsight(trades, current_price):
         return None
 
     shares = 0.0
-    shares_sold = proceeds = 0.0
+    shares_sold = proceeds = sale_value = 0.0
     closed_on = None
     for t, qty, price, is_buy in _equity_lots(trades):
         if is_buy:
             # Going from flat back to invested starts a new position, so
             # anything sold before it belonged to a different one.
             if shares <= 0:
-                shares_sold = proceeds = 0.0
+                shares_sold = proceeds = sale_value = 0.0
                 closed_on = None
             shares += qty
             continue
@@ -201,6 +201,11 @@ def hindsight(trades, current_price):
         shares_sold += qty
         # The trade's own cash, so fees are counted the way they were paid.
         proceeds += abs(t.get("net_value") or 0.0) or (qty * price)
+        # The price you traded at, kept apart from the cash you received.
+        # Dividing cash by shares folds the fee into the price: AMAT was called
+        # away at exactly 170.00 and the $5 fee made that read 169.95, which is
+        # not a price anyone traded at.
+        sale_value += qty * price
         closed_on = t.get("date") or closed_on
     if not shares_sold:
         return None
@@ -212,7 +217,7 @@ def hindsight(trades, current_price):
         "delta": value_now - proceeds,
         # The two prices the comparison rests on. Averaged over the closing
         # sales, so a position sold in pieces still reports one exit price.
-        "sale_price": proceeds / shares_sold,
+        "sale_price": (sale_value / shares_sold) if sale_value else (proceeds / shares_sold),
         "price_now": current_price,
         # When it was sold. GOOGL reads $16,531 given up, which is true and
         # unreadable without knowing that is a twenty-month-old decision.

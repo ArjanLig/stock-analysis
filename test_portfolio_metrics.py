@@ -462,6 +462,28 @@ class TestHindsight(unittest.TestCase):
         self.assertAlmostEqual(h["sale_price"], 36.595, places=3)
         self.assertAlmostEqual(h["price_now"], 40.00)
 
+    def test_the_sale_price_is_what_you_sold_at_not_what_you_netted(self):
+        """AMAT was called away at exactly 170.00; the $5 assignment fee made
+        net proceeds 169.95 a share. Dividing cash by shares put 169.95 under
+        "Sold at", which is not a price anyone traded at. The money column
+        still shows the cash that actually arrived."""
+        trades = [_eq(100, 205.0, txn="Receive Deliver"),
+                  {"instrument_type": "Equity", "type": "Receive Deliver",
+                   "action": "Sell to Close", "quantity": 100.0, "price": 170.0,
+                   "net_value": 16994.983, "date": date(2025, 11, 19)}]
+        h = hindsight(trades, 552.30)
+        self.assertAlmostEqual(h["sale_price"], 170.00)
+        self.assertAlmostEqual(h["proceeds"], 16994.983)
+
+    def test_a_fill_without_a_price_falls_back_to_its_cash(self):
+        """Some history carries only the money. Better the net price than no
+        row at all."""
+        trades = [_eq(10, 50.0),
+                  {"instrument_type": "Equity", "type": "Trade",
+                   "action": "Sell to Close", "quantity": 10.0, "price": 0,
+                   "net_value": 599.0, "date": date(2026, 1, 1)}]
+        self.assertAlmostEqual(hindsight(trades, 70.0)["sale_price"], 59.90)
+
     def test_the_sale_price_averages_a_position_sold_in_pieces(self):
         trades = [_eq(10, 50.0), _eq(4, 60.0, action="Sell to Close"),
                   _eq(6, 80.0, action="Sell to Close")]
