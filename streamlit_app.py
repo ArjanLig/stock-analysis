@@ -4577,11 +4577,24 @@ def _watchlist_overview():
         basis = row.get('cap_basis')
         if band == "n/a":
             return _tip("— defer", None, "Phase 1 — too early to judge capital returns; defer.")
+        def _suffix(metric_name):
+            """Name the metric in the cell when it isn't the column's own.
+
+            The header used to say "Capital" because the figure is ROCE for
+            most names but ROE for a float business and, for one, Rule of 40.
+            Under a ROCE header those rows would be mislabelled, and the
+            tooltip is not where a contradiction should be resolved.
+            """
+            if not metric_name or metric_name.upper().startswith("ROCE"):
+                return ""
+            return (f'<span style="font-size:0.65rem;color:{muted};'
+                    f'margin-left:3px">{_html.escape(metric_name)}</span>')
+
         if band and metric and value is not None:
             base = _CAP_DEFS.get(metric, metric)
             help_text = f"{base}. {basis}." if basis else f"{base}."
             color = {"robust": green, "fragile": red}.get(band)
-            return _tip(f"{value:.0f}%", color, help_text)
+            return _tip(f"{value:.0f}%", color, help_text) + _suffix(metric)
         # Fallback: raw multi-year Avg ROCE/ROE (ticker not yet assessed)
         rv, rm = row.get('roce_avg'), row.get('roce_metric', 'ROCE')
         if rv is None:
@@ -4589,17 +4602,19 @@ def _watchlist_overview():
         help_text = (f"{_CAP_DEFS.get(rm, rm)} — multi-year average; this ticker "
                      "isn't assessed in the Robustness table yet.")
         color = green if rv >= 20 else (red if rv < 10 else None)
-        return _tip(f"{rv:.1f}%", color, help_text)
+        return _tip(f"{rv:.1f}%", color, help_text) + _suffix(rm)
 
     def _render_wl_header():
         hdr = st.columns([0.3, 1.0, 1.6, 0.8, 1.5, 0.8, 0.7, 0.6, 0.7, 0.7, 0.3])
-        _wl_hdr = ["", "Ticker", "Company", "Price", "Fair Value", "Buy", "Upside", "Capital", "FCF Yield", "Earnings", ""]
+        _wl_hdr = ["", "Ticker", "Company", "Price", "Fair Value", "Buy", "Upside", "ROCE", "FCF Yield", "Earnings", ""]
         for col, label in zip(hdr, _wl_hdr):
             if not label:
                 continue
-            if label == "Capital":
-                # Centered header above the centered figure column.
-                col.markdown('<div style="text-align:center"><b>Capital</b></div>',
+            if label == "ROCE":
+                # Centered header above the centered figure column. Named for
+                # the metric it carries for all but a handful of tickers; those
+                # few name their own in the cell.
+                col.markdown('<div style="text-align:center"><b>ROCE</b></div>',
                              unsafe_allow_html=True)
             else:
                 col.markdown(f"**{label}**")
