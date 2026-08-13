@@ -11660,15 +11660,26 @@ elif page == "Cost Basis":
                     _c = T["red"] if _d > 0 else T["accent"]
                     _move = ((_hs["price_now"] / _hs["sale_price"] - 1) * 100
                              if _hs["sale_price"] else 0.0)
-                    # One figure in the label, the rest inside. "worth ...
-                    # more today" rather than a bare "$178 less", which left
-                    # the reader asking less than what; the subject is the
-                    # shares and the yardstick is what they were sold for. A
-                    # word rather than a sign, so a red +$37,815 does not read
-                    # as a gain.
+                    # Percentage first, amount beside it. The percentage is
+                    # what the price did since the sale, so its sign describes
+                    # the stock rather than the outcome and stops fighting the
+                    # colour: +222% in red is "it ran on without you". The
+                    # amount stays because a percentage alone flatters small
+                    # positions — BYND's -30% is $9 against GOOGL's +93% at
+                    # $16,604.
+                    # A decimal while it still tells you something, none once
+                    # the number is big enough not to need one, and no sign at
+                    # all on a move that rounds to nothing — TTD came out as
+                    # "-0%", which reads as a rounding artefact rather than the
+                    # flat result it is.
+                    if abs(_move) < 0.05:
+                        _pct = "0%"
+                    elif abs(_move) < 10:
+                        _pct = f"{_move:+.1f}%"
+                    else:
+                        _pct = f"{_move:+.0f}%"
                     _label = (f'If I\'d held  ·  :{"red" if _d > 0 else "green"}'
-                              f'[worth ${abs(_d):,.0f} '
-                              f'{"more" if _d > 0 else "less"} today]')
+                              f'[{_pct} (${abs(_d):,.0f})]')
                     with st.expander(_label):
                         if _hs.get("closed_on"):
                             st.caption(
