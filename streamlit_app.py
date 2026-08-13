@@ -11660,12 +11660,15 @@ elif page == "Cost Basis":
                     _c = T["red"] if _d > 0 else T["accent"]
                     _move = ((_hs["price_now"] / _hs["sale_price"] - 1) * 100
                              if _hs["sale_price"] else 0.0)
-                    # One figure in the label, the rest inside. The old line
-                    # carried a sentence of detail where it only has to say
-                    # whether opening it is worth it. "more"/"less" carries the
-                    # direction, so the sign does not have to fight the colour.
+                    # One figure in the label, the rest inside. "worth ...
+                    # more today" rather than a bare "$178 less", which left
+                    # the reader asking less than what; the subject is the
+                    # shares and the yardstick is what they were sold for. A
+                    # word rather than a sign, so a red +$37,815 does not read
+                    # as a gain.
                     _label = (f'If I\'d held  ·  :{"red" if _d > 0 else "green"}'
-                              f'[${abs(_d):,.0f} {"more" if _d > 0 else "less"}]')
+                              f'[worth ${abs(_d):,.0f} '
+                              f'{"more" if _d > 0 else "less"} today]')
                     with st.expander(_label):
                         if _hs.get("closed_on"):
                             st.caption(
