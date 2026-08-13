@@ -189,7 +189,11 @@ def _latest_fcf_yield(fund: dict, equity_market_value: float | None,
 
     shares_same_year = shares[latest] if latest < len(shares) else None
     if live_price and live_price > 0 and shares_same_year:
-        return (fcf[latest] * 1e6 / shares_same_year) / live_price
+        # Both lists are in millions — gather_data divides raw share counts by
+        # 1e6 on the way in, the same as every money field — so the ratio is
+        # already dollars per share. Scaling the FCF and not the share count
+        # put NTDOY's yield at 2,638,257%.
+        return (fcf[latest] / shares_same_year) / live_price
 
     if equity_market_value and equity_market_value > 0:
         return fcf[latest] / equity_market_value  # both in $M
@@ -8776,11 +8780,14 @@ with st.sidebar:
     if st.session_state.get("t212_credentials"):
         _connected.append(("Trading 212", "t212"))
 
-    # Not on the pages that carry their own Overview / per-broker tabs: two
-    # controls for one thing invites picking the one that doesn't apply.
-    # Elsewhere the switcher is the only way to say which account the option
-    # chain, deposit history and margin figures belong to.
-    if len(_connected) >= 2 and page not in ("Portfolio", "Cost Basis"):
+    # Only where it changes something. Option Finder builds a chain from one
+    # account and Results reads one account's deposits and net liq history;
+    # Portfolio and Cost Basis carry their own Overview / per-broker tabs, and
+    # Watchlist and Cashflow Champions touch no broker data at all — a control
+    # that does nothing still asks to be understood. A whitelist rather than a
+    # list of exceptions, so a new page does not inherit it by default.
+    _BROKER_SCOPED_PAGES = ("Option Finder", "Results")
+    if len(_connected) >= 2 and page in _BROKER_SCOPED_PAGES:
         _broker_options = [label for label, _ in _connected]
         _broker_keys = [key for _, key in _connected]
         _current = get_active_broker()
