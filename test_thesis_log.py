@@ -82,6 +82,44 @@ class TestOnlyOnChange(unittest.TestCase):
         self.assertEqual(len(second), 1)
 
 
+class TestSameDayCollapses(unittest.TestCase):
+    """Tuning is not a sequence of theses."""
+
+    def test_a_second_revision_on_the_same_day_replaces_the_first(self):
+        """Dragging the growth path in the editor and saving between tweaks
+        would otherwise file every intermediate step as its own thesis. Only
+        the version you settled on is one."""
+        log = append_assumption_snapshot({}, _cfg(), today="2026-08-13")
+        log = append_assumption_snapshot(
+            {ASSUMPTION_LOG_KEY: log}, _cfg(growth=[0.09, 0.08, 0.06]),
+            today="2026-08-13")
+        log = append_assumption_snapshot(
+            {ASSUMPTION_LOG_KEY: log}, _cfg(growth=[0.10, 0.08, 0.06]),
+            today="2026-08-13")
+        self.assertEqual(len(log), 1)
+        self.assertEqual(log[0]["revenue_growth"], [0.10, 0.08, 0.06])
+
+    def test_a_revision_on_a_later_day_is_its_own_entry(self):
+        log = append_assumption_snapshot({}, _cfg(), today="2026-08-13")
+        log = append_assumption_snapshot(
+            {ASSUMPTION_LOG_KEY: log}, _cfg(growth=[0.09, 0.08, 0.06]),
+            today="2026-08-14")
+        self.assertEqual(len(log), 2)
+
+    def test_the_earlier_entry_survives_a_same_day_rewrite_of_the_latest(self):
+        """Collapsing today's edits must not eat yesterday's thesis."""
+        log = append_assumption_snapshot({}, _cfg(), today="2026-08-13")
+        log = append_assumption_snapshot(
+            {ASSUMPTION_LOG_KEY: log}, _cfg(growth=[0.09, 0.08, 0.06]),
+            today="2026-08-14")
+        log = append_assumption_snapshot(
+            {ASSUMPTION_LOG_KEY: log}, _cfg(growth=[0.10, 0.08, 0.06]),
+            today="2026-08-14")
+        self.assertEqual(len(log), 2)
+        self.assertEqual(log[0]["as_of"], "2026-08-13")
+        self.assertEqual(log[0]["revenue_growth"], [0.08, 0.08, 0.06])
+
+
 class TestBounds(unittest.TestCase):
     def test_the_log_stops_growing_at_the_cap(self):
         log = []

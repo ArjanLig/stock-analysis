@@ -159,7 +159,14 @@ def append_assumption_snapshot(stored_cfg, new_cfg, today=None):
     snapshot["as_of"] = today or date.today().isoformat()
     snapshot["fv_mid"] = ((new_cfg.get("valuation_summary") or {})
                           .get("weighted_fv_mid"))
-    log.append(snapshot)
+
+    # Revisions on the same day collapse to the last one. Dragging the growth
+    # path in the editor and saving between tweaks is tuning, not a sequence of
+    # theses; only the version settled on is one.
+    if log and log[-1].get("as_of") == snapshot["as_of"]:
+        log[-1] = snapshot
+    else:
+        log.append(snapshot)
     return log[-ASSUMPTION_LOG_MAX:]
 
 
