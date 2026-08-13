@@ -11658,14 +11658,20 @@ elif page == "Cost Basis":
                 if _hs:
                     _d = _hs["delta"]
                     _c = T["red"] if _d > 0 else T["accent"]
-                    _verb = "given up" if _d > 0 else "saved"
-                    _when = (f' · sold {_hs["closed_on"]:%b %Y}'
-                             if _hs.get("closed_on") else '')
                     _move = ((_hs["price_now"] / _hs["sale_price"] - 1) * 100
                              if _hs["sale_price"] else 0.0)
-                    with st.expander(
-                        f'Held to today  —  ${abs(_d):,.0f} {_verb}{_when}'
-                    ):
+                    # One figure in the label, the rest inside. The old line
+                    # carried a sentence of detail where it only has to say
+                    # whether opening it is worth it. "more"/"less" carries the
+                    # direction, so the sign does not have to fight the colour.
+                    _label = (f'If I\'d held  ·  :{"red" if _d > 0 else "green"}'
+                              f'[${abs(_d):,.0f} {"more" if _d > 0 else "less"}]')
+                    with st.expander(_label):
+                        if _hs.get("closed_on"):
+                            st.caption(
+                                f'Sold {_hs["closed_on"]:%d %b %Y} · '
+                                f'{_hs["shares_sold"]:,.0f} shares'
+                            )
                         _th = (f'padding:4px 8px;text-align:right;'
                                f'color:{T["text_muted"]};font-weight:600')
                         _td = ('padding:4px 8px;text-align:right;'
@@ -11677,7 +11683,7 @@ elif page == "Cost Basis":
                             f'<thead><tr>'
                             f'<th style="{_th};text-align:left"></th>'
                             f'<th style="{_th}">Price</th>'
-                            f'<th style="{_th}">{_hs["shares_sold"]:,.0f} shares</th>'
+                            f'<th style="{_th}">Value</th>'
                             f'</tr></thead><tbody>'
                             f'<tr>'
                             f'<td style="{_td};{_bd};text-align:left">Sold at</td>'
