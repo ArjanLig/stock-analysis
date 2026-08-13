@@ -473,11 +473,15 @@ class TestHindsight(unittest.TestCase):
                    "net_value": 16994.983, "date": date(2025, 11, 19)}]
         h = hindsight(trades, 552.30)
         self.assertAlmostEqual(h["sale_price"], 170.00)
-        self.assertAlmostEqual(h["proceeds"], 16994.983)
+        # Gross: 100 x 170.00, not the 16,994.98 that landed after the $5 fee.
+        # The other side of the comparison is a hypothetical holding valued at
+        # today's price with no costs at all, so netting one side and not the
+        # other compares two different things.
+        self.assertAlmostEqual(h["proceeds"], 17000.0)
 
     def test_a_fill_without_a_price_falls_back_to_its_cash(self):
-        """Some history carries only the money. Better the net price than no
-        row at all."""
+        """Some history carries only the money. Better the net figure than no
+        row at all — and it is the only number available."""
         trades = [_eq(10, 50.0),
                   {"instrument_type": "Equity", "type": "Trade",
                    "action": "Sell to Close", "quantity": 10.0, "price": 0,

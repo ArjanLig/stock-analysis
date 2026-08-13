@@ -200,11 +200,12 @@ def hindsight(trades, current_price):
         shares -= qty
         shares_sold += qty
         # The trade's own cash, so fees are counted the way they were paid.
-        proceeds += abs(t.get("net_value") or 0.0) or (qty * price)
-        # The price you traded at, kept apart from the cash you received.
-        # Dividing cash by shares folds the fee into the price: AMAT was called
-        # away at exactly 170.00 and the $5 fee made that read 169.95, which is
-        # not a price anyone traded at.
+        # Price times shares, not the cash that landed. The other side of the
+        # comparison is a hypothetical holding valued at today's price with no
+        # costs at all, so subtracting fees from one side only would compare
+        # two different things — and it put 169.95 where AMAT was called away
+        # at exactly 170.00.
+        proceeds += (qty * price) or abs(t.get("net_value") or 0.0)
         sale_value += qty * price
         closed_on = t.get("date") or closed_on
     if not shares_sold:
