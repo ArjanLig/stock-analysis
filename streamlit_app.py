@@ -4627,9 +4627,12 @@ def _watchlist_overview():
             if st.button("", key=f"wl_edit_{t}", icon=":material/edit:"):
                 st.query_params["edit"] = t
                 st.rerun()
-        logo_url = f"https://assets.parqet.com/logos/symbol/{t}"
+        _wl_logo = _logo_img(
+            t, None, "",
+            "width:24px;height:24px;border-radius:50%;object-fit:cover;"
+            "vertical-align:middle;margin-right:6px")
         cols[1].markdown(
-            f'<img src="{logo_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px" onerror="this.style.display=\'none\'"><strong>{t}</strong>',
+            f'{_wl_logo}<strong>{t}</strong>',
             unsafe_allow_html=True,
         )
         cols[2].markdown(row['company'])
@@ -5758,15 +5761,16 @@ def _dcf_editor(ticker):
             for idx_p, pr in enumerate(_peer_rows):
                 _is_self = pr.get("is_self", False)
                 _pt = pr.get("ticker", "")
-                _logo_url = f"https://assets.parqet.com/logos/symbol/{_pt}"
+                _peer_logo = _logo_img(
+                    _pt, None, "",
+                    "width:28px;height:28px;border-radius:50%;object-fit:cover")
                 _row_bg = f'background:{T["row_alt"]};' if _is_self else ''
                 _fw = 'font-weight:700;' if _is_self else ''
                 _ptable += f'<tr style="{_row_bg}">'
                 _ptable += (
                     f'<td style="padding:10px 12px;border-bottom:1px solid {T["border_light"]};color:{T["text"]};{_fw}">'
                     f'<div style="display:flex;align-items:center;gap:10px">'
-                    f'<img src="{_logo_url}" style="width:28px;height:28px;border-radius:50%;object-fit:cover" '
-                    f'onerror="this.style.display=\'none\'">'
+                    f'{_peer_logo}'
                     f'<span>{_pt}</span>'
                     f'</div></td>'
                 )
@@ -8662,9 +8666,9 @@ def _dcf_editor(ticker):
         f'<div class="hero-card">'
         f'<p class="hero-label">{_prettify_company(cfg.get("company", ticker))}</p>'
         f'<div style="display:flex;align-items:center;justify-content:center;gap:12px">'
-        f'<img src="https://assets.parqet.com/logos/symbol/{ticker}" '
-        f'style="width:36px;height:36px;border-radius:50%;object-fit:cover" '
-        f'onerror="this.style.display=\'none\'">'
+        + _logo_img(ticker, cfg.get("isin"), "",
+                    "width:36px;height:36px;border-radius:50%;object-fit:cover")
+        + 
         f'<p class="hero-value" style="font-size:2rem;margin:0">{ticker}</p>'
         f'</div>'
         f'<div class="stat-row">'
@@ -9169,31 +9173,29 @@ def _load_portfolio_data():
     return cost_basis
 
 
-def _logo_img(symbol, isin=None, css_class="pf-logo"):
-    """An <img> that tries the symbol, then the ISIN, then gives up.
+def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
+    """An <img> for a ticker's logo, addressed by ISIN when we have one.
 
-    Parqet indexes logos by symbol but only resolves US-style tickers: the
-    Amundi ETF WEBN 404s there while /logos/isin/IE0003XJA0J9 serves it fine,
-    and T212 hands us the ISIN with every position.
+    Parqet indexes logos both ways, but the symbol index only resolves
+    US-style tickers: the Amundi ETF WEBN 404s there while its ISIN serves the
+    real Amundi mark. So the ISIN leads whenever a broker gave us one.
 
-    The fallback is the browser's own onerror rather than a HEAD request from
-    the server. Checking server-side meant one request per ticker, a day-long
-    cache to hide the cost, and — the reason WEBN stayed blank — a failed check
-    falling back to the very URL that 404s. The browser already knows whether
-    the image loaded.
+    Two earlier attempts failed for reasons worth writing down. A HEAD request
+    from the server to pick the working URL: parqet answers 404 to anything
+    without a browser User-Agent, so the check failed and then fell back to the
+    very URL that 404s. Then a browser-side onerror chain: Streamlit sanitises
+    the HTML it renders, so an event handler is not something to depend on.
+    Choosing the right src up front needs neither.
     """
     symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
-    hide = "this.style.display='none'"
-    if isin:
-        # A function, not a string: assigning a string to .onerror in script
-        # does not compile it as a handler the way an inline attribute does, so
-        # a name whose ISIN also fails would have been left showing a broken
-        # image icon instead of nothing.
-        isin_url = f"https://assets.parqet.com/logos/isin/{isin}"
-        onerror = (f"this.onerror=function(){{{hide}}};this.src='{isin_url}'")
-    else:
-        onerror = f"this.onerror=null;{hide}"
-    return f'<img class="{css_class}" src="{symbol_url}" onerror="{onerror}">' 
+    isin_url = f"https://assets.parqet.com/logos/isin/{isin}" if isin else ""
+    src = isin_url or symbol_url
+    # A courtesy for when the handler does survive; nothing depends on it.
+    onerror = (f"this.onerror=null;this.src='{symbol_url}'" if isin_url
+               else "this.style.display='none'")
+    _cls = f'class="{css_class}" ' if css_class else ""
+    _sty = f'style="{style}" ' if style else ""
+    return f'<img {_cls}{_sty}src="{src}" onerror="{onerror}">' 
 
 
 def _color_val(val):
@@ -11769,7 +11771,8 @@ elif page == "Results":
     def _performer_cards(items):
         cards = ''
         for ticker, data in items:
-            logo = f"https://assets.parqet.com/logos/symbol/{ticker}"
+            logo = _logo_img(data.get("symbol", ticker), data.get("isin"),
+                             "", "width:100%;height:100%;object-fit:cover")
             pl = data["total_pl_real"]
             pl_cls = " pf-green" if pl > 0 else " pf-red" if pl < 0 else ""
             opt = data["option_pl"]
@@ -12363,10 +12366,11 @@ elif page == "Cashflow Champions":
                       f'color:{T["text"] if ok else T["text_muted"]}')
                 lb = f'border-left:3px solid {T["accent"] if champ else "transparent"}'
                 rank_txt = str(r.get(rank_key)) if r.get(rank_key) else "·"
-                logo = (f'<img src="https://assets.parqet.com/logos/symbol/{r["ticker"]}" '
-                        f'style="width:20px;height:20px;border-radius:50%;object-fit:cover;'
-                        f'vertical-align:middle;margin-right:6px" '
-                        f'onerror="this.style.display=\'none\'"><strong>{r["ticker"]}</strong>')
+                logo = (_logo_img(r["ticker"], None, "",
+                                  "width:20px;height:20px;border-radius:50%;"
+                                  "object-fit:cover;vertical-align:middle;"
+                                  "margin-right:6px")
+                        + f'<strong>{r["ticker"]}</strong>')
                 cells = [
                     f'<td style="{td};{lb};font-weight:600;white-space:nowrap">{rank_txt}</td>',
                     f'<td style="{td};white-space:nowrap">{logo}</td>',
