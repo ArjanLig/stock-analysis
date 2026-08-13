@@ -23,7 +23,8 @@ from error_logger import log_error, log_error_with_trace
 from dcf_calculator import (compute_wacc, compute_intrinsic_value, compute_reverse_dcf,
                             DEFAULT_DISCOUNT_MODE)
 from valuation_lenses import FORWARD_LENSES
-from config_store import save_config, load_config, load_all_configs, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
+from thesis import thesis_vs_history, HEROIC_RATIO
+from config_store import ASSUMPTION_LOG_KEY, save_config, load_config, load_all_configs, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
 import gather_data
 from gather_data import (
     get_cik,
@@ -4923,7 +4924,10 @@ def _dcf_editor(ticker):
     margins = list(cfg.get('op_margins', []))
 
     # ── Tabs: DCF / Reverse DCF / Peer Comparison / Dividend / SOTP / Fundamentals ──
-    _tab_notes, _tab_fundamentals, _tab_dcf, _tab_rdcf, _tab_peers, _tab_dividend, _tab_sotp = st.tabs(["Pre-Scan", "Fundamentals", "DCF", "Reverse DCF", "Peer Comparison", "Dividend", "SOTP"])
+    (_tab_notes, _tab_fundamentals, _tab_dcf, _tab_rdcf, _tab_peers,
+     _tab_dividend, _tab_sotp, _tab_history) = st.tabs(
+        ["Pre-Scan", "Fundamentals", "DCF", "Reverse DCF", "Peer Comparison",
+         "Dividend", "SOTP", "History"])
 
     with _tab_dcf:
         with st.container(key="tabcard_dcf_1"):
@@ -8405,6 +8409,113 @@ def _dcf_editor(ticker):
                     )
                 _result_html += '</div>'
                 st.markdown(_result_html, unsafe_allow_html=True)
+
+    with _tab_history:
+        with st.container(key="tabcard_history"):
+            st.markdown("#### Thesis vs the business")
+
+            # ── How hard is the assumption? ──
+            # Answerable today, from the config and EDGAR. The other half —
+            # did the company deliver — needs elapsed years, which is why the
+            # log below exists at all.
+            _hist_cagr = None
+            _fund_hl = (cfg.get("fundamentals") or {}).get("headline") or {}
+            if _fund_hl.get("revenue_cagr_3y_pct") is not None:
+                _hist_cagr = _fund_hl["revenue_cagr_3y_pct"] / 100.0
+            elif cfg.get("fundamentals", {}).get("revenue"):
+                _rev = [r for r in cfg["fundamentals"]["revenue"] if r]
+                if len(_rev) >= 4 and _rev[-4] > 0:
+                    _hist_cagr = (_rev[-1] / _rev[-4]) ** (1 / 3) - 1
+
+            _tvh = thesis_vs_history(cfg.get("revenue_growth"), _hist_cagr)
+            if _tvh:
+                _r = _tvh["ratio"]
+                _rtxt = f"{_r:.2f}x" if _r is not None else "n.v.t."
+                _rcol = T["red"] if _tvh["heroic"] else T["text"]
+                st.markdown(
+                    f'<div class="hero-card" style="padding:20px 24px">'
+                    f'<div style="display:flex;gap:32px;flex-wrap:wrap">'
+                    f'<div><div style="font-size:0.78rem;color:{T["text_muted"]}">'
+                    f'You assume</div><div style="font-size:1.5rem;font-weight:700">'
+                    f'{_tvh["assumed_cagr"]:.1%}</div>'
+                    f'<div style="font-size:0.72rem;color:{T["text_muted"]}">'
+                    f'5y revenue CAGR</div></div>'
+                    f'<div><div style="font-size:0.78rem;color:{T["text_muted"]}">'
+                    f'It has delivered</div><div style="font-size:1.5rem;'
+                    f'font-weight:700">{_tvh["delivered_cagr"]:.1%}</div>'
+                    f'<div style="font-size:0.72rem;color:{T["text_muted"]}">'
+                    f'3y revenue CAGR</div></div>'
+                    f'<div><div style="font-size:0.78rem;color:{T["text_muted"]}">'
+                    f'Ratio</div><div style="font-size:1.5rem;font-weight:700;'
+                    f'color:{_rcol}">{_rtxt}</div>'
+                    f'<div style="font-size:0.72rem;color:{T["text_muted"]}">'
+                    f'above {HEROIC_RATIO:.1f}x rests on a break in trend</div>'
+                    f'</div></div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.caption(
+                    "Under 1x means the model underwrites less than the company "
+                    "has been doing, which is what lets a fair value survive a "
+                    "bad year. It is not automatically better — it can also mean "
+                    "leaving the case unmade."
+                )
+            else:
+                st.info("No revenue history to compare the growth path against yet.")
+
+            # ── Revisions ──
+            st.markdown("")
+            st.markdown("##### Revisions")
+            _alog = cfg.get(ASSUMPTION_LOG_KEY) or []
+            if len(_alog) < 2:
+                st.caption(
+                    "Each time the growth path, margins or base year change, the "
+                    "previous thesis is kept here with the fair value it produced. "
+                    "Rebuilding a DCF used to overwrite them, so there was no way "
+                    "to ask afterwards whether the business delivered what you "
+                    "assumed. Recording starts from the first save after this — "
+                    "there is nothing from before it to recover."
+                )
+            if _alog:
+                _rows = ""
+                _prev_fv = None
+                for _e in reversed(_alog):
+                    _g = _e.get("revenue_growth") or []
+                    _gtxt = (f'{_g[0]:.1%} → {_g[-1]:.1%}' if _g else "—")
+                    _fv = _e.get("fv_mid")
+                    _fvtxt = f"${_fv:,.2f}" if _fv else "—"
+                    _chg = ""
+                    if _fv and _prev_fv:
+                        _d = (_prev_fv / _fv - 1) * 100
+                        _chg = (f'<span style="color:'
+                                f'{T["red"] if _d > 0 else T["accent"]}">'
+                                f'{_d:+.1f}%</span>')
+                    _prev_fv = _fv or _prev_fv
+                    _td = f'padding:6px 10px;border-top:1px solid {T["divider"]}'
+                    _rows += (
+                        f'<tr><td style="{_td}">{_e.get("as_of", "—")}</td>'
+                        f'<td style="{_td}">{_e.get("base_year", "—")}</td>'
+                        f'<td style="{_td}">{_gtxt}</td>'
+                        f'<td style="{_td};text-align:right">{_fvtxt}</td>'
+                        f'<td style="{_td};text-align:right">{_chg}</td></tr>'
+                    )
+                _th = (f'padding:6px 10px;color:{T["text_muted"]};'
+                       f'font-weight:600;text-align:left')
+                st.markdown(
+                    f'<table style="width:100%;border-collapse:collapse;'
+                    f'font-size:0.85rem"><thead><tr>'
+                    f'<th style="{_th}">Set on</th><th style="{_th}">Base year</th>'
+                    f'<th style="{_th}">Growth path</th>'
+                    f'<th style="{_th};text-align:right">Fair value</th>'
+                    f'<th style="{_th};text-align:right">vs next</th>'
+                    f'</tr></thead><tbody>{_rows}</tbody></table>',
+                    unsafe_allow_html=True,
+                )
+                if len(_alog) > 1:
+                    st.caption(
+                        "The last column is how each fair value compares to the one "
+                        "that replaced it. A mid-point that keeps climbing toward "
+                        "the price says more about the model than the company."
+                    )
 
     # ── Action buttons ──
     st.markdown("---")

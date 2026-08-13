@@ -106,6 +106,63 @@ _DELETABLE_BY_OMISSION = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Assumption log
+# ---------------------------------------------------------------------------
+
+ASSUMPTION_LOG_KEY = "assumption_log"
+
+# Enough to cover years of revisions at a handful a year, and small enough that
+# the log stays a rounding error next to ai_notes.
+ASSUMPTION_LOG_MAX = 60
+
+# The fields that constitute a thesis. A change in any of them is a revision
+# worth recording; anything else about the config is not.
+_ASSUMPTION_FIELDS = (
+    "base_year", "base_revenue", "base_op_margin",
+    "revenue_growth", "op_margins", "terminal_growth", "terminal_margin",
+)
+
+
+def append_assumption_snapshot(stored_cfg, new_cfg, today=None):
+    """Return the assumption log with the incoming thesis appended if it changed.
+
+    Rebuilding a DCF overwrites base_year and the growth path, so what you
+    assumed a year ago is gone the moment you revise — and with it any way to
+    ask whether the business delivered. This keeps a dated copy of each thesis
+    as it is set.
+
+    Appends only on a real revision. save_config also runs on every valuation
+    refresh, and fair value drifts with the risk-free rate and the share price
+    without anyone changing their mind; logging that would bury the handful of
+    genuine rethinks under hundreds of rows. fv_mid rides along on each entry
+    so the log can also show whether your own valuation creeps up to meet the
+    price, but it never triggers one.
+    """
+    from datetime import date
+
+    snapshot = {k: new_cfg.get(k) for k in _ASSUMPTION_FIELDS}
+    if all(v is None for v in snapshot.values()):
+        return list(stored_cfg.get(ASSUMPTION_LOG_KEY) or []) \
+            if isinstance(stored_cfg.get(ASSUMPTION_LOG_KEY), list) else []
+
+    log = stored_cfg.get(ASSUMPTION_LOG_KEY)
+    if not isinstance(log, list):
+        # A save that raises loses the user's actual edit, and the log is the
+        # least important thing in the config.
+        log = []
+    log = list(log)
+
+    if log and all(log[-1].get(k) == snapshot[k] for k in _ASSUMPTION_FIELDS):
+        return log
+
+    snapshot["as_of"] = today or date.today().isoformat()
+    snapshot["fv_mid"] = ((new_cfg.get("valuation_summary") or {})
+                          .get("weighted_fv_mid"))
+    log.append(snapshot)
+    return log[-ASSUMPTION_LOG_MAX:]
+
+
 def save_config(client, ticker, cfg, user_id=None):
     """Upsert a DCF config dict to Supabase.
 
@@ -177,6 +234,17 @@ def save_config(client, ticker, cfg, user_id=None):
         if preserved:
             logger.info("save_config(%s): merged %d untouched key(s) from DB: %s",
                         ticker, len(preserved), preserved)
+
+    # Record the thesis as it is being written. Here rather than in the app or
+    # the MCP: save_config is the one door every write goes through, so no
+    # caller can revise a growth path without the previous one being kept.
+    try:
+        _log = append_assumption_snapshot(existing or {}, cfg)
+        if _log:
+            cfg[ASSUMPTION_LOG_KEY] = _log
+    except Exception as _e:
+        # Never let bookkeeping cost the user their actual edit.
+        logger.warning("save_config(%s): assumption log skipped: %s", ticker, _e)
 
     data = _prepare_for_json(cfg)
 
