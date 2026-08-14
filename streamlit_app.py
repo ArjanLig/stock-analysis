@@ -10762,7 +10762,17 @@ elif page == "Portfolio":
             _margin_reqs = {}
 
         for row in rows:
-            row["Weight"] = row["Mkt Value"] / total_value * 100 if total_value else 0.0
+            # Against net liq, not against the positions' own total. Cash is a
+            # real allocation — 15% of it at the time of writing — and dividing
+            # it out made every holding look larger than it is: PEP read 56.5%
+            # of the portfolio where it is 47.8% of the money. It also puts
+            # this column on the same denominator as the Deployment card, so
+            # one screen stops giving two answers to "how big is this".
+            #
+            # Falls back to the invested total when balances are unavailable,
+            # which is the old behaviour and better than a blank column.
+            _weight_base = net_liq if net_liq > 0 else total_value
+            row["Weight"] = row["Mkt Value"] / _weight_base * 100 if _weight_base else 0.0
             _mr = _margin_reqs.get(row["Ticker"], {})
             row["Margin"] = _mr.get("margin_requirement", 0)
             _mv = row["Mkt Value"]
@@ -10931,7 +10941,21 @@ elif page == "Portfolio":
         })
 
     _by_contrib = sorted(_perf_rows, key=lambda r: r["contribution"], reverse=True)
-    _pf_value = sum(r["market_value"] for r in _perf_rows)
+    # Net liq, matching the positions table and the Deployment card. Dividing
+    # by the positions' own total instead would make this card disagree with
+    # the one above it about how big the same holding is.
+    try:
+        _nl_by_broker, _ = _cached_all_balances()
+        _nl_view = st.session_state.get("_portfolio_view", "Overview")
+        if _nl_view != "Overview":
+            _nl_by_broker = {k: v for k, v in _nl_by_broker.items() if k == _nl_view}
+        _pf_value = sum(b.get("net_liquidating_value") or 0.0
+                        for b in _nl_by_broker.values())
+    except Exception as e:
+        logger.debug("Net liq unavailable for contribution weights: %s", e)
+        _pf_value = 0.0
+    if not _pf_value:
+        _pf_value = sum(r["market_value"] for r in _perf_rows)
     _rated = [r for r in _perf_rows if r["rel"] and r["rel"]["alpha"] is not None]
     _behind = sorted([r for r in _rated if r["rel"]["alpha"] < 0],
                      key=lambda r: r["rel"]["alpha"])
