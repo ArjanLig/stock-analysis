@@ -151,3 +151,63 @@ class TestCombinedBalances(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMergeNetLiq(unittest.TestCase):
+    """Adding two brokers' account curves into one.
+
+    Each broker reports on its own dates — Tastytrade snapshots, Trading 212
+    one point per calendar day — so the union of dates is the only honest grid,
+    and each series carries its last value forward across the gaps.
+    """
+
+    A = [{"time": "2026-07-01", "close": 100.0},
+         {"time": "2026-07-03", "close": 120.0}]
+    B = [{"time": "2026-07-02", "close": 50.0},
+         {"time": "2026-07-03", "close": 60.0}]
+
+    def test_it_sums_on_the_union_of_dates(self):
+        out = broker_adapter.merge_net_liq_series([self.A, self.B])
+        self.assertEqual([p["time"] for p in out],
+                         ["2026-07-01", "2026-07-02", "2026-07-03"])
+        self.assertAlmostEqual(out[-1]["close"], 180.0)
+
+    def test_a_series_carries_its_last_value_across_a_gap(self):
+        """Tastytrade does not print on a weekend. Treating the gap as zero
+        would drop the whole account out of the curve for two days."""
+        out = broker_adapter.merge_net_liq_series([self.A, self.B])
+        self.assertAlmostEqual(out[1]["close"], 150.0)   # 100 carried + 50
+
+    def test_an_account_counts_only_from_its_first_point(self):
+        """The T212 account did not exist before July. Back-filling it would
+        invent money, and back-filling zero is the same thing said quietly."""
+        out = broker_adapter.merge_net_liq_series([self.A, self.B])
+        self.assertAlmostEqual(out[0]["close"], 100.0)
+
+    def test_one_series_passes_through(self):
+        self.assertEqual(broker_adapter.merge_net_liq_series([self.A]), self.A)
+
+    def test_empty_input_yields_empty(self):
+        self.assertEqual(broker_adapter.merge_net_liq_series([]), [])
+        self.assertEqual(broker_adapter.merge_net_liq_series([[], []]), [])
+
+
+class TestMergeTransfers(unittest.TestCase):
+    def test_a_transfer_between_your_own_brokers_nets_out(self):
+        """Moving money from Tastytrade to Trading 212 is a withdrawal there
+        and a deposit here. Summed, it is what it is: not new money."""
+        tt = {2026: {"total": -5000.0, "months": {8: -5000.0}}}
+        t212 = {2026: {"total": 5000.0, "months": {8: 5000.0}}}
+        out = broker_adapter.merge_yearly_transfers([tt, t212])
+        self.assertAlmostEqual(out[2026]["total"], 0.0)
+        self.assertAlmostEqual(out[2026]["months"][8], 0.0)
+
+    def test_years_and_months_combine(self):
+        a = {2025: {"total": 100.0, "months": {1: 100.0}},
+             2026: {"total": 200.0, "months": {3: 200.0}}}
+        b = {2026: {"total": 50.0, "months": {3: 20.0, 4: 30.0}}}
+        out = broker_adapter.merge_yearly_transfers([a, b])
+        self.assertAlmostEqual(out[2025]["total"], 100.0)
+        self.assertAlmostEqual(out[2026]["total"], 250.0)
+        self.assertAlmostEqual(out[2026]["months"][3], 220.0)
+        self.assertAlmostEqual(out[2026]["months"][4], 30.0)

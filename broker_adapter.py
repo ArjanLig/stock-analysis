@@ -6,9 +6,14 @@ st.session_state["active_broker"]. Callers never pass refresh tokens
 or credentials; the adapter handles that internally.
 """
 
+import logging
+
 import streamlit as st
+
 import t212_api
 import tastytrade_api
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +314,95 @@ def fetch_all_portfolio_data():
     if not account_id and per_broker:
         account_id = next(iter(per_broker.values()))[1]
     return merged, account_id, failures
+
+
+def merge_net_liq_series(series_list):
+    """Add per-broker account curves into one, on the union of their dates.
+
+    Each broker reports on its own grid — Tastytrade snapshots when it feels
+    like it, Trading 212 one point per calendar day — so a series carries its
+    last value forward across a date it did not print on. Treating that gap as
+    zero would drop a whole account out of the curve for a weekend.
+
+    An account counts only from its own first point. Back-filling it would
+    invent money that was not there yet; back-filling zero says the same thing
+    more quietly and skews every return computed off the curve.
+    """
+    series_list = [s for s in series_list if s]
+    if not series_list:
+        return []
+    if len(series_list) == 1:
+        return series_list[0]
+
+    dates = sorted({p["time"] for s in series_list for p in s})
+    lookups = [{p["time"]: p["close"] for p in s} for s in series_list]
+    firsts = [min(lu) for lu in lookups]
+
+    out, last = [], [None] * len(lookups)
+    for day in dates:
+        total = 0.0
+        for i, lu in enumerate(lookups):
+            if day in lu:
+                last[i] = lu[day]
+            if day < firsts[i] or last[i] is None:
+                continue          # this account did not exist yet
+            total += last[i]
+        out.append({"time": day, "close": total})
+    return out
+
+
+def merge_yearly_transfers(transfer_dicts):
+    """Add per-broker deposit histories.
+
+    Money moved between your own brokers is a withdrawal at one and a deposit
+    at the other; summed, the pair cancels — which is the honest answer, since
+    no new money entered.
+    """
+    out: dict = {}
+    for d in transfer_dicts:
+        for year, entry in (d or {}).items():
+            year_out = out.setdefault(year, {"total": 0.0, "months": {}})
+            year_out["total"] += entry.get("total") or 0.0
+            for month, amount in (entry.get("months") or {}).items():
+                year_out["months"][month] = (
+                    year_out["months"].get(month, 0.0) + amount
+                )
+    return out
+
+
+def fetch_all_net_liq_history(time_back="1y"):
+    """The combined account curve across every connected broker."""
+    series = []
+    for broker in connected_brokers():
+        try:
+            if broker == "t212":
+                series.append(t212_api.fetch_net_liq_history(
+                    _get_t212_creds(), time_back))
+            elif broker == "ibkr":
+                series.append(_get_ibkr().fetch_net_liq_history(time_back=time_back))
+            else:
+                series.append(tastytrade_api.fetch_net_liq_history(
+                    time_back=time_back, refresh_token=_get_refresh_token()))
+        except Exception as e:
+            logger.warning("Net liq history failed for %s: %s", broker, e)
+    return merge_net_liq_series(series)
+
+
+def fetch_all_yearly_transfers():
+    """Combined deposits across every connected broker."""
+    out = []
+    for broker in connected_brokers():
+        try:
+            if broker == "t212":
+                out.append(t212_api.fetch_yearly_transfers(_get_t212_creds()))
+            elif broker == "ibkr":
+                out.append(_get_ibkr().fetch_yearly_transfers())
+            else:
+                out.append(tastytrade_api.fetch_yearly_transfers(
+                    refresh_token=_get_refresh_token()))
+        except Exception as e:
+            logger.warning("Transfers failed for %s: %s", broker, e)
+    return merge_yearly_transfers(out)
 
 
 def fetch_all_balances():

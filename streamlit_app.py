@@ -53,6 +53,7 @@ from broker_adapter import (
     fetch_earnings_dates, has_active_broker, get_active_broker,
     fetch_benchmark_monthly_returns,
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
+    fetch_all_net_liq_history, fetch_all_yearly_transfers,
 )
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
@@ -11594,25 +11595,38 @@ elif page == "Results":
     pl_sign = "+" if total_pl_real >= 0 else ""
 
     # ── Compute CAGR from net liq history (deposit-adjusted) ──
+    # Keyed by view: Overview adds every broker's curve, a broker tab shows
+    # only its own. Without the key, switching tabs served the previous
+    # account's history under the new tab's heading.
+    _nl_key = f"net_liq_all::{_res_view}"
+    _tr_key = f"yearly_transfers::{_res_view}"
     cagr_pill = ""
-    if "net_liq_all" not in st.session_state:
+    if _nl_key not in st.session_state:
         try:
             with st.spinner("Loading full net liq history..."):
-                st.session_state["net_liq_all"] = fetch_net_liq_history("all")
+                st.session_state[_nl_key] = (
+                    fetch_all_net_liq_history("all") if _res_view == "Overview"
+                    else fetch_net_liq_history("all"))
         except Exception as e:
             if not _is_auth_error(e):
                 logger.warning("Net liq history fetch failed: %s", e)
                 log_error_with_trace("PORTFOLIO_ERROR", e, page="Portfolio", metadata={"component": "net_liq_history"})
-            st.session_state["net_liq_all"] = None
-    if "yearly_transfers" not in st.session_state:
+            st.session_state[_nl_key] = None
+    if _tr_key not in st.session_state:
         try:
             with st.spinner("Loading cash transfer history..."):
-                st.session_state["yearly_transfers"] = fetch_yearly_transfers()
+                st.session_state[_tr_key] = (
+                    fetch_all_yearly_transfers() if _res_view == "Overview"
+                    else fetch_yearly_transfers())
         except Exception as e:
             if not _is_auth_error(e):
                 logger.warning("Yearly transfers fetch failed: %s", e)
                 log_error_with_trace("PORTFOLIO_ERROR", e, page="Portfolio", metadata={"component": "yearly_transfers"})
-            st.session_state["yearly_transfers"] = {}
+            st.session_state[_tr_key] = {}
+
+    # Names the rest of the page already reads.
+    st.session_state["net_liq_all"] = st.session_state.get(_nl_key)
+    st.session_state["yearly_transfers"] = st.session_state.get(_tr_key) or {}
 
     nl_all_early = st.session_state.get("net_liq_all")
     transfers_early = st.session_state.get("yearly_transfers", {})
@@ -11783,11 +11797,14 @@ elif page == "Results":
           # its own, and in the Overview tab that is not obvious from the tab.
           # Trading 212's is rebuilt from fills and cash movements rather than
           # fetched, so it is a reconstruction — worth saying out loud.
-          _nl_broker = BROKER_NAMES.get(get_active_broker(), "Tastytrade")
+          _t212_on = "t212" in connected_brokers()
           st.caption(
-              f"{_nl_broker} only — one account at a time."
-              + (" Rebuilt from fills and cash movements; Trading 212 has no "
-                 "history endpoint." if get_active_broker() == "t212" else "")
+              ("Every connected broker, added per day."
+               if _res_view == "Overview"
+               else f"{_res_view} only.")
+              + (" Trading 212's curve is rebuilt from fills and cash "
+                 "movements — it has no history endpoint."
+                 if _t212_on else "")
           )
       else:
           st.info("Net liquidation history unavailable.")
