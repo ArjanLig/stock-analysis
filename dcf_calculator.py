@@ -30,7 +30,13 @@ def _equity_market_value(cfg):
     return (cfg.get("stock_price", 0) or 0) * (cfg.get("shares_outstanding", 0) or 0)
 
 
-DEFAULT_DISCOUNT_MODE = "capm"
+DEFAULT_DISCOUNT_MODE = "hurdle"
+
+# The hurdle every name is held to under "hurdle" mode. A config may carry its
+# own `hurdle_rate` to hold one business to a higher bar; leaving it out keeps
+# the whole watchlist on this one number, so changing the bar is one edit here
+# rather than an edit per ticker.
+DEFAULT_HURDLE_RATE = 0.09
 
 
 def _effective_beta(cfg):
@@ -50,6 +56,10 @@ def _effective_beta(cfg):
     left untouched in the config either way (its sector name still drives the
     margin lookup); "opportunity_cost" simply does not read the beta figures.
     """
+    if cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE) == "hurdle":
+        # Beta is not part of a fixed hurdle. Returning it anyway would let a
+        # sector beta leak into anything that reads this for display.
+        return 1.0
     if cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE) == "capm":
         eq_val = _equity_market_value(cfg)
         debt_val = cfg["debt_market_value"]
@@ -70,29 +80,47 @@ def compute_cost_of_equity(cfg):
     exactly (the WACC IS ke there); under "capm" they coincide only when
     debt = 0.
 
+    Under "hurdle" there is no cost-of-equity calculation at all — the hurdle
+    IS the required return, and reporting a different number here would show a
+    figure the DCF is not using.
+
     Returns the cost of equity as a float (e.g. 0.087 for 8.7%).
     """
+    if cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE) == "hurdle":
+        return _hurdle_rate(cfg)
     return cfg["risk_free_rate"] + _effective_beta(cfg) * cfg["erp"]
+
+
+def _hurdle_rate(cfg):
+    """The fixed hurdle for this config."""
+    rate = cfg.get("hurdle_rate")
+    return float(rate) if rate else DEFAULT_HURDLE_RATE
 
 
 def compute_wacc(cfg):
     """Compute the discount rate from the config dict.
 
-    Two philosophies, selected by cfg['discount_mode']:
+    Three philosophies, selected by cfg['discount_mode']:
 
-    - "capm" (default): the classic equity/debt-weighted WACC blend, with the
-      after-tax cost of debt pulling the rate below ke. Company risk enters
-      through the Hamada-relevered sector beta.
+    - "hurdle" (default): a fixed required return, the same for every name.
+      It moves with nothing — not the risk-free rate, not the ERP, not beta or
+      capital structure. The bar you demand of a business does not fall because
+      the Treasury cut rates or because the company borrowed cheaply.
+
+    - "capm": the classic equity/debt-weighted WACC blend, with the after-tax
+      cost of debt pulling the rate below ke. Company risk enters through the
+      Hamada-relevered sector beta.
 
     - "opportunity_cost": the discount rate IS the cost of equity,
-      ke = rf + ERP — one market-wide opportunity-cost hurdle. Capital
-      structure is deliberately ignored: cheap debt and its tax shield must
-      not lower the hurdle. Kept as an opt-in per config.
+      ke = rf + ERP — one market-wide hurdle that still drifts with rates.
 
     Returns the rate as a float (e.g. 0.08 for 8%).
     """
+    mode = cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE)
+    if mode == "hurdle":
+        return _hurdle_rate(cfg)
     ke = cfg['risk_free_rate'] + _effective_beta(cfg) * cfg['erp']
-    if cfg.get("discount_mode", DEFAULT_DISCOUNT_MODE) != "capm":
+    if mode != "capm":
         return ke
     eq_val = _equity_market_value(cfg)
     debt_val = cfg['debt_market_value']

@@ -106,29 +106,31 @@ def test_compute_cost_of_equity_opportunity_cost_ignores_beta():
         {**cfg, "sector_betas": [("X", 0.3, 1.0)]}) == pytest.approx(ke, abs=1e-12)
 
 
-def test_default_discount_mode_is_capm():
-    """Portfolio-wide default is CAPM: a config that omits discount_mode must
-    discount at the levered-beta WACC, not the flat rf + ERP hurdle.
-    Regression guard for the 2026-08-03 rollback off opportunity_cost."""
+def test_default_discount_mode_is_the_fixed_hurdle():
+    """Portfolio-wide default is a fixed hurdle: a config that omits
+    discount_mode discounts at DEFAULT_HURDLE_RATE, not at a levered-beta WACC
+    and not at rf + ERP. Third setting of this dial — opportunity_cost from
+    2026-07-09, capm from 2026-08-03, fixed hurdle from 2026-08-14."""
     import dcf_calculator
-    assert dcf_calculator.DEFAULT_DISCOUNT_MODE == "capm"
+    assert dcf_calculator.DEFAULT_DISCOUNT_MODE == "hurdle"
     cfg = {
-        # discount_mode omitted → must default to capm
+        # discount_mode omitted → must default to the hurdle
         "equity_market_value": 1000,
         "debt_market_value": 200,
-        "sector_betas": [("Software", 1.80, 1.0)],  # high beta must now bite
+        "sector_betas": [("Software", 1.80, 1.0)],  # high beta must NOT bite
         "tax_rate": 0.21,
         "risk_free_rate": 0.0449,
         "erp": 0.0445,
         "credit_spread": 0.01,
     }
-    assert dcf_calculator.compute_cost_of_equity(cfg) == pytest.approx(
-        dcf_calculator.compute_cost_of_equity({**cfg, "discount_mode": "capm"}), abs=1e-12)
     assert dcf_calculator.compute_wacc(cfg) == pytest.approx(
-        dcf_calculator.compute_wacc({**cfg, "discount_mode": "capm"}), abs=1e-12)
-    # And it must differ from the flat opportunity-cost hurdle.
-    assert dcf_calculator.compute_wacc(cfg) != pytest.approx(
-        dcf_calculator.compute_wacc({**cfg, "discount_mode": "opportunity_cost"}), abs=1e-6)
+        dcf_calculator.DEFAULT_HURDLE_RATE, abs=1e-12)
+    assert dcf_calculator.compute_cost_of_equity(cfg) == pytest.approx(
+        dcf_calculator.DEFAULT_HURDLE_RATE, abs=1e-12)
+    # And it must differ from both rates it replaced.
+    for mode in ("capm", "opportunity_cost"):
+        assert dcf_calculator.compute_wacc(cfg) != pytest.approx(
+            dcf_calculator.compute_wacc({**cfg, "discount_mode": mode}), abs=1e-6)
 
 
 def test_wacc_opportunity_cost_equals_ke_ignoring_debt():
@@ -249,6 +251,9 @@ def test_dividend_lens_skips_no_growth_history():
 def test_dividend_lens_skips_when_ke_le_terminal():
     """cost_of_equity ≤ terminal_growth → Gordon perpetuity blows up → skip."""
     cfg = dict(_DIVIDEND_BASE_CFG)
+    # rf and ERP only reach ke under a rate-driven mode; the default hurdle is
+    # fixed and would ignore them.
+    cfg["discount_mode"] = "capm"
     cfg["risk_free_rate"] = 0.01  # very low rf → low ke
     cfg["erp"] = 0.005             # very low erp
     cfg["terminal_growth"] = 0.05  # high terminal growth → ke < g

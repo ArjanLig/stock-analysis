@@ -4955,7 +4955,7 @@ def _dcf_editor(ticker):
             _ww_val = f'<div style="display:flex;justify-content:space-between;padding:6px 0;color:{T["text"]}"><span style="color:{T["text"]};{{extra}}">{{label}}</span><span style="color:{T["text"]};{{extra}}">{{value}}</span></div>'
             _ww_sep = f'<div style="border-top:1px solid {T["separator"]};margin:2px 0"></div>'
 
-            with st.expander("### Discount rate", expanded=False):
+            with st.expander("### Hurdle rate", expanded=False):
               with st.container(border=True):
                 _rf_label = "Risk-Free Rate % (TIPS — Real)" if cfg.get('valuation_basis') == 'real' else "Risk-Free Rate %"
                 cfg['risk_free_rate'] = st.number_input(
@@ -5096,21 +5096,26 @@ def _dcf_editor(ticker):
 
                 st.markdown(_ww_sep, unsafe_allow_html=True)
 
-                # Discount rate actually fed to the engine: ke under
-                # opportunity_cost (no debt blend), the WACC blend under capm —
-                # mirrors dcf_calculator.compute_wacc.
-                if cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE) != 'capm':
-                    st.markdown(_ww_val.format(label="Discount rate", value=f"{_ke:.2%}",
+                # Asked of the engine rather than recomputed here. This block
+                # mirrored compute_wacc's arithmetic by hand, which is fine
+                # until the engine grows a mode the mirror does not know — a
+                # fixed hurdle ignores rf, beta and the debt blend entirely.
+                _mode = cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE)
+                _rate = compute_wacc(cfg)
+                _rate_label = {
+                    "hurdle": "Hurdle rate",
+                    "capm": "Hurdle rate (WACC)",
+                }.get(_mode, "Hurdle rate")
+                if _mode == 'capm' and _total_cap <= 0:
+                    st.warning("Equity + Debt market value must be > 0 to compute the discount rate")
+                else:
+                    st.markdown(_ww_val.format(label=_rate_label, value=f"{_rate:.2%}",
                                                extra=f"font-weight:700;font-size:1.15rem;color:{T['accent']};"), unsafe_allow_html=True)
-                    if _total_cap > 0:
+                    # What a WACC blend would have said, for reference only —
+                    # it is not what the engine used.
+                    if _mode != 'capm' and _total_cap > 0:
                         _wacc_blend = _eq_wt * _ke + _debt_wt * _kd
                         st.markdown(_ww_val.format(label="Blended WACC (unused)", value=f"{_wacc_blend:.2%}", extra=f"color:{T['text_muted']};font-size:0.82rem;"), unsafe_allow_html=True)
-                elif _total_cap > 0:
-                    _wacc_computed = _eq_wt * _ke + _debt_wt * _kd
-                    st.markdown(_ww_val.format(label="Discount rate (WACC)", value=f"{_wacc_computed:.2%}",
-                                               extra=f"font-weight:700;font-size:1.15rem;color:{T['accent']};"), unsafe_allow_html=True)
-                else:
-                    st.warning("Equity + Debt market value must be > 0 to compute the discount rate")
 
             _s2c_val = f'<div style="display:flex;justify-content:space-between;padding:6px 0;color:{T["text"]}"><span style="color:{T["text"]};{{extra}}">{{label}}</span><span style="color:{T["text"]};{{extra}}">{{value}}</span></div>'
             _s2c_sep = f'<div style="border-top:1px solid {T["separator"]};margin:2px 0"></div>'
@@ -5424,9 +5429,9 @@ def _dcf_editor(ticker):
 
                 _dcf_divider()  # ── FCFF → Discounting ──
 
-                # ── WACC (editable) ──
+                # ── Hurdle rate (editable) ──
                 wr = st.columns(_cw)
-                _dcf_row_label(wr, "Discount rate", bold=True)
+                _dcf_row_label(wr, "Hurdle rate", bold=True)
                 _dcf_row_val(wr, 1, "")
                 for i in range(_n):
                     _wacc_list[i] = _dcf_row_input(wr, i + 2, f"ed_w_{i}", _wacc_list[i], 0.1, "%.2f")
@@ -5526,9 +5531,9 @@ def _dcf_editor(ticker):
                     if _rm_step > 0 and _rm_max > _rm_min:
                         _rdcf_m_range = (_rm_min, _rm_max, _rm_step)
                 with _rc3:
-                    st.markdown("**Discount rate**")
+                    st.markdown("**Hurdle rate**")
                     _rdcf_wacc = st.number_input(
-                        "Discount rate %", value=val['wacc'] * 100,
+                        "Hurdle rate %", value=val['wacc'] * 100,
                         step=0.1, format="%.2f", key="rdcf_wacc",
                     ) / 100
 
@@ -5583,7 +5588,7 @@ def _dcf_editor(ticker):
             )
 
             # ── Sensitivity matrix ──
-            st.markdown(f"**Sensitivity Matrix** — Discount rate: {_rdcf['wacc']:.2%} | Market: ${_rdcf['market_price']:.2f}")
+            st.markdown(f"**Sensitivity Matrix** — Hurdle rate: {_rdcf['wacc']:.2%} | Market: ${_rdcf['market_price']:.2f}")
 
             _g_tests = _rdcf['growth_tests']
             _m_tests = _rdcf['margin_tests']
@@ -6421,7 +6426,7 @@ def _dcf_editor(ticker):
                     fig.add_hline(
                         y=wacc_pct, line_dash="dash",
                         line_color=_COLORS['secondary'],
-                        annotation_text=f"Discount rate {wacc_pct:.1f}%",
+                        annotation_text=f"Hurdle rate {wacc_pct:.1f}%",
                         annotation_position="top right",
                     )
                 # Prasad/PE screen bar at 20% — sustained 20%+ ROCE over 5+
@@ -7395,7 +7400,7 @@ def _dcf_editor(ticker):
                     fig.add_hline(
                         y=wacc_pct, line_dash="dash",
                         line_color=_COLORS['secondary'],
-                        annotation_text=f"Discount rate {wacc_pct:.1f}%",
+                        annotation_text=f"Hurdle rate {wacc_pct:.1f}%",
                         annotation_position="top right",
                     )
                 # Historic average — same convention as ROCE chart
