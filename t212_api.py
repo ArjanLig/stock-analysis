@@ -26,6 +26,28 @@ _LAST_CALL: dict = {}
 # Module-level cache of instrument metadata (code -> resolved info).
 _INSTRUMENTS_CACHE: dict | None = None
 
+# Order and cash history, cached briefly. Both are paginated behind a six-second
+# throttle, and a single Results load wants each of them twice — once to build
+# the positions and once to rebuild the account curve. Short enough that a new
+# fill shows up on the next page load; long enough that one load does not wait
+# for the same pages twice.
+_HISTORY_TTL = 120.0
+_HISTORY_CACHE: dict = {}
+
+
+def _clear_history_cache():
+    """Drop the cached order/cash history. For tests and after a reconnect."""
+    _HISTORY_CACHE.clear()
+
+
+def _cached_history(key, build):
+    hit = _HISTORY_CACHE.get(key)
+    if hit and (time.time() - hit[0]) < _HISTORY_TTL:
+        return hit[1]
+    value = build()
+    _HISTORY_CACHE[key] = (time.time(), value)
+    return value
+
 
 def _get(path: str, creds: dict, *, min_interval: float = 1.0, max_retries: int = 3):
     """GET a T212 endpoint with throttling + 429 retry. Returns parsed JSON."""
@@ -228,6 +250,8 @@ def _clean_isin(trades):
 def fetch_trades(creds: dict) -> dict:
     """Return {symbol: [trade, ...]} from T212 fill history, oldest first.
 
+    Cached for _HISTORY_TTL — see _cached_history.
+
     Same trade shape Tastytrade produces, so the FIFO lot engine, the cost
     basis and the index comparison all work on T212 positions without knowing
     which broker they came from. Without it a T212 holding has an average price
@@ -237,6 +261,10 @@ def fetch_trades(creds: dict) -> dict:
     A failure returns {} rather than propagating: the positions still render
     with the broker's average price, minus the history.
     """
+    return _cached_history("trades", lambda: _fetch_trades_uncached(creds))
+
+
+def _fetch_trades_uncached(creds: dict) -> dict:
     out: dict = {}
     path = "/equity/history/orders?limit=50"
     pages = 0
@@ -318,7 +346,13 @@ def fetch_cash_movements(creds: dict) -> list:
 
     Amounts are in the ACCOUNT's currency, unconverted — the caller decides
     which day's rate applies, and for a historical curve that is never today's.
+
+    Cached for _HISTORY_TTL — see _cached_history.
     """
+    return _cached_history("cash", lambda: _fetch_cash_movements_uncached(creds))
+
+
+def _fetch_cash_movements_uncached(creds: dict) -> list:
     out, path, pages = [], "/equity/history/transactions?limit=50", 0
     try:
         while path and pages < 40:

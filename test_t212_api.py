@@ -107,6 +107,7 @@ class TestResolve(unittest.TestCase):
 class TestPortfolio(unittest.TestCase):
     def setUp(self):
         t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
 
     @patch("gather_data.fetch_fx_rate", return_value=1.0)
     @patch("t212_api._get")
@@ -330,6 +331,7 @@ class TestSignConvention(unittest.TestCase):
 
     def setUp(self):
         t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
 
     @patch("t212_api._get")
     def test_costs_are_negative_and_pl_adds_up(self, mock_get):
@@ -402,6 +404,7 @@ class TestUsdNormalisation(unittest.TestCase):
 
     def setUp(self):
         t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
         gather_data._FX_CACHE.clear()
 
     def _fetch(self):
@@ -509,6 +512,7 @@ class TestTrades(unittest.TestCase):
 
     def setUp(self):
         t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
         gather_data._FX_CACHE.clear()
 
     def _trades(self, rate=1.0):
@@ -623,6 +627,7 @@ class TestClosedPositions(unittest.TestCase):
 
     def setUp(self):
         t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
         gather_data._FX_CACHE.clear()
 
     def _fetch(self):
@@ -683,3 +688,79 @@ class TestClosedPositions(unittest.TestCase):
         d = self._fetch()["AAPL"]
         self.assertEqual(d["shares_held"], 10)
         self.assertEqual(d["purchase_price"], 150.0)
+
+
+class TestHistoryIntegration(unittest.TestCase):
+    """The layer between the API and the pure reconstruction.
+
+    Both bugs that reached the live account lived exactly here: a wallet
+    impact taken at face value, and a symbol Yahoo does not answer to. Neither
+    was reachable from a test of the arithmetic alone.
+    """
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
+        gather_data._FX_CACHE.clear()
+
+    def _router(self, calls):
+        def _r(path, creds, **kw):
+            calls.append(path)
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path.startswith("/equity/history/orders"):
+                return {"items": [
+                    {"order": {"ticker": "AAPL_US_EQ", "side": "BUY",
+                               "instrument": {"ticker": "AAPL_US_EQ",
+                                              "currency": "USD"}},
+                     "fill": {"quantity": 2.0, "price": 100.0,
+                              "filledAt": "2026-07-02T10:00:00.000Z",
+                              "walletImpact": {"currency": "EUR",
+                                               "netValue": 200.0}}},
+                ], "nextPagePath": None}
+            if path.startswith("/equity/history/transactions"):
+                return {"items": [
+                    {"dateTime": "2026-07-01T09:00:00.000Z", "amount": 1000.0,
+                     "type": "DEPOSIT", "currency": "EUR", "reference": "d1"},
+                ], "nextPagePath": None}
+            raise AssertionError(path)
+        return _r
+
+    def _run(self, calls):
+        from datetime import date
+        closes = {date(2026, 7, 1): 100.0, date(2026, 7, 2): 100.0,
+                  date(2026, 7, 3): 100.0}
+        def _daily(sym, years):
+            return closes if sym == "AAPL" else {}
+        with patch("t212_api._get", side_effect=self._router(calls)), \
+             patch("gather_data.fetch_daily_closes",
+                   side_effect=lambda s, y: ({date(2026, 7, 1): 1.0,
+                                              date(2026, 7, 2): 1.0,
+                                              date(2026, 7, 3): 1.0}
+                                             if s == "EURUSD=X" else _daily(s, y))), \
+             patch("gather_data.fetch_fx_rate", return_value=1.0):
+            # "all": the window must reach back to the first movement, not to
+            # a month before today.
+            return t212_api.fetch_net_liq_history(_CREDS, "all")
+
+    def test_buying_shares_does_not_increase_the_account(self):
+        """The whole point. A purchase moves value from cash into stock; if the
+        wallet impact is read unsigned it adds the money back and the curve
+        jumps by the cost of the trade."""
+        series = self._run([])
+        by_day = {p["time"]: p["close"] for p in series}
+        self.assertAlmostEqual(by_day["2026-07-01"], 1000.0, places=2)
+        self.assertAlmostEqual(by_day["2026-07-02"], 1000.0, places=2)
+
+    def test_the_history_is_fetched_once_per_run(self):
+        """fetch_portfolio_data and this both want the fills, and every page
+        costs six seconds of throttle. Fetching twice made a Results load wait
+        for the same data it already had."""
+        calls = []
+        self._run(calls)
+        t212_api.fetch_trades(_CREDS)
+        t212_api.fetch_cash_movements(_CREDS)
+        orders = [c for c in calls if c.startswith("/equity/history/orders")]
+        cash = [c for c in calls if c.startswith("/equity/history/transactions")]
+        self.assertEqual(len(orders), 1)
+        self.assertEqual(len(cash), 1)
