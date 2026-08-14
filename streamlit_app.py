@@ -9159,6 +9159,20 @@ def _load_portfolio_data():
     return cost_basis
 
 
+def _to_time_col(values):
+    """Parse a net-liq "time" column that may hold more than one format.
+
+    Brokers stamp differently — Tastytrade an ISO timestamp, sometimes tz-aware,
+    Trading 212 a bare date — and a merged or cached series can carry both.
+    pandas infers one format from the first element and then raises on the
+    rest, which took the whole Results page down. format="mixed" parses each
+    element on its own; the timezone is dropped because everything downstream
+    groups by day and year.
+    """
+    parsed = pd.to_datetime(values, format="mixed", utc=True)
+    return parsed.dt.tz_localize(None)
+
+
 def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
     """An <img> for a ticker's logo, addressed by ISIN when we have one.
 
@@ -9680,7 +9694,7 @@ def _show_week_detail(year, iso_wk, wk_start, wk_end, cost_basis, nl_all, transf
     _period_capital = 0.0
     if nl_all:
         df = pd.DataFrame(nl_all)
-        df["time"] = pd.to_datetime(df["time"])
+        df["time"] = _to_time_col(df["time"])
         df = df.sort_values("time")
         # Normalize timezone: strip tz from df if wk_start is naive, or vice versa
         _wk_s = pd.Timestamp(wk_start)
@@ -9930,7 +9944,7 @@ def _show_month_detail(year, month, cost_basis, nl_all, transfers, monthly_retur
     _period_capital = 0.0
     if nl_all:
         df = pd.DataFrame(nl_all)
-        df["time"] = pd.to_datetime(df["time"])
+        df["time"] = _to_time_col(df["time"])
         df = df.sort_values("time")
         mo_data = df[(df["time"].dt.year == year) & (df["time"].dt.month == month)]
         if not mo_data.empty:
@@ -11629,7 +11643,7 @@ elif page == "Results":
     if nl_all_early:
         # Yearly Simple Dietz returns, then compound to CAGR
         df_cagr = pd.DataFrame(nl_all_early)
-        df_cagr["time"] = pd.to_datetime(df_cagr["time"])
+        df_cagr["time"] = _to_time_col(df_cagr["time"])
         df_cagr = df_cagr.sort_values("time")
         df_cagr["year"] = df_cagr["time"].dt.year
         yr_close = df_cagr.groupby("year")["close"].last()
@@ -11670,7 +11684,7 @@ elif page == "Results":
         from datetime import datetime as _dt_cls
         _cur_year = _dt_cls.now().year
         _df_mr = pd.DataFrame(nl_all_early)
-        _df_mr["time"] = pd.to_datetime(_df_mr["time"])
+        _df_mr["time"] = _to_time_col(_df_mr["time"])
         _df_mr = _df_mr.sort_values("time")
         _df_mr["year"] = _df_mr["time"].dt.year
         _df_mr["month"] = _df_mr["time"].dt.month
@@ -11745,7 +11759,7 @@ elif page == "Results":
       net_liq_data = st.session_state[cache_key]
       if net_liq_data:
           df_liq = pd.DataFrame(net_liq_data)
-          df_liq["time"] = pd.to_datetime(df_liq["time"])
+          df_liq["time"] = _to_time_col(df_liq["time"])
           df_liq = df_liq.set_index("time")
           if time_back == "ytd":
               df_liq = df_liq[df_liq.index >= f"{pd.Timestamp.now().year}-01-01"]
@@ -11864,7 +11878,7 @@ elif page == "Results":
 
         if nl_all:
             df_nl = pd.DataFrame(nl_all)
-            df_nl["time"] = pd.to_datetime(df_nl["time"])
+            df_nl["time"] = _to_time_col(df_nl["time"])
             df_nl["year"] = df_nl["time"].dt.year
             # Last close per year
             year_close = df_nl.groupby("year")["close"].last()
@@ -12029,7 +12043,7 @@ elif page == "Results":
         if monthly_returns is None or yearly_returns is None:
             # Fallback: compute if cache unavailable (e.g. nl_all_early was None)
             df_ret = pd.DataFrame(nl_all)
-            df_ret["time"] = pd.to_datetime(df_ret["time"])
+            df_ret["time"] = _to_time_col(df_ret["time"])
             df_ret["year"] = df_ret["time"].dt.year
             df_ret["month"] = df_ret["time"].dt.month
             df_ret = df_ret.sort_values("time")
@@ -12064,7 +12078,7 @@ elif page == "Results":
 
         # ── Weekly returns (TWR, deposit-adjusted like monthly) ──
         _df_wk = pd.DataFrame(nl_all)
-        _df_wk["time"] = pd.to_datetime(_df_wk["time"])
+        _df_wk["time"] = _to_time_col(_df_wk["time"])
         _df_wk = _df_wk.sort_values("time")
         _df_wk["iso_yr"] = _df_wk["time"].dt.isocalendar().year.astype(int)
         _df_wk["iso_wk"] = _df_wk["time"].dt.isocalendar().week.astype(int)
