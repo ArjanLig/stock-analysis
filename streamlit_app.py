@@ -10578,12 +10578,12 @@ elif page == "Portfolio":
             "Option" in (t.get("instrument_type") or "")
             for d in held.values() for t in d.get("trades", [])
         )
-        _wheel_only = ["Wheel Basis", "Break-even", "Ann. %", "Premie", "Days"]
+        _wheel_only = ["Break-even", "Ann. %", "Premie", "Days"]
 
-        all_cols = ["Shares", "Cost Basis", "Wheel Basis", "Break-even", "Current Price",
+        all_cols = ["Shares", "Cost Basis", "Break-even", "Current Price",
                     "Day %", "Mkt Value", "Unrealized P/L", "Return %", "Ann. %",
                     "Premie", "Days", "Weight", "Margin", "Margin %"]
-        default_cols = ["Shares", "Cost Basis", "Wheel Basis", "Current Price", "Day %",
+        default_cols = ["Shares", "Cost Basis", "Current Price", "Day %",
                         "Mkt Value", "Unrealized P/L", "Return %", "Weight"]
         # The hold-or-sell pair. Only offered when at least one holding has a
         # usable valuation, so an account with no DCF work behind it does not
@@ -10711,10 +10711,6 @@ elif page == "Portfolio":
                 "Broker": data.get("broker", ""),
                 "Shares": shares,
                 "Cost Basis": purchase_price,
-                # display_basis, not the raw figure: wheel_cps is signed cash
-                # (money out is negative), so the column printed a NEGATIVE
-                # price — NFLX at 67.73 read as $-67.73.
-                "Wheel Basis": display_basis(wheel_cps),
                 "Break-even": break_even,
                 "Current Price": cur,
                 "Day %": day_change_pct,
@@ -10786,7 +10782,7 @@ elif page == "Portfolio":
                     " pf-red" if val > 120 else "")
             if col in color_cols_set:
                 cls = " pf-green" if val > 0 else " pf-red" if val < 0 else ""
-            if col in ("Cost Basis", "Wheel Basis", "Break-even", "Current Price"):
+            if col in ("Cost Basis", "Break-even", "Current Price"):
                 return f"${val:,.2f}", cls
             if col == "Mkt Value":
                 return f"${val:,.0f}", cls
