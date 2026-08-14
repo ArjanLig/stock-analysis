@@ -463,26 +463,28 @@ def test_render_football_field_falls_back_to_summary_price_without_live():
 # the arithmetic; tests/test_edgar_fetch_resilience.py pins the fetch layer.
 
 def test_fcf_yield_per_share_uses_price():
-    # Both lists are in millions — gather_data divides raw share counts by 1e6
-    # on the way in, the same as every money field.
-    fund = {"fcf": [1000.0, 2000.0], "shares": [100.0, 200.0]}
+    # fcf in $M, shares a RAW count — the units fetch_fundamentals returns.
+    fund = {"fcf": [1000.0, 2000.0], "shares": [100_000_000, 200_000_000]}
     # 2000 $M / 200M shares = $10/share; at $250 → 4%
     assert streamlit_app._latest_fcf_yield(fund, None, 250.0) == pytest.approx(0.04)
 
 
-def test_fcf_yield_treats_shares_as_millions():
-    """NTDOY, from the watchlist: FCF $1,603M over 4,610M shares is $0.35 a
-    share, 2.6% at $13.18. Scaling FCF to dollars while leaving shares in
-    millions put 2,638,257% on the row."""
-    fund = {"fcf": [1603.0], "shares": [4610.0]}
+def test_fcf_yield_reads_shares_as_a_raw_count():
+    """NTDOY: FCF $1,603M over 4.61bn shares is $0.35 a share, 2.6% at $13.18.
+
+    Its 2,638,257% row was a fundamentals *override* entered in millions, not a
+    unit bug in this function — and "correcting" the function to match the bad
+    override put every EDGAR-derived yield at 0.0%.
+    """
+    fund = {"fcf": [1603.0], "shares": [4_610_000_000]}
     assert streamlit_app._latest_fcf_yield(fund, None, 13.18) == pytest.approx(0.0264, abs=1e-4)
 
 
 def test_fcf_yield_pairs_fcf_and_shares_from_the_same_year():
     """The latest year reports FCF but no share count. Reaching back for an
     older year's share count would divide FY2 FCF by FY1 shares."""
-    fund = {"fcf": [1000.0, 2000.0], "shares": [100.0, None]}
-    # Must not return (2000/100)/250 = 8%. Falls back to FCF / market cap.
+    fund = {"fcf": [1000.0, 2000.0], "shares": [100_000_000, None]}
+    # Must not return (2000e6/100e6)/250 = 8%. Falls back to FCF / market cap.
     assert streamlit_app._latest_fcf_yield(fund, 50_000.0, 250.0) == pytest.approx(0.04)
 
 
@@ -493,12 +495,12 @@ def test_fcf_yield_falls_back_to_market_cap_without_shares():
 
 
 def test_fcf_yield_falls_back_to_market_cap_when_price_missing():
-    fund = {"fcf": [1000.0], "shares": [100.0]}
+    fund = {"fcf": [1000.0], "shares": [100_000_000]}
     assert streamlit_app._latest_fcf_yield(fund, 25_000.0, 0.0) == pytest.approx(0.04)
 
 
 def test_fcf_yield_skips_trailing_none_fcf_years():
-    fund = {"fcf": [1000.0, None], "shares": [100.0, 100.0]}
+    fund = {"fcf": [1000.0, None], "shares": [100_000_000, 100_000_000]}
     assert streamlit_app._latest_fcf_yield(fund, None, 100.0) == pytest.approx(0.10)
 
 
@@ -520,7 +522,7 @@ def test_fcf_yield_empty_fundamentals_from_failed_fetch():
 
 
 def test_fcf_yield_negative_fcf_is_reported_not_swallowed():
-    fund = {"fcf": [-500.0], "shares": [100.0]}
+    fund = {"fcf": [-500.0], "shares": [100_000_000]}
     assert streamlit_app._latest_fcf_yield(fund, None, 100.0) == pytest.approx(-0.05)
 
 

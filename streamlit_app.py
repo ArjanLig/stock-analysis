@@ -189,11 +189,13 @@ def _latest_fcf_yield(fund: dict, equity_market_value: float | None,
 
     shares_same_year = shares[latest] if latest < len(shares) else None
     if live_price and live_price > 0 and shares_same_year:
-        # Both lists are in millions — gather_data divides raw share counts by
-        # 1e6 on the way in, the same as every money field — so the ratio is
-        # already dollars per share. Scaling the FCF and not the share count
-        # put NTDOY's yield at 2,638,257%.
-        return (fcf[latest] / shares_same_year) / live_price
+        # fcf is in $M, shares is a RAW count — fetch_fundamentals says so in
+        # its own docstring. parse_financials stores shares in millions and
+        # fetch_fundamentals multiplies them back up, so the two sources of
+        # "fundamentals" in this codebase deliberately disagree. Reading the
+        # wrong one and dropping this factor put every EDGAR-derived yield at
+        # 0.0%.
+        return (fcf[latest] * 1e6 / shares_same_year) / live_price
 
     if equity_market_value and equity_market_value > 0:
         return fcf[latest] / equity_market_value  # both in $M
