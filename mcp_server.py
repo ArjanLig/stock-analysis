@@ -1755,12 +1755,17 @@ def _t212_positions_impl(user_id: str | None = None) -> str:
         # user does not have.
         if not d.get("shares_held"):
             continue
+        # Computed, not read: t212_api does not set market_value — the
+        # Streamlit layer works it out as price x shares on the way to the
+        # table. Reading the key gave every position a value of zero.
+        shares = d["shares_held"]
+        price = d.get("broker_price") or 0.0
         rows.append({
             "ticker": symbol,
-            "shares": round(d["shares_held"], 4),
+            "shares": round(shares, 4),
             "cost_per_share": round(d.get("purchase_price") or 0.0, 2),
-            "price": round(d.get("broker_price") or 0.0, 2),
-            "market_value": round(d.get("market_value") or 0.0, 2),
+            "price": round(price, 2),
+            "market_value": round(shares * price, 2),
             "unrealized_pl": round(d.get("total_pl") or 0.0, 2),
             "currency": d.get("currency", "USD"),
             "isin": d.get("isin", ""),

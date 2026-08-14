@@ -14,8 +14,9 @@ import mcp_server
 _CREDS = {"t212_api_key": "KEY", "t212_api_secret": "SECRET"}
 
 _POSITIONS = {
+    # No market_value key, matching what t212_api actually returns.
     "RDDT": {"shares_held": 6.0, "purchase_price": 162.49, "broker_price": 158.66,
-             "market_value": 951.96, "equity_cost": -974.94, "total_pl": -22.98,
+             "equity_cost": -974.94, "total_pl": -22.98,
              "currency": "USD", "isin": "US75734B1008", "exchange": "US",
              "trades": [{"instrument_type": "Equity", "type": "Trade",
                          "action": "Buy to Open", "quantity": 6.0,
@@ -80,6 +81,15 @@ class TestPositions(_Base):
         """t212_api returns them so the Cost Basis page can show a closed card.
         A positions tool that listed them would report holdings you don't have."""
         self.assertNotIn("WEBN", self._run())
+
+    def test_market_value_is_computed_not_read(self):
+        """t212_api does not set market_value — the Streamlit layer computes it
+        as price x shares on the way to the table. Reading the key gave every
+        position a market value of zero."""
+        import json
+        out = json.loads(self._run())
+        rddt = next(p for p in out["positions"] if p["ticker"] == "RDDT")
+        self.assertAlmostEqual(rddt["market_value"], 6.0 * 158.66, places=2)
 
     def test_the_currency_is_stated(self):
         """Everything is converted to USD; saying so stops Claude from
