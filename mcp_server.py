@@ -1708,3 +1708,178 @@ def delete_price_alert(alert_id: str) -> str:
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
+
+
+# ---------------------------------------------------------------------------
+# Trading 212 — read-only broker tools
+# ---------------------------------------------------------------------------
+# T212 has no OAuth: authentication is an API key + secret the user generates
+# in the app and stores through Lazy Theta's Broker Connections screen. So
+# these tools authenticate the *caller* (Supabase Auth, via the MCP's JWT) and
+# then look up that caller's own key. Read-only throughout — no order
+# endpoints are touched.
+
+
+def _t212_creds(user_id: str | None):
+    """The caller's own T212 credentials, or None.
+
+    user_id is mandatory in spirit even though the signature allows None for
+    the stdio path: this server runs with the service-role key, which bypasses
+    RLS, so an unscoped read would return whichever row came back first — a
+    different user's brokerage account.
+    """
+    user_id = user_id or USER_ID
+    return config_store.load_t212_credentials(get_supabase_client(),
+                                              user_id=user_id)
+
+
+_T212_NOT_CONNECTED = (
+    "Trading 212 is not connected for this account. Add an API key under "
+    "Account → Broker Connections in Lazy Theta first."
+)
+
+
+def _t212_positions_impl(user_id: str | None = None) -> str:
+    """Core logic for t212_positions."""
+    import t212_api
+
+    creds = _t212_creds(user_id)
+    if not creds:
+        return _T212_NOT_CONNECTED
+    positions, account_id = t212_api.fetch_portfolio_data(creds)
+
+    rows = []
+    for symbol, d in sorted(positions.items()):
+        # Closed names ride along so the Cost Basis page can show a card for
+        # them; a positions tool that listed them would report holdings the
+        # user does not have.
+        if not d.get("shares_held"):
+            continue
+        rows.append({
+            "ticker": symbol,
+            "shares": round(d["shares_held"], 4),
+            "cost_per_share": round(d.get("purchase_price") or 0.0, 2),
+            "price": round(d.get("broker_price") or 0.0, 2),
+            "market_value": round(d.get("market_value") or 0.0, 2),
+            "unrealized_pl": round(d.get("total_pl") or 0.0, 2),
+            "currency": d.get("currency", "USD"),
+            "isin": d.get("isin", ""),
+        })
+    return json.dumps({
+        "account_id": account_id,
+        "currency_note": "All figures converted to USD.",
+        "positions": rows,
+    }, default=str)
+
+
+def _t212_balance_impl(user_id: str | None = None) -> str:
+    """Core logic for t212_balance."""
+    import t212_api
+
+    creds = _t212_creds(user_id)
+    if not creds:
+        return _T212_NOT_CONNECTED
+    b = t212_api.fetch_account_balances(creds)
+    return json.dumps({
+        "net_liquidating_value": round(b.get("net_liquidating_value") or 0.0, 2),
+        "cash_balance": round(b.get("cash_balance") or 0.0, 2),
+        "currency": b.get("currency", "USD"),
+        # The account's own currency and the rate applied, so the figures can
+        # be reconciled against what Trading 212 itself shows.
+        "account_currency": b.get("native_currency", ""),
+        "fx_rate_used": b.get("fx_rate", 1.0),
+    }, default=str)
+
+
+def _t212_transactions_impl(ticker: str | None = None,
+                            start_date: str | None = None,
+                            end_date: str | None = None,
+                            user_id: str | None = None) -> str:
+    """Core logic for t212_transactions."""
+    import t212_api
+
+    creds = _t212_creds(user_id)
+    if not creds:
+        return _T212_NOT_CONNECTED
+    positions, _ = t212_api.fetch_portfolio_data(creds)
+
+    want = ticker.upper() if ticker else None
+    fills = []
+    for symbol, d in positions.items():
+        if want and symbol.upper() != want:
+            continue
+        for t in d.get("trades") or []:
+            day = str(t.get("date") or "")
+            if start_date and day < start_date:
+                continue
+            if end_date and day > end_date:
+                continue
+            fills.append({
+                "ticker": symbol,
+                "date": day,
+                "action": t.get("action", ""),
+                "quantity": t.get("quantity"),
+                "price": round(t.get("price") or 0.0, 4),
+                "net_value": round(t.get("net_value") or 0.0, 2),
+            })
+    # Oldest first: the order a position was built in is what makes a cost
+    # basis readable, and the broker's own ordering is not to be trusted.
+    fills.sort(key=lambda f: (f["date"], f["ticker"]))
+    return json.dumps({
+        "currency_note": "Prices converted to USD.",
+        "count": len(fills),
+        "fills": fills,
+    }, default=str)
+
+
+@mcp.tool()
+def t212_positions() -> str:
+    """Open Trading 212 positions, converted to USD.
+
+    Read-only. Requires a Trading 212 API key connected in Lazy Theta
+    (Account → Broker Connections).
+
+    Returns:
+        JSON with account_id and a list of positions: ticker, shares,
+        cost_per_share (FIFO), price, market_value, unrealized_pl,
+        currency, isin.
+    """
+    try:
+        return _t212_positions_impl()
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def t212_balance() -> str:
+    """Trading 212 account value and free cash, converted to USD.
+
+    Also returns the account's own currency and the FX rate applied, so the
+    figures can be reconciled against Trading 212's own screen.
+    """
+    try:
+        return _t212_balance_impl()
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp.tool()
+def t212_transactions(ticker: str | None = None,
+                      start_date: str | None = None,
+                      end_date: str | None = None) -> str:
+    """Trading 212 fill history, oldest first, prices converted to USD.
+
+    Args:
+        ticker: only this ticker, e.g. "RDDT".
+        start_date: YYYY-MM-DD, inclusive.
+        end_date: YYYY-MM-DD, inclusive.
+
+    Returns:
+        JSON with count and a list of fills: ticker, date, action, quantity,
+        price, net_value.
+    """
+    try:
+        return _t212_transactions_impl(ticker=ticker, start_date=start_date,
+                                       end_date=end_date)
+    except Exception as e:
+        return json.dumps({"error": str(e)})

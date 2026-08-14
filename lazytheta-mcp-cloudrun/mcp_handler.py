@@ -83,6 +83,27 @@ async def _tool_get_watchlist(user_id: str, args: dict) -> Any:
     return mcp_server._get_watchlist_impl(user_id=user_id)
 
 
+# ── Trading 212 (read-only) ──
+# user_id comes from the JWT, never from the arguments: this server runs with
+# the service-role key, so a caller-supplied id would read another user's
+# brokerage account.
+async def _tool_t212_positions(user_id: str, args: dict) -> Any:
+    return mcp_server._t212_positions_impl(user_id=user_id)
+
+
+async def _tool_t212_balance(user_id: str, args: dict) -> Any:
+    return mcp_server._t212_balance_impl(user_id=user_id)
+
+
+async def _tool_t212_transactions(user_id: str, args: dict) -> Any:
+    return mcp_server._t212_transactions_impl(
+        ticker=args.get("ticker"),
+        start_date=args.get("start_date"),
+        end_date=args.get("end_date"),
+        user_id=user_id,
+    )
+
+
 async def _tool_update_valuation_inputs(user_id: str, args: dict) -> Any:
     return mcp_server._update_valuation_inputs_impl(
         ticker=args["ticker"],
@@ -703,6 +724,44 @@ TOOLS: list[dict] = [
             "required": ["alert_id"],
         },
     },
+    {
+        "name": "t212_positions",
+        "description": (
+            "Open Trading 212 positions: shares, FIFO cost per share, current "
+            "price, market value and unrealized P/L. All figures converted to "
+            "USD. Read-only. Requires the user to have connected a Trading 212 "
+            "API key in Lazy Theta."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "t212_balance",
+        "description": (
+            "Trading 212 account value and free cash, converted to USD, with "
+            "the account's own currency and the FX rate applied so the figures "
+            "can be checked against the broker's own screen."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "t212_transactions",
+        "description": (
+            "Trading 212 fill history, oldest first: ticker, date, buy/sell, "
+            "quantity, price and net value. Optionally narrowed to one ticker "
+            "or a date window. Prices converted to USD."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string",
+                           "description": "Only this ticker, e.g. RDDT"},
+                "start_date": {"type": "string",
+                               "description": "YYYY-MM-DD, inclusive"},
+                "end_date": {"type": "string",
+                             "description": "YYYY-MM-DD, inclusive"},
+            },
+        },
+    },
 ]
 
 
@@ -714,6 +773,9 @@ TOOL_HANDLERS: dict[str, Callable[[str, dict], Awaitable[Any]]] = {
     "save_to_watchlist": _tool_save_to_watchlist,
     "get_config": _tool_get_config,
     "get_watchlist": _tool_get_watchlist,
+    "t212_positions": _tool_t212_positions,
+    "t212_balance": _tool_t212_balance,
+    "t212_transactions": _tool_t212_transactions,
     "update_valuation_inputs": _tool_update_valuation_inputs,
     "update_lens_weights": _tool_update_lens_weights,
     "update_dcf_scenario_adjustments": _tool_update_dcf_scenario_adjustments,

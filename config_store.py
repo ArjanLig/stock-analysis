@@ -466,16 +466,25 @@ def save_credential(client, service_name, value):
     }).execute()
 
 
-def load_credential(client, service_name):
-    """Load a stored credential. Returns the credential string or None."""
+def load_credential(client, service_name, user_id=None):
+    """Load a stored credential. Returns the credential string or None.
+
+    user_id is optional but load-bearing off Streamlit. The app passes a
+    user-scoped client and RLS narrows the query for it; the MCP server runs
+    with the service-role key, which bypasses RLS entirely. Without an explicit
+    filter that query matches every user's row, and maybe_single() then raises
+    rather than handing one back — which is the right failure, but only because
+    the filter is there to be forgotten once.
+    """
     try:
-        resp = (
+        query = (
             client.table("user_credentials")
             .select("credential")
             .eq("service_name", service_name)
-            .maybe_single()
-            .execute()
         )
+        if user_id is not None:
+            query = query.eq("user_id", user_id)
+        resp = query.maybe_single().execute()
         if resp and resp.data:
             return resp.data["credential"]
     except Exception as e:
@@ -505,11 +514,11 @@ def save_ibkr_credentials(client, creds):
             save_credential(client, key, creds[key])
 
 
-def load_ibkr_credentials(client):
+def load_ibkr_credentials(client, user_id=None):
     """Load all IBKR credentials. Returns dict or None if not connected."""
     result = {}
     for key in IBKR_CREDENTIAL_KEYS:
-        val = load_credential(client, key)
+        val = load_credential(client, key, user_id=user_id)
         if val:
             result[key] = val
     if "ibkr_flex_token" in result and "ibkr_flex_query_id" in result:
@@ -543,11 +552,15 @@ def save_t212_credentials(client, creds):
             save_credential(client, key, creds[key])
 
 
-def load_t212_credentials(client):
-    """Load all T212 credentials. Returns dict or None if not connected."""
+def load_t212_credentials(client, user_id=None):
+    """Load all T212 credentials, or None when the pair is incomplete.
+
+    Basic auth needs both halves; half a pair would fail later as a confusing
+    401 rather than "not connected".
+    """
     result = {}
     for key in T212_CREDENTIAL_KEYS:
-        val = load_credential(client, key)
+        val = load_credential(client, key, user_id=user_id)
         if val:
             result[key] = val
     if "t212_api_key" in result and "t212_api_secret" in result:
