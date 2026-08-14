@@ -184,6 +184,39 @@ class TestMergeNetLiq(unittest.TestCase):
         out = broker_adapter.merge_net_liq_series([self.A, self.B])
         self.assertAlmostEqual(out[0]["close"], 100.0)
 
+    def test_two_brokers_that_stamp_dates_differently_still_line_up(self):
+        """Tastytrade returns a timestamp, Trading 212 a bare date. Compared as
+        strings those are different days, so the union doubled up and every
+        second point counted one account. They are the same day and must key
+        as one."""
+        tt = [{"time": "2026-07-01T21:00:00.000+00:00", "close": 100.0},
+              {"time": "2026-07-02T21:00:00.000+00:00", "close": 110.0}]
+        t212 = [{"time": "2026-07-01", "close": 50.0},
+                {"time": "2026-07-02", "close": 55.0}]
+        out = broker_adapter.merge_net_liq_series([tt, t212])
+        self.assertEqual([p["time"] for p in out], ["2026-07-01", "2026-07-02"])
+        self.assertAlmostEqual(out[0]["close"], 150.0)
+        self.assertAlmostEqual(out[1]["close"], 165.0)
+
+    def test_several_snapshots_on_one_day_collapse_to_the_last(self):
+        """Tastytrade prints intraday. Summing them would count the account
+        as many times as it was sampled."""
+        tt = [{"time": "2026-07-01T09:00:00Z", "close": 100.0},
+              {"time": "2026-07-01T21:00:00Z", "close": 120.0}]
+        t212 = [{"time": "2026-07-01", "close": 50.0}]
+        out = broker_adapter.merge_net_liq_series([tt, t212])
+        self.assertEqual(len(out), 1)
+        self.assertAlmostEqual(out[0]["close"], 170.0)
+
+    def test_a_datetime_object_is_accepted_too(self):
+        """The Tastytrade SDK hands back datetimes, not always strings."""
+        from datetime import datetime
+        tt = [{"time": datetime(2026, 7, 1, 21, 0), "close": 100.0}]
+        t212 = [{"time": "2026-07-01", "close": 50.0}]
+        out = broker_adapter.merge_net_liq_series([tt, t212])
+        self.assertEqual(out[0]["time"], "2026-07-01")
+        self.assertAlmostEqual(out[0]["close"], 150.0)
+
     def test_one_series_passes_through(self):
         self.assertEqual(broker_adapter.merge_net_liq_series([self.A]), self.A)
 

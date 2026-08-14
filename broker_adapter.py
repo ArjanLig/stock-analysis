@@ -316,6 +316,17 @@ def fetch_all_portfolio_data():
     return merged, account_id, failures
 
 
+def _day_key(stamp):
+    """The calendar day a net-liq point belongs to, as YYYY-MM-DD.
+
+    Accepts what either broker hands back: a date string, an ISO timestamp, or
+    a datetime object from the Tastytrade SDK.
+    """
+    if hasattr(stamp, "strftime"):
+        return stamp.strftime("%Y-%m-%d")
+    return str(stamp)[:10]
+
+
 def merge_net_liq_series(series_list):
     """Add per-broker account curves into one, on the union of their dates.
 
@@ -334,8 +345,19 @@ def merge_net_liq_series(series_list):
     if len(series_list) == 1:
         return series_list[0]
 
-    dates = sorted({p["time"] for s in series_list for p in s})
-    lookups = [{p["time"]: p["close"] for p in s} for s in series_list]
+    # Key on the calendar day, not on the string each broker happens to send:
+    # Tastytrade stamps a timestamp and Trading 212 a bare date, so compared as
+    # text they are different days and the union doubled up. Several snapshots
+    # on one day collapse to the last — summing them would count the account
+    # once per sample.
+    lookups = []
+    for series in series_list:
+        by_day = {}
+        for point in series:
+            by_day[_day_key(point["time"])] = point["close"]
+        lookups.append(by_day)
+
+    dates = sorted({day for lu in lookups for day in lu})
     firsts = [min(lu) for lu in lookups]
 
     out, last = [], [None] * len(lookups)
