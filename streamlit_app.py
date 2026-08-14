@@ -8916,33 +8916,11 @@ with st.sidebar:
     if st.session_state.get("t212_credentials"):
         _connected.append(("Trading 212", "t212"))
 
-    # Only where it changes something. Results reads one account's deposits and
-    # net liq history; Portfolio and Cost Basis carry their own Overview /
-    # per-broker tabs, and Watchlist and Cashflow Champions touch no broker
-    # data at all — a control that does nothing still asks to be understood. A
-    # whitelist rather than a list of exceptions, so a new page does not
-    # inherit it by default.
-    _BROKER_SCOPED_PAGES = ("Results",)
-    if len(_connected) >= 2 and page in _BROKER_SCOPED_PAGES:
-        _broker_options = [label for label, _ in _connected]
-        _broker_keys = [key for _, key in _connected]
-        _current = get_active_broker()
-        _idx = _broker_keys.index(_current) if _current in _broker_keys else 0
-        _selected = st.selectbox(
-            "Active Broker", _broker_options, index=_idx,
-            key="_broker_select", label_visibility="collapsed",
-        )
-        _new_broker = _broker_keys[_broker_options.index(_selected)]
-        if _new_broker != _current:
-            st.session_state["active_broker"] = _new_broker
-            for k in ["portfolio_data", "portfolio_account", "portfolio_prices",
-                       "net_liq_all", "yearly_transfers", "benchmark_returns",
-                       "portfolio_fetched_at"]:
-                st.session_state.pop(k, None)
-            for k in [k for k in st.session_state if k.startswith("net_liq_")]:
-                st.session_state.pop(k, None)
-            st.rerun()
-    elif len(_connected) == 1:
+    # No sidebar switcher any more: Portfolio, Cost Basis and Results each
+    # carry their own Overview / per-broker tabs, and Watchlist and Cashflow
+    # Champions touch no broker data at all. A second control for the same
+    # thing only invites picking the one that doesn't apply.
+    if len(_connected) == 1:
         st.session_state["active_broker"] = _connected[0][1]
 
     st.markdown("---")
@@ -8952,7 +8930,7 @@ with st.sidebar:
         # The Portfolio page has its own broker view, so name what is actually
         # on screen — the sidebar reading "Tastytrade" above a combined table
         # would be a label that contradicts the page.
-        if page in ("Portfolio", "Cost Basis") and len(_connected) > 1:
+        if page in ("Portfolio", "Cost Basis", "Results") and len(_connected) > 1:
             # The widget's own key, not the copy the page writes afterwards:
             # the sidebar renders before the page body, so the copy would show
             # the previous selection for one interaction.
@@ -9039,8 +9017,8 @@ def _broker_view_control(page_key):
     """Render the Overview / per-broker picker and return the choice.
 
     Shared by the Portfolio and Cost Basis pages so the two never disagree
-    about which account is on screen. It replaces the sidebar's Active Broker
-    box on those pages: two controls for one thing invites picking the one that
+    about which account is on screen. It replaced the sidebar's Active Broker
+    box entirely — two controls for one thing invites picking the one that
     doesn't apply.
 
     The widget key is per page — Streamlit drops widget state for a widget that
@@ -11582,6 +11560,18 @@ elif page == "Results":
     st.markdown("")
     cost_basis = _load_portfolio_data()
 
+    # Same picker as Portfolio and Cost Basis. The P/L totals and the performer
+    # cards are built per position, so they narrow cleanly. Net liq history and
+    # deposits do not: Trading 212 exposes neither, so those two blocks stay
+    # single-broker and say which one they are showing.
+    _res_view = _broker_view_control("Results")
+    if _res_view != "Overview":
+        cost_basis = {t: d for t, d in cost_basis.items()
+                      if d.get("broker") == _res_view}
+        if not cost_basis:
+            st.info(f"No positions at {_res_view}.")
+            st.stop()
+
     # ── Compute aggregates ──
     total_pl_real = sum(d["total_pl_real"] for d in cost_basis.values())
     total_option_pl = sum(d["option_pl"] for d in cost_basis.values())
@@ -11789,6 +11779,11 @@ elif page == "Results":
               showlegend=False,
           )
           st.plotly_chart(fig_liq, use_container_width=True)
+          # Named, because this one cannot be combined: Trading 212 exposes no
+          # net-liq history, so the curve is always a single account's — and in
+          # the Overview tab that is not obvious from the tab itself.
+          st.caption(f"{BROKER_NAMES.get(get_active_broker(), 'Tastytrade')} only "
+                     "— Trading 212 exposes no net liquidation history.")
       else:
           st.info("Net liquidation history unavailable.")
 
@@ -11803,14 +11798,14 @@ elif page == "Results":
         cards = ''
         for ticker, data in items:
             logo = _logo_img(data.get("symbol", ticker), data.get("isin"),
-                             "", "width:100%;height:100%;object-fit:cover")
+                             "pf-logo")
             pl = data["total_pl_real"]
             pl_cls = " pf-green" if pl > 0 else " pf-red" if pl < 0 else ""
             opt = data["option_pl"]
             opt_cls = " pf-green" if opt > 0 else " pf-red" if opt < 0 else ""
             cards += (
                 f'<div class="portfolio-card">'
-                f'<img class="pf-logo" src="{logo}" onerror="this.style.display=\'none\'">'
+                f'{logo}'
                 f'<span class="pf-ticker">{ticker}</span>'
                 f'<div class="pf-cell"><span class="pf-label">Total P/L</span>'
                 f'<span class="pf-val{pl_cls}">${pl:+,.0f}</span></div>'
