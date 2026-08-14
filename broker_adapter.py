@@ -141,7 +141,9 @@ def fetch_margin_for_position(ticker, quantity):
 
 def fetch_net_liq_history(time_back="1y"):
     if get_active_broker() == "t212":
-        return []
+        # T212 has no history endpoint; the curve is rebuilt from fills, cash
+        # movements and daily closes. See t212_history.
+        return t212_api.fetch_net_liq_history(_get_t212_creds(), time_back)
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_net_liq_history(time_back=time_back)
     return tastytrade_api.fetch_net_liq_history(
@@ -176,7 +178,7 @@ def fetch_beta_weighted_delta():
 
 def fetch_yearly_transfers():
     if get_active_broker() == "t212":
-        return {}
+        return t212_api.fetch_yearly_transfers(_get_t212_creds())
     if get_active_broker() == "ibkr":
         return _get_ibkr().fetch_yearly_transfers()
     return tastytrade_api.fetch_yearly_transfers(refresh_token=_get_refresh_token())

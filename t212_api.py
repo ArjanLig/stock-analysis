@@ -246,7 +246,9 @@ def fetch_trades(creds: dict) -> dict:
             for item in body.get("items") or []:
                 trade = _fill_to_trade(item, creds)
                 if trade:
-                    out.setdefault(trade.pop("_symbol"), []).append(trade)
+                    sym = trade.pop("_symbol")
+                    trade["symbol"] = sym
+                    out.setdefault(sym, []).append(trade)
             path = body.get("nextPagePath")
             pages += 1
     except Exception as e:
@@ -281,9 +283,21 @@ def _fill_to_trade(item: dict, creds: dict):
     except ValueError:
         return None
 
+    wallet = fill.get("walletImpact") or {}
     return {
         "_symbol": info["symbol"],
         "isin": (order.get("instrument") or {}).get("isin") or info["isin"],
+        # Kept unconverted alongside the USD figures: a historical curve has to
+        # convert at each day's own rate, and today's rate is the one thing it
+        # must not use.
+        "native_price": fill.get("price"),
+        "native_currency": info["currency"] or "",
+        # Signed here, not trusted from the API: T212 reports the wallet
+        # impact as a magnitude, so a purchase came back positive and the
+        # reconstruction added the money it had just spent.
+        "wallet_net_value": (-abs(wallet["netValue"]) if is_buy
+                             else abs(wallet["netValue"]))
+                            if wallet.get("netValue") is not None else None,
         "date": day,
         "label": "Stock Buy" if is_buy else "Stock Sell",
         "type": "Trade",
@@ -297,6 +311,38 @@ def _fill_to_trade(item: dict, creds: dict):
         "net_value": -(qty * price) if is_buy else (qty * price),
         "instrument_type": "Equity",
     }
+
+
+def fetch_cash_movements(creds: dict) -> list:
+    """Deposits, withdrawals, interest and fees, oldest first.
+
+    Amounts are in the ACCOUNT's currency, unconverted — the caller decides
+    which day's rate applies, and for a historical curve that is never today's.
+    """
+    out, path, pages = [], "/equity/history/transactions?limit=50", 0
+    try:
+        while path and pages < 40:
+            body = _get(path, creds, min_interval=6.0) or {}
+            for item in body.get("items") or []:
+                stamp = item.get("dateTime") or ""
+                try:
+                    day = datetime.fromisoformat(stamp.replace("Z", "+00:00")).date()
+                except ValueError:
+                    continue
+                out.append({
+                    "date": day,
+                    "amount": float(item.get("amount") or 0.0),
+                    "type": item.get("type") or "",
+                    "currency": item.get("currency") or "",
+                    "reference": item.get("reference") or "",
+                })
+            path = body.get("nextPagePath")
+            pages += 1
+    except Exception as e:
+        logger.warning("T212 cash history unavailable: %s", e)
+        return []
+    out.sort(key=lambda m: m["date"])
+    return out
 
 
 def fetch_account_balances(creds: dict) -> dict:
@@ -332,3 +378,89 @@ def fetch_account_balances(creds: dict) -> dict:
         "native_currency": native,
         "fx_rate": fx,
     }
+
+
+_TIME_BACK_DAYS = {"1d": 2, "1m": 31, "3m": 92, "6m": 183, "1y": 366,
+                   "all": 3650}
+
+
+def fetch_net_liq_history(creds: dict, time_back: str = "1y"):
+    """Rebuild the account-value curve. Returns [{"time", "close"}] in USD.
+
+    T212 has no endpoint for this — see t212_history for why it can be
+    computed anyway. Returns [] when there is nothing to rebuild from, which
+    is the same thing the adapter returned before and renders as "unavailable".
+    """
+    from datetime import date, timedelta
+
+    import gather_data
+    from t212_history import reconstruct_net_liq, yahoo_candidates
+
+    fills = [t for trades in fetch_trades(creds).values() for t in trades]
+    moves = fetch_cash_movements(creds)
+    if not fills and not moves:
+        return []
+
+    start = min([f["date"] for f in fills] + [m["date"] for m in moves])
+    window = _TIME_BACK_DAYS.get(time_back, 366)
+    start = max(start, date.today() - timedelta(days=window))
+    end = date.today()
+
+    years = max(1, (end - start).days // 365 + 1)
+    fx = gather_data.fetch_daily_closes("EURUSD=X", years)
+
+    closes = {}
+    for symbol in {f["symbol"] for f in fills}:
+        exchange = _clean_symbol_exchange(symbol, creds)
+        currency = next((f.get("native_currency") for f in fills
+                         if f["symbol"] == symbol), "")
+        # First candidate that answers wins; a name Yahoo does not know under
+        # any of them is carried at cost and reported, never guessed at.
+        for candidate in yahoo_candidates(symbol, exchange, currency):
+            series = gather_data.fetch_daily_closes(candidate, years)
+            if series:
+                closes[symbol] = series
+                break
+
+    prepared = [{
+        "date": f["date"],
+        "symbol": f["symbol"],
+        "quantity": f["quantity"],
+        "is_buy": "Buy" in (f.get("action") or ""),
+        "native_price": f.get("native_price"),
+        "native_currency": f.get("native_currency") or "",
+        # Falls back to the USD figure when T212 gave no wallet impact; the
+        # curve is then off by the FX difference rather than absent.
+        "wallet_net_value": (f.get("wallet_net_value")
+                             if f.get("wallet_net_value") is not None
+                             else f.get("net_value") or 0.0),
+    } for f in fills]
+
+    series, unpriced = reconstruct_net_liq(prepared, moves, closes, fx, start, end)
+    if unpriced:
+        # Carried at cost inside the reconstruction; say so rather than let a
+        # flat line pass for a valuation.
+        logger.info("T212 net liq: no closes for %s — carried at cost",
+                    ", ".join(unpriced))
+    return series
+
+
+def _clean_symbol_exchange(symbol: str, creds: dict) -> str:
+    """The exchange segment for a resolved symbol, for the Yahoo guess."""
+    for code, info in (_resolve_instruments(creds) or {}).items():
+        if info.get("symbol") == symbol:
+            return info.get("exchange") or ""
+    return ""
+
+
+def fetch_yearly_transfers(creds: dict) -> dict:
+    """Net deposits per year and month, in USD."""
+    import gather_data
+    from t212_history import yearly_transfers
+
+    moves = fetch_cash_movements(creds)
+    if not moves:
+        return {}
+    years = max(1, (moves[-1]["date"] - moves[0]["date"]).days // 365 + 1)
+    fx = gather_data.fetch_daily_closes("EURUSD=X", years)
+    return yearly_transfers(moves, fx)

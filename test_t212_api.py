@@ -529,6 +529,37 @@ class TestTrades(unittest.TestCase):
                          ["2026-05-04", "2026-06-18"])
         self.assertEqual([t["instrument_type"] for t in webn], ["Equity"] * 2)
 
+    def test_the_wallet_impact_is_signed_by_direction(self):
+        """T212 reports it as a magnitude. Taken at face value a purchase adds
+        the money it just spent, which inflated the rebuilt account curve by
+        the whole cost of the portfolio."""
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path.startswith("/equity/history/orders"):
+                return {"items": [
+                    {"order": {"ticker": "AAPL_US_EQ", "side": "BUY",
+                               "instrument": {"ticker": "AAPL_US_EQ",
+                                              "currency": "USD"}},
+                     "fill": {"quantity": 2.0, "price": 150.0,
+                              "filledAt": "2026-01-05T10:00:00.000Z",
+                              "walletImpact": {"currency": "EUR",
+                                               "netValue": 260.0}}},
+                    {"order": {"ticker": "AAPL_US_EQ", "side": "SELL",
+                               "instrument": {"ticker": "AAPL_US_EQ",
+                                              "currency": "USD"}},
+                     "fill": {"quantity": 2.0, "price": 170.0,
+                              "filledAt": "2026-02-05T10:00:00.000Z",
+                              "walletImpact": {"currency": "EUR",
+                                               "netValue": 295.0}}},
+                ], "nextPagePath": None}
+            raise AssertionError(path)
+        with patch("t212_api._get", side_effect=_router), \
+             patch("gather_data.fetch_fx_rate", return_value=1.0):
+            trades = t212_api.fetch_trades(_CREDS)["AAPL"]
+        self.assertAlmostEqual(trades[0]["wallet_net_value"], -260.0)
+        self.assertAlmostEqual(trades[1]["wallet_net_value"], 295.0)
+
     def test_a_buy_costs_cash_and_a_sale_returns_it(self):
         """net_value carries the app's sign convention, since every downstream
         walk reads the sign to tell a purchase from a sale."""

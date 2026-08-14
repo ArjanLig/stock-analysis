@@ -11779,11 +11779,16 @@ elif page == "Results":
               showlegend=False,
           )
           st.plotly_chart(fig_liq, use_container_width=True)
-          # Named, because this one cannot be combined: Trading 212 exposes no
-          # net-liq history, so the curve is always a single account's — and in
-          # the Overview tab that is not obvious from the tab itself.
-          st.caption(f"{BROKER_NAMES.get(get_active_broker(), 'Tastytrade')} only "
-                     "— Trading 212 exposes no net liquidation history.")
+          # Named, because this one cannot be combined: each broker's curve is
+          # its own, and in the Overview tab that is not obvious from the tab.
+          # Trading 212's is rebuilt from fills and cash movements rather than
+          # fetched, so it is a reconstruction — worth saying out loud.
+          _nl_broker = BROKER_NAMES.get(get_active_broker(), "Tastytrade")
+          st.caption(
+              f"{_nl_broker} only — one account at a time."
+              + (" Rebuilt from fills and cash movements; Trading 212 has no "
+                 "history endpoint." if get_active_broker() == "t212" else "")
+          )
       else:
           st.info("Net liquidation history unavailable.")
 
