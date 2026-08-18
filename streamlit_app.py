@@ -12187,13 +12187,16 @@ elif page == "Screener":
                 t = r["ticker"]
                 cols = st.columns(_w, vertical_alignment="center")
                 with cols[0]:
-                    if t.upper() in _wl:
-                        st.markdown('<span title="on your watchlist" '
-                                    'style="font-size:0.9rem">&#9733;</span>',
-                                    unsafe_allow_html=True)
-                    elif st.button("", key=f"scr_add_{t}",
-                                   icon=":material/add:",
-                                   help=f"Add {t} to your watchlist"):
+                    # Same button either way, disabled once the name is on the
+                    # watchlist: one shape in the column, and the grey state
+                    # says "done" where a different icon said "look this up".
+                    _on_wl = t.upper() in _wl
+                    if st.button("", key=f"scr_add_{t}",
+                                 icon=":material/check:" if _on_wl
+                                 else ":material/add:",
+                                 disabled=_on_wl,
+                                 help="Already on your watchlist" if _on_wl
+                                 else f"Add {t} to your watchlist"):
                         _screener_add(t)
                 _logo = _logo_img(t, None, "",
                                   "width:20px;height:20px;border-radius:50%;"
@@ -12211,7 +12214,7 @@ elif page == "Screener":
                                  f'font-size:0.85rem">{r.get("years_used", 0)}y</span>',
                                  unsafe_allow_html=True)
                 cols[6].markdown(f'${-r.get("net_debt", 0):,.0f}M')
-            st.caption(f"{len(passes)} name(s) · &#9733; = on your watchlist · "
+            st.caption(f"{len(passes)} name(s) · a grey check = already on your watchlist · "
                        "+ adds the EDGAR facts; assumptions stay yours to author")
 
         # What fell out and why — a screen that hides its rejects looks stricter
