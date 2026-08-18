@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 from error_logger import log_error, log_error_with_trace
 from dcf_calculator import (compute_wacc, compute_intrinsic_value, compute_reverse_dcf,
-                            DEFAULT_DISCOUNT_MODE)
+                            DEFAULT_DISCOUNT_MODE, DEFAULT_HURDLE_RATE)
 from valuation_lenses import FORWARD_LENSES
 from thesis import thesis_vs_history, HEROIC_RATIO
 from config_store import ASSUMPTION_LOG_KEY, save_config, load_config, load_all_configs, list_watchlist, remove_from_watchlist, load_user_prefs, save_user_prefs, load_credential, delete_credential, load_ibkr_credentials, save_ibkr_credentials, delete_ibkr_credentials, load_t212_credentials, save_t212_credentials, delete_t212_credentials, log_page_view
@@ -4783,19 +4783,30 @@ def _dcf_editor(ticker):
                     step=0.5, format="%.1f", key="ed_tax",
                 ) / 100
 
-                _disc_modes = ["opportunity_cost", "capm"]
+                _disc_modes = ["hurdle", "opportunity_cost", "capm"]
                 _disc_labels = {
+                    "hurdle": f"Fixed hurdle ({DEFAULT_HURDLE_RATE:.0%}, portfolio-wide)",
                     "opportunity_cost": "Opportunity cost (ke = rf + ERP, β = 1)",
                     "capm": "CAPM (ke = rf + levered β × ERP)",
                 }
+                # A config saved under a mode this build no longer offers must
+                # not take the editor down; fall back to the default and let
+                # the user re-pick.
+                _cur_mode = cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE)
+                if _cur_mode not in _disc_modes:
+                    logger.warning("Unknown discount_mode %r for %s; showing default",
+                                   _cur_mode, ticker)
+                    _cur_mode = DEFAULT_DISCOUNT_MODE
                 cfg['discount_mode'] = st.selectbox(
                     "Discount mode",
                     _disc_modes,
-                    index=_disc_modes.index(cfg.get('discount_mode', DEFAULT_DISCOUNT_MODE)),
+                    index=_disc_modes.index(_cur_mode),
                     format_func=lambda m: _disc_labels[m],
                     key="ed_disc_mode",
-                    help="Opportunity cost: één marktbrede hurdle voor elk bedrijf; "
-                         "bedrijfsrisico zit in de kasstromen en margin of safety. "
+                    help="Fixed hurdle: één vaste eis voor elk bedrijf — beweegt niet "
+                         "mee met rente, β of kapitaalstructuur; risico hoort in het "
+                         "groeipad en de marge. "
+                         "Opportunity cost: rf + ERP, dus wél rentegevoelig. "
                          "CAPM: bedrijfsrisico via de sector-β in de discontovoet.",
                 )
 
