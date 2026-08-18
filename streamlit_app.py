@@ -12148,50 +12148,71 @@ elif page == "Screener":
         if not passes:
             st.info("No names pass in this index.")
         else:
-            _th = (f'padding:7px 10px;text-align:right;color:{T["text_muted"]};'
-                   f'font-weight:600;white-space:nowrap')
-            _td = ('padding:7px 10px;text-align:right;white-space:nowrap;'
-                   'font-variant-numeric:tabular-nums')
-            _bd = f'border-top:1px solid {T["divider"]}'
-            body = ""
+            # Rows of columns rather than an HTML table, for one reason: a
+            # button. The add flow is the SAME one the watchlist's own "Add to
+            # Watchlist" uses — run_analysis for the EDGAR facts, save_config
+            # to store them. A second, different way of adding would be the
+            # two-answers problem in write form.
+            def _screener_add(t):
+                try:
+                    with st.spinner(f"Building {t} from EDGAR..."):
+                        _cfg, _ = run_analysis(
+                            t,
+                            peer_mode="Auto-discover",
+                            manual_peers="",
+                            margin_of_safety=MARGIN_OF_SAFETY_DEFAULT,
+                            terminal_growth=TERMINAL_GROWTH_DEFAULT,
+                        )
+                        save_config(_sb_client, t, _cfg)
+                    st.cache_data.clear()
+                    st.success(f"{t} added to watchlist — open it there to "
+                               "author the DCF assumptions.")
+                    st.rerun()
+                except Exception as e:
+                    logger.error("Screener add failed for %s: %s", t, e)
+                    log_error_with_trace("WATCHLIST_ERROR", e, page="Screener",
+                                         metadata={"ticker": t})
+                    st.error(f"Could not add {t}: {type(e).__name__}")
+
+            _w = [0.42, 1.1, 2.1, 1.5, 0.85, 0.6, 1.0]
+            hdr = st.columns(_w, vertical_alignment="center")
+            for _c, _label in zip(hdr, ["", "Ticker", "Company", "Sector",
+                                        "Avg ROCE", "Years", "Net cash"]):
+                if _label:
+                    _c.markdown(f'<span style="color:{T["text_muted"]};'
+                                f'font-weight:600;font-size:0.8rem">{_label}</span>',
+                                unsafe_allow_html=True)
+
             for r in passes:
-                _logo = _logo_img(r["ticker"], None, "",
+                t = r["ticker"]
+                cols = st.columns(_w, vertical_alignment="center")
+                with cols[0]:
+                    if t.upper() in _wl:
+                        st.markdown('<span title="on your watchlist" '
+                                    'style="font-size:0.9rem">&#9733;</span>',
+                                    unsafe_allow_html=True)
+                    elif st.button("", key=f"scr_add_{t}",
+                                   icon=":material/add:",
+                                   help=f"Add {t} to your watchlist"):
+                        _screener_add(t)
+                _logo = _logo_img(t, None, "",
                                   "width:20px;height:20px;border-radius:50%;"
                                   "object-fit:cover;vertical-align:middle;"
                                   "margin-right:7px")
-                _mark = (' <span title="on your watchlist" style="font-size:0.7rem">'
-                         '&#9733;</span>' if r["ticker"].upper() in _wl else "")
-                _nd = r.get("net_debt")
-                body += (
-                    f'<tr>'
-                    f'<td style="{_td};{_bd};text-align:left">{_logo}'
-                    f'<b>{r["ticker"]}</b>{_mark}</td>'
-                    f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]};'
-                    f'max-width:230px;overflow:hidden;text-overflow:ellipsis">'
-                    f'{r.get("name") or ""}</td>'
-                    f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]}">'
-                    f'{r.get("sector") or ""}</td>'
-                    f'<td style="{_td};{_bd};font-weight:600">'
-                    f'{r["avg_roce"]:.0f}%</td>'
-                    f'<td style="{_td};{_bd};color:{T["text_muted"]}">'
-                    f'{r.get("years_used", 0)}y</td>'
-                    f'<td style="{_td};{_bd}">'
-                    f'${-_nd:,.0f}M</td>'
-                    f'</tr>'
-                )
-            st.markdown(
-                f'<table style="width:100%;border-collapse:collapse;font-size:0.85rem">'
-                f'<thead><tr>'
-                f'<th style="{_th};text-align:left">Ticker</th>'
-                f'<th style="{_th};text-align:left">Company</th>'
-                f'<th style="{_th};text-align:left">Sector</th>'
-                f'<th style="{_th}">Avg ROCE</th>'
-                f'<th style="{_th}">History</th>'
-                f'<th style="{_th}">Net cash</th>'
-                f'</tr></thead><tbody>{body}</tbody></table>',
-                unsafe_allow_html=True,
-            )
-            st.caption(f"{len(passes)} name(s) · &#9733; = on your watchlist")
+                cols[1].markdown(f'{_logo}<b>{t}</b>', unsafe_allow_html=True)
+                cols[2].markdown(f'<span style="color:{T["text_muted"]};'
+                                 f'font-size:0.85rem">{r.get("name") or ""}</span>',
+                                 unsafe_allow_html=True)
+                cols[3].markdown(f'<span style="color:{T["text_muted"]};'
+                                 f'font-size:0.85rem">{r.get("sector") or ""}</span>',
+                                 unsafe_allow_html=True)
+                cols[4].markdown(f'**{r["avg_roce"]:.0f}%**')
+                cols[5].markdown(f'<span style="color:{T["text_muted"]};'
+                                 f'font-size:0.85rem">{r.get("years_used", 0)}y</span>',
+                                 unsafe_allow_html=True)
+                cols[6].markdown(f'${-r.get("net_debt", 0):,.0f}M')
+            st.caption(f"{len(passes)} name(s) · &#9733; = on your watchlist · "
+                       "+ adds the EDGAR facts; assumptions stay yours to author")
 
         # What fell out and why — a screen that hides its rejects looks stricter
         # than it is.
