@@ -186,3 +186,37 @@ def three_state_html(band, labels=None, size=44, theme=None):
         )
     return ('<div style="display:flex;justify-content:center;gap:14px;'
             'align-items:flex-start">' + "".join(circles) + "</div>")
+
+
+# A category is a tag, not a clause. Long enough to be a sentence and it is
+# prose that happens to contain a dash — NVDA's triggers use dashes as
+# punctuation and must not lose their first half to it.
+_MAX_CATEGORY_LEN = 26
+
+
+def split_trigger(text):
+    """Split "CATEGORY — trigger" into (category, trigger).
+
+    Returns (None, text) when there is no category, which is most of them: the
+    prefix is a habit in some tickers' pre-mortems and absent in others.
+    """
+    raw = str(text or "").strip()
+    if not raw:
+        return None, ""
+    # Colon last: it is ordinary punctuation far more often than it is a tag,
+    # so a dash gets first refusal on a line that has both.
+    for sep in ("—", "–", "--", ":"):
+        if sep not in raw:
+            continue
+        head, _, tail = raw.partition(sep)
+        head, tail = head.strip(), tail.strip()
+        if not tail or len(head) > _MAX_CATEGORY_LEN:
+            continue
+        # A tag is written as one: short, capitalised, and containing at least
+        # one letter — digits survive .upper() unchanged, so an all-caps test
+        # on its own would promote "2026" to a category.
+        if head == head.upper() and any(c.isalpha() for c in head):
+            # Drop a list number: some pre-mortems number their triggers, which
+            # turned the tag into "1. ORDERBOEK KRIMPT".
+            return re.sub(r"^\d+[.)]\s*", "", head), tail
+    return None, raw

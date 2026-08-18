@@ -3687,36 +3687,99 @@ def _pm_lines(s):
 
 
 def _render_premortem(pm, theme):
-    """Typographic render of a structured pre-mortem dict (fixed sections, same
-    order every time). Returns None for a legacy string / empty (caller falls
-    back to plain markdown)."""
+    """Render a structured pre-mortem as a decision board.
+
+    Five stacked lists ran to forty-odd items on the bigger tickers — CPRT has
+    45 — which is a wall you skim rather than a rule you check. The two lists
+    you act on sit side by side, the one you deliberately do NOT act on sits
+    beside them greyed, and process goes underneath.
+
+    Returns None for a legacy string / empty (caller falls back to markdown).
+    """
     if not isinstance(pm, dict):
         return None
     import html as _h
+
+    from prescan_render import split_trigger
+
     muted = theme.get("text_muted", "#888")
     txt = theme.get("text", "#111")
-    css = (f"<style>.pm-label{{font-size:0.72rem;font-weight:700;letter-spacing:0.07em;"
-           f"text-transform:uppercase;color:{muted};margin:14px 0 2px}}"
-           f".pm-wrap>div:first-child{{margin-top:0}}"
-           f".pm-text{{font-size:0.93rem;color:{txt};line-height:1.55}}"
-           f".pm-list{{margin:1px 0 2px;padding-left:1.15rem}}"
-           f".pm-list li{{font-size:0.93rem;color:{txt};line-height:1.55;margin:2px 0}}</style>")
-    parts, any_content = ['<div class="pm-wrap">'], False
-    for key, label in _PM_SECTIONS:
-        if key == "current":
-            val = str(pm.get("current", "") or "").strip()
-            if val:
-                any_content = True
-                parts.append(f'<div class="pm-label">{label}</div>'
-                             f'<div class="pm-text">{_h.escape(val)}</div>')
-        else:
-            items = [str(i) for i in (pm.get(key) or []) if str(i).strip()]
-            if items:
-                any_content = True
-                parts.append(f'<div class="pm-label">{label}</div><ul class="pm-list">'
-                             + "".join(f"<li>{_h.escape(i)}</li>" for i in items) + "</ul>")
-    parts.append("</div>")
-    return css + "".join(parts) if any_content else None
+    border = theme.get("border_light", "#e8e8ed")
+    bg = theme.get("bg_secondary", "#f4f2ee")
+    red, green = "#c0603f", "#2f8f4e"
+
+    def _items(key):
+        return [str(i) for i in (pm.get(key) or []) if str(i).strip()]
+
+    sell, add, ignore = _items("sell"), _items("add"), _items("ignore")
+    discipline = _items("discipline")
+    current = str(pm.get("current", "") or "").strip()
+    if not any((sell, add, ignore, discipline, current)):
+        return None
+
+    def _column(title, items, tone, dim=False):
+        if not items:
+            return ""
+        rows = []
+        for raw in items:
+            cat, body = split_trigger(raw)
+            tag = (f'<div style="font-size:0.62rem;font-weight:700;'
+                   f'letter-spacing:0.07em;color:{tone};opacity:0.9;'
+                   f'margin-bottom:1px">{_h.escape(cat)}</div>' if cat else "")
+            rows.append(
+                f'<li style="margin:0 0 9px 0;line-height:1.45;'
+                f'font-size:0.86rem;color:{muted if dim else txt}">'
+                f'{tag}{_h.escape(body)}</li>'
+            )
+        return (
+            f'<div style="flex:1;min-width:230px">'
+            f'<div style="display:flex;align-items:baseline;gap:7px;'
+            f'padding-bottom:7px;margin-bottom:10px;'
+            f'border-bottom:2px solid {tone}{"55" if dim else ""}">'
+            f'<span style="font-size:0.68rem;font-weight:700;letter-spacing:0.08em;'
+            f'text-transform:uppercase;color:{tone}">{title}</span>'
+            f'<span style="font-size:0.68rem;color:{muted}">{len(items)}</span>'
+            f'</div>'
+            f'<ul style="margin:0;padding-left:16px">{"".join(rows)}</ul></div>'
+        )
+
+    parts = []
+    if current:
+        parts.append(
+            f'<div style="background:{bg};border-radius:12px;padding:12px 16px;'
+            f'margin-bottom:16px;font-size:0.86rem;line-height:1.5;color:{txt}">'
+            f'<span style="font-size:0.62rem;font-weight:700;letter-spacing:0.08em;'
+            f'text-transform:uppercase;color:{muted};display:block;'
+            f'margin-bottom:4px">Current view</span>'
+            f'{_h.escape(current)}</div>'
+        )
+
+    # Sell first: the trigger you most need to have decided in advance is the
+    # one you will least want to act on in the moment.
+    cols = (_column("Sell when", sell, red)
+            + _column("Add when", add, green)
+            + _column("Not a reason", ignore, muted, dim=True))
+    if cols:
+        parts.append(f'<div style="display:flex;gap:26px;flex-wrap:wrap;'
+                     f'align-items:flex-start">{cols}</div>')
+
+    if discipline:
+        # Process, not triggers — folded away so it stops competing with the
+        # rules you actually check a position against.
+        rows = "".join(
+            f'<li style="margin:0 0 6px 0;line-height:1.45;font-size:0.82rem;'
+            f'color:{muted}">{_h.escape(i)}</li>' for i in discipline
+        )
+        parts.append(
+            f'<details style="margin-top:18px;padding-top:12px;'
+            f'border-top:1px solid {border}">'
+            f'<summary style="cursor:pointer;font-size:0.68rem;font-weight:700;'
+            f'letter-spacing:0.08em;text-transform:uppercase;color:{muted}">'
+            f'Discipline ({len(discipline)})</summary>'
+            f'<ul style="margin:10px 0 0;padding-left:16px">{rows}</ul></details>'
+        )
+
+    return "".join(parts)
 
 
 def _render_notifications_panel():

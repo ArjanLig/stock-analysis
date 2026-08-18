@@ -198,3 +198,79 @@ class TestBandTone(unittest.TestCase):
         self.assertIsNone(band_tone("Fettuccine"))
         self.assertIsNone(band_tone(""))
         self.assertIsNone(band_tone(None))
+
+
+class TestTriggerSplit(unittest.TestCase):
+    """Pulling the category off a pre-mortem trigger."""
+
+    def test_a_leading_category_is_separated(self):
+        from prescan_render import split_trigger
+        cat, text = split_trigger(
+            "MOAT EROSIE — Gross margin onder 54% voor 2 kwartalen (nu 57.7%).")
+        self.assertEqual(cat, "MOAT EROSIE")
+        self.assertTrue(text.startswith("Gross margin"))
+
+    def test_a_trigger_without_one_keeps_its_whole_text(self):
+        """NVDA's triggers carry no category and must not lose their first
+        clause to a dash that happens to be punctuation."""
+        from prescan_render import split_trigger
+        cat, text = split_trigger(
+            "Gross margin onder 70% — dan is de pricing power weg")
+        self.assertIsNone(cat)
+        self.assertIn("pricing power", text)
+
+    def test_a_long_lead_is_prose_not_a_label(self):
+        """A category is a tag, not a sentence. Anything long enough to be a
+        clause stays part of the trigger."""
+        from prescan_render import split_trigger
+        cat, _ = split_trigger(
+            "De concurrentie in performance running wordt heviger — marge daalt")
+        self.assertIsNone(cat)
+
+    def test_double_hyphens_count_too(self):
+        from prescan_render import split_trigger
+        cat, text = split_trigger("FUNDAMENTEEL -- Schuld aangaan voor acquisities")
+        self.assertEqual(cat, "FUNDAMENTEEL")
+        self.assertTrue(text.startswith("Schuld"))
+
+    def test_a_colon_separates_a_category_too(self):
+        """CPRT writes them with a colon rather than a dash; both are the same
+        habit and neither should need the other's punctuation."""
+        from prescan_render import split_trigger
+        cat, text = split_trigger(
+            "STRUCTUREEL VOLUME: bewijs dat verzekeraars remarketing verschuiven")
+        self.assertEqual(cat, "STRUCTUREEL VOLUME")
+        self.assertTrue(text.startswith("bewijs"))
+
+    def test_a_mid_sentence_colon_is_not_a_category(self):
+        """"Koers bereikt buy price $86.42 terwijl: GM >55%" — a colon is
+        ordinary punctuation far more often than it is a tag, so the lead has
+        to look like a tag: short, and written in capitals."""
+        from prescan_render import split_trigger
+        cat, text = split_trigger(
+            "Koers bereikt buy price $86.42 terwijl: GM >55%, HOKA groei >5%")
+        self.assertIsNone(cat)
+        self.assertIn("terwijl", text)
+
+    def test_a_lowercase_lead_is_never_a_category(self):
+        from prescan_render import split_trigger
+        self.assertIsNone(split_trigger("marge: onder 54%")[0])
+
+    def test_a_bare_number_is_not_a_category(self):
+        """Digits survive .upper() unchanged, so an all-caps test alone would
+        promote "2026" to a tag."""
+        from prescan_render import split_trigger
+        self.assertIsNone(split_trigger("2026: omzet daalt")[0])
+
+    def test_a_list_number_is_not_part_of_the_category(self):
+        """RACE numbers its triggers, which turned the tag into
+        "1. ORDERBOEK KRIMPT"."""
+        from prescan_render import split_trigger
+        self.assertEqual(
+            split_trigger("1. ORDERBOEK KRIMPT: orders dalen")[0],
+            "ORDERBOEK KRIMPT")
+
+    def test_empty_and_none(self):
+        from prescan_render import split_trigger
+        self.assertEqual(split_trigger(""), (None, ""))
+        self.assertEqual(split_trigger(None), (None, ""))
