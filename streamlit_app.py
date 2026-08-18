@@ -1390,70 +1390,43 @@ Apply criteria mechanically:
 - Determine direction as Widening/Stable/Narrowing
 - Identify 1-2 primary moat sources
 STEP 5: OUTPUT
-# TEMPLATE
-# 🏰 Moat Analysis: [Company Name] ([Ticker])
-  * **Moat Size:** [None ❌/Narrow 🤏/Wide 🛡️]
-  * **Moat Direction:** [Widening ↗️/Stable ➡️/Narrowing ↘️]
-  * **Primary Moat Source(s):** [List the 1-2 most dominant moat sources, prepending the appropriate emoji for each (e.g., ⚓️ Switching Costs).]
-  * **Summary:** [Provide a 1-2 sentence narrative summary of the overall moat thesis, supported by a key metric with a citation.]
-## ⚓️ Switching Costs
-  * **Assessment:** [✅ Present/❌ Not Present] [Output the Size with its emoji and the Direction with its emoji, if present (e.g., Wide 🛡️, Widening ↗️).]
-  * **Analysis:** [Provide a detailed paragraph explaining the reasoning for your assessment.]
-  * **Supporting Data:**
-      * [**Metric 1**]: [Insert relevant metric here, e.g., Net Dollar Retention: ___%.]
-      * [**Metric 2**]: [Insert relevant metric here, e.g., RPO: $___B, up ___% YoY.]
-      * Evidence Quote: [Provide a powerful quote about platform stickiness, integration, or high customer exit costs.]
-## 💡 Intangible Assets
-  * **Assessment:** [✅ Present/❌ Not Present] [Output the Size with its emoji and the Direction with its emoji, if present (e.g., Wide 🛡️, Widening ↗️).]
-  * **Analysis:** [Provide a detailed paragraph explaining the reasoning for your assessment.]
-  * **Supporting Data:**
-      * [**Metric 1**]: [Insert relevant metric here, e.g., U.S. Commercial Revenue Growth: ___% YoY.]
-      * [**Metric 2**]: [Insert relevant metric here, e.g., R&D Investment as % of Revenue.]
-      * Evidence Quote: [Provide a powerful quote about the value of the brand, the strength of patents, or a key regulatory advantage.]
-## 🌐 Network Effects
-  * **Assessment:** [✅ Present/❌ Not Present] [Output the Size with its emoji and the Direction with its emoji, if present (e.g., Wide 🛡️, Widening ↗️).]
-  * **Analysis:** [Provide a detailed paragraph explaining the reasoning for your assessment.]
-  * **Supporting Data:**
-      * [**Metric 1**]: [Insert relevant metric here, e.g., Customer Growth: +___% YoY.]
-      * [**Metric 2**]: [Insert relevant metric here, e.g., Platform Engagement Metric.]
-      * Evidence Quote: [Provide a powerful quote describing how new users add value to existing users or the platform's flywheel effect.]
-## ⚙️ Low-Cost Production
-  * **Assessment:** [✅ Present/❌ Not Present] [Output the Size with its emoji and the Direction with its emoji, if present (e.g., Wide 🛡️, Widening ↗️).]
-  * **Analysis:** [Provide a detailed paragraph explaining the reasoning for your assessment.]
-  * **Supporting Data:**
-      * [**Metric 1**]: [Insert relevant metric here, e.g., Gross Margin: ___%.]
-      * [**Metric 2**]: [Insert relevant metric here, e.g., Operating Margin vs. Peers.]
-      * Evidence Quote: [Provide a powerful quote about operational efficiency, scale advantages, or the company's cost structure.]
-## 🤺 Counter-Positioning
-  * **Assessment:** [✅ Present/❌ Not Present] [Output the Size with its emoji and the Direction with its emoji, if present (e.g., Wide 🛡️, Widening ↗️).]
-  * **Analysis:** [Provide a detailed paragraph explaining the reasoning for your assessment.]
-  * **Supporting Data:**
-      * [**Metric 1**]: [Insert relevant metric here, e.g., U.S. Commercial Customer Count: ___+.]
-      * [**Metric 2**]: [Insert relevant metric here, e.g., Market Share Gain vs. Incumbents.]
-      * Evidence Quote: [Provide a powerful quote about the disruptive nature of the business model or why incumbents cannot easily replicate it.]
-## ⚠️ Risks & Final Considerations
-  * **Primary Risk:** [Identify and explain the most significant risk to the company's moat, supported by a cited data point.]
-  * **Competitive Landscape:** [Briefly describe the main competitive threats, citing sources for specific claims.]
-  * **Valuation Risk:** [Provide a key valuation metric and compare it to peers, with a citation.]
-  * **Morningstar View Comparison:**
-      * **Morningstar's Rating:** [State Morningstar's official Moat Size, Direction, and key rationale summary, with a citation to the report.]
-      * **Analysis:** [Provide a 1-2 sentence analysis comparing your independent findings to Morningstar's. Note whether your first-principles analysis confirms, challenges, or adds nuance to their view, and briefly explain why.]
-## 🔗 Sources
-[List each source numbered and formatted as:]
-[1] Source Name - domain.com
-[2] Source Name - domain.com
-[3] Source Name - domain.com
-[4] Source Name - domain.com
-[5] Source Name - domain.com
-[Continue with all sources used]
---------------------------------------------
-BEHAVIORAL GUARDRAILS
---------------------------------------------
-1. No Self-Reference: Do not use any examples from this prompt as analysis sources
-2. Citation Discipline: Every data point must have a source
-3. Evidence Standards: 2 metrics + 1 quote minimum per moat type
-4. Primary Sources Only: Prioritize 10-K, 10-Q, official transcripts
-5. Assume No Moat: Default position until proven otherwise
+
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body exists to justify it, not to restate it. Every
+bullet must survive the question "would I still write this if I had to drop
+one?" — if it would not, drop it.
+
+# TEMPLATE (output exactly this shape, nothing before or after)
+
+**Moat: [None ❌ / Narrow 🤏 / Wide 🛡️] · [Widening ↗️ / Stable ➡️ / Narrowing ↘️] · [0-5]/5**
+
+[ONE sentence. Name the company, bold the verdict, and say where the moat comes
+from — or why there isn't one. No preamble, no restating the question.]
+
+- **[Two-to-three word label]**: [one line, with the number or fact that makes
+  it true. No citation clutter — the source list is below.]
+- **[Two-to-three word label]**: [one line]
+- **[Two-to-three word label]**: [one line]
+
+**Weakest link:** [one line — the moat source you looked for and did not find,
+or the one most likely to erode first. This line is mandatory: a moat analysis
+with nothing against it has not been done.]
+
+## Sources
+[1] Source - domain.com
+[2] Source - domain.com
+
+# RULES FOR THE TEMPLATE
+- The score is the moat's strength on the five sources you assessed, not a
+  confidence rating: 0 = none, 1-2 = narrow, 3-4 = wide, 5 = wide and widening.
+- EXACTLY three bullets. Not four because a fourth is interesting. If two
+  sources are strong and three are absent, three bullets still — use one to
+  say what is absent and why it does not matter.
+- A bullet whose label could be swapped onto any company in the sector is not
+  a moat, it is a description. Rewrite it or drop it.
+- No tables. No per-source subsections. No "Assessment: Present" lines. You
+  still assess all five sources — you just report the ones that decide it.
+
 """,
     },
     {
@@ -1763,56 +1736,49 @@ State which documents found: "Analyzing [Company] using 10-K from [date] and 10-
 - 🟡 Yellow: Normal competitive environment
 - 🟢 Green: Monopoly/Duopoly dynamics
 ## OUTPUT TEMPLATE
-# ⚠️ Execution Risk Analysis: [Company Name] ([Ticker])
-## 📊 Overall Summary
-**Overall Risk Level:** [High 🔴 / Medium 🟡 / Low 🟢]
-**Primary Risk Factors:** [List 1-2 highest risk areas]
-**Key Mitigation:** [Strongest defensive position if any]
----
-## 🎯 RISK ASSESSMENT DETAILS
-### 🧩 Concentration
-- **Rating:** [🔴 Red / 🟡 Yellow / 🟢 Green] | **Trend:** [↗️/➡️/↘️]
-- **Evidence:** [Specific data with citation, e.g., "Top 3 customers = 45% of revenue per 10-K"]
-### 🔄 Disruption
-- **Rating:** [🔴 Red / 🟡 Yellow / 🟢 Green] | **Trend:** [↗️/➡️/↘️]
-- **Evidence:** [Specific threat or advantage with citation, e.g., "AI replacing core product per risk factors section"]
-### 🌍 Outside Forces
-- **Rating:** [🔴 Red / 🟡 Yellow / 🟢 Green] | **Trend:** [↗️/➡️/↘️]
-- **Evidence:** [List specific exposures with citation, e.g., "40% revenue from government contracts, commodity costs = 60% COGS per 10-K"]
-### 🏁 Competition
-- **Rating:** [🔴 Red / 🟡 Yellow / 🟢 Green] | **Trend:** [↗️/➡️/↘️]
-- **Evidence:** [Market structure data with citation, e.g., "Gross margins compressed 500bps in 2 years per MD&A"]
----
-## 📋 Risk Assessment Matrix
-| Risk Factor | Rating | Evidence Strength | Trend | Management Response |
-|------------|--------|------------------|-------|-------------------|
-| Concentration | [🔴/🟡/🟢] | [Strong/Moderate/Limited] | [↗️/➡️/↘️] | [Disclosed actions if any] |
-| Disruption | [🔴/🟡/🟢] | [Strong/Moderate/Limited] | [↗️/➡️/↘️] | [Disclosed actions if any] |
-| Outside Forces | [🔴/🟡/🟢] | [Strong/Moderate/Limited] | [↗️/➡️/↘️] | [Disclosed actions if any] |
-| Competition | [🔴/🟡/🟢] | [Strong/Moderate/Limited] | [↗️/➡️/↘️] | [Disclosed actions if any] |
----
-## 🔍 Risk Interconnections
-[Brief 2-3 sentence analysis of how risks compound or offset each other]
-## 🛡️ Defensive Positions
-[List 1-3 company strengths that mitigate risks, if found in filings]
----
-## 📗 Sources
+
+Write for someone scanning ten of these. Rate all four risk factors — then
+report the ones that decide the answer. A risk that is Yellow because nothing
+is wrong does not need a paragraph.
+
+# TEMPLATE (output exactly this shape, nothing before or after)
+
+**Risk: [High 🔴 / Medium 🟡 / Low 🟢] · [Concentration / Disruption / Outside forces / Competition — the one that drives the rating]**
+
+[ONE sentence. What would actually have to go wrong for this to hurt, and how
+exposed the company is to it. Not a list of risk categories.]
+
+- **[Two-to-three word label]**: [one line, with the number that makes it real
+  — a customer share, a margin move, a revenue concentration]
+- **[Two-to-three word label]**: [one line]
+- **[Two-to-three word label]**: [one line]
+
+**What would change this:** [one line — the specific, observable thing that
+would move the rating up or down. "Macro improves" is not an answer; "gross
+margin back above 54% for two quarters" is.]
+
+## Sources
 [1] [Company] 10-K [Date] - sec.gov
-[2] [Company] 10-Q [Quarter] - sec.gov
-[3] [Additional source if used] - domain.com
-[Continue with all sources]
+[2] Source - domain.com
+
+# RULES FOR THE TEMPLATE
+- EXACTLY three bullets, ordered worst first. If only two risks are real, use
+  the third to name the one you expected to find and did not — an analysis
+  that finds nothing reassuring is as incomplete as one that finds nothing
+  wrong.
+- Every bullet carries a figure or a filing fact. "Faces competition" is not a
+  risk; "gross margin fell 500bps in two years while two entrants scaled" is.
+- No tables, no matrix, no per-factor subsections. The four ratings still get
+  made; they just do not each get a heading.
+- Default to Medium when the evidence is thin, and say the evidence is thin.
+
 ## BEHAVIORAL GUARDRAILS
-- Apply Red/Yellow/Green classifications strictly per defined criteria
-- Default to Yellow if evidence is ambiguous or limited
-- Prioritize most recent filing data (last 12 months)
-- State "Limited disclosure" if company doesn't provide specific risk data
-- Use bullet points for evidence (not paragraphs)
-- Include trend arrows to show directional changes
-- Cite filing sections inline with evidence statements
-- Assess overall risk as weighted average (Red=3, Yellow=2, Green=1)
- - 2.5+ = High Risk (Red)
- - 1.5-2.4 = Medium Risk (Yellow)
- - <1.5 = Low Risk (Green)
+- Apply Red/Yellow/Green strictly per the criteria above
+- Prioritize filing data from the last 12 months
+- State "Limited disclosure" where the company does not break it out
+- Overall rating is the weighted average (Red=3, Yellow=2, Green=1):
+  2.5+ = High, 1.5-2.4 = Medium, below 1.5 = Low
+
 """,
     },
     {
