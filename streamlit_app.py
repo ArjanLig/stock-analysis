@@ -285,16 +285,18 @@ def _render_fv_cell(price: float, summary: dict | None,
 
 
 def _render_robustness_table(cfg: dict, theme: dict) -> str:
-    """Render the Prasad robustness table: compact aligned continuum rows + a
-    verdict pill. Pure HTML-string builder (no Streamlit calls).
+    """Render the Prasad robustness assessment as a headline verdict card plus
+    one three-state row per axis. Pure HTML-string builder (no Streamlit calls).
 
-    Layout per row: fixed-width label (deal-breakers flagged), a band disc, a
-    short fixed-width gradient track with a single marker in its zone, then the
-    value/note truncated with the full text on hover. Verdict shows as a pill
-    top-right with the reason beneath."""
+    The verdict gets the large selector because it is the answer; the six axes
+    get compact ones because they are the working. Three circles rather than a
+    marker on a gradient: the bands ARE three states, and a continuous track
+    invited reading a position between them that the data does not carry.
+    """
     import html as _html
 
     import robustness as _rob
+    from prescan_render import three_state_html
 
     rob = (cfg or {}).get("robustness") or {}
     axes = rob.get("axes") or {}
@@ -304,17 +306,10 @@ def _render_robustness_table(cfg: dict, theme: dict) -> str:
         return (f'<div style="color:{muted};font-size:0.85rem;margin:6px 0 14px">'
                 'Robustness not yet assessed — run the Robustness section.</div>')
 
-    card = theme.get("card", "#fff")
     border_light = theme.get("border_light", "#e8e8ed")
-    # Lazy Theta semantic palette (same earthy tones as the Scorecard).
-    band_color = {"robust": theme.get("green", "#81b29a"),
-                  "mid": theme.get("yellow", "#f2cc8f"),
-                  "fragile": theme.get("red", "#e07a5f")}
-    band_fill = {"robust": "#d9e7dd", "mid": "#fbedd2", "fragile": "#f7dfd7"}
-    band_pos = {"robust": 12.0, "mid": 50.0, "fragile": 88.0}   # marker % on track
+    bg = theme.get("bg_secondary", "#f4f2ee")
     font = ("'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', "
             "Arial, sans-serif")
-    lw, dw, tw = 168, 10, 120   # label / disc / track widths (px)
 
     def _val_label(key, ax):
         if key == "roce" and ax.get("value") is not None:
@@ -324,54 +319,49 @@ def _render_robustness_table(cfg: dict, theme: dict) -> str:
             return "net cash" if v <= 0 else f'{v:.1f}× EBITDA'
         return ax.get("note", "") or ""
 
+    # ── Headline: the verdict, large ──
+    verdict = rob.get("verdict", "")
+    reason = _html.escape(rob.get("verdict_reason", ""))
+    head = (
+        f'<div style="background:{bg};border-radius:16px;padding:20px 22px 16px;'
+        f'margin-bottom:14px">'
+        f'<div style="text-align:center;font-size:0.7rem;font-weight:700;'
+        f'letter-spacing:0.09em;color:{muted};text-transform:uppercase;'
+        f'margin-bottom:16px">How robust is this business?</div>'
+        + three_state_html(verdict, ("Fragile", "Borderline", "Robust"),
+                           size=48, theme=theme)
+        + (f'<div style="text-align:center;margin-top:16px;padding-top:14px;'
+           f'border-top:1px solid {border_light};font-size:0.9rem;'
+           f'line-height:1.5;color:{text}">{reason}</div>' if reason else '')
+        + '</div>'
+    )
+
+    # ── Working: one compact row per axis ──
     rows = []
     for key, label, is_db, _src in _rob.AXES:
-        ax = axes.get(key, {"band": "mid"})
-        band = ax.get("band", "mid")
-        color = band_color.get(band, muted)
-        left = band_pos.get(band, 50.0)
+        ax = axes.get(key, {})
         note = _html.escape(_val_label(key, ax))
-        flag = (f'<span title="deal-breaker" style="color:{muted};font-size:0.68rem">&#9873;</span>'
-                if is_db else '')
+        flag = (f'<span title="deal-breaker" style="color:{muted};'
+                f'font-size:0.68rem">&#9873;</span>' if is_db else '')
         rows.append(
-            f'<div class="rb-row" style="display:flex;align-items:center;gap:12px;height:30px;'
-            f'font-size:0.82rem">'
-            f'<div style="width:{lw}px;flex:none;color:{text};white-space:nowrap;overflow:hidden;'
-            f'text-overflow:ellipsis">{label} {flag}</div>'
-            f'<span style="width:{dw}px;height:{dw}px;border-radius:50%;background:{color};'
-            f'flex:none"></span>'
-            f'<div style="width:{tw}px;flex:none;position:relative;height:6px;border-radius:980px;'
-            f'background:linear-gradient(90deg,{band_fill["robust"]},{band_fill["mid"]},'
-            f'{band_fill["fragile"]})">'
-            f'<div style="position:absolute;left:{left:.0f}%;top:50%;width:12px;height:12px;'
-            f'border-radius:50%;background:{color};border:2px solid {card};'
-            f'transform:translate(-50%,-50%)"></div></div>'
-            f'<div title="{note}" style="flex:1;min-width:0;color:{muted};white-space:nowrap;'
-            f'overflow:hidden;text-overflow:ellipsis">{note}</div>'
+            f'<div style="display:flex;align-items:center;gap:14px;'
+            f'padding:7px 0;border-top:1px solid {border_light};font-size:0.82rem">'
+            f'<div style="width:168px;flex:none;color:{text};white-space:nowrap;'
+            f'overflow:hidden;text-overflow:ellipsis">{label} {flag}</div>'
+            f'<div style="flex:none">'
+            + three_state_html(ax.get("band"), ("", "", ""), size=17, theme=theme)
+            + f'</div>'
+            f'<div title="{note}" style="flex:1;min-width:0;color:{muted};'
+            f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{note}</div>'
             f'</div>'
         )
 
-    v = rob.get("verdict", "?")
-    vkey = {"robust": "robust", "borderline": "mid", "fragile": "fragile"}.get(v, "mid")
-    vcolor, vfill = band_color[vkey], band_fill[vkey]
-    reason = _html.escape(rob.get("verdict_reason", ""))
-    pill = (f'<span title="{reason}" style="padding:3px 13px;border-radius:980px;'
-            f'background:{vfill};border:1px solid {vcolor};color:{text};font-weight:600;'
-            f'font-size:0.7rem;letter-spacing:0.06em">{v.upper()}</span>')
-    header = (f'<div style="display:flex;justify-content:flex-end;align-items:center;'
-              f'margin-bottom:6px">{pill}</div>')
-    cap = (f'<div style="display:flex;align-items:center;gap:12px;height:13px;margin-bottom:4px">'
-           f'<div style="width:{lw}px;flex:none"></div><span style="width:{dw}px;flex:none"></span>'
-           f'<div style="width:{tw}px;flex:none;display:flex;justify-content:space-between;'
-           f'color:{muted};font-size:0.6rem;letter-spacing:0.04em;text-transform:uppercase">'
-           f'<span>most</span><span>least</span></div><div style="flex:1"></div></div>')
     legend = ('&#9873; deal-breaker (ROCE &middot; net debt &middot; management) — '
               'a red sinks the verdict, amber caps it at borderline')
-    foot_text = f'{reason} &nbsp;·&nbsp; {legend}' if reason else legend
     foot = (f'<div style="color:{muted};font-size:0.7rem;margin-top:10px;'
-            f'border-top:1px solid {border_light};padding-top:8px">{foot_text}</div>')
+            f'border-top:1px solid {border_light};padding-top:8px">{legend}</div>')
     return (f'<div style="font-family:{font};margin:2px 0 4px">'
-            f'{header}{cap}{"".join(rows)}{foot}</div>')
+            f'{head}{"".join(rows)}{foot}</div>')
 
 
 def _render_football_field(summary: dict | None, theme: dict,

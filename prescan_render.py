@@ -96,3 +96,57 @@ def parse_verdict_section(content):
         "footer_label": footer_label,
         "footer_text": footer_text,
     }
+
+
+# One vocabulary in, one widget out. Robustness stores robust/mid/fragile, the
+# scorecard green/yellow/red, and the overall verdict says "borderline" — all
+# three are the same three-point scale wearing different words.
+_BAND_INDEX = {
+    "fragile": 0, "red": 0, "weak": 0, "poor": 0, "none": 0,
+    "mid": 1, "yellow": 1, "borderline": 1, "mixed": 1, "moderate": 1, "narrow": 1,
+    "robust": 2, "green": 2, "strong": 2, "wide": 2,
+}
+
+_DEFAULT_LABELS = ("Weak", "Mixed", "Strong")
+_GLYPHS = ("&#10005;", "&#8211;", "&#10003;")          # ✕  –  ✓
+_TONES = ("#c0603f", "#c79a3a", "#2f8f4e")
+_TINTS = ("#f7dfd7", "#fbedd2", "#d9e7dd")
+
+
+def three_state_html(band, labels=None, size=44, theme=None):
+    """A weak / mixed / strong selector with one state lit.
+
+    An unrecognised band lights nothing. Three grey circles read as "not
+    assessed", which is what it is — confidently lighting the middle one would
+    turn a missing rating into a middling one.
+    """
+    from html import escape
+
+    labels = labels or _DEFAULT_LABELS
+    theme = theme or {}
+    muted = theme.get("text_muted", "#9a958c")
+    text = theme.get("text", "#2b2b2f")
+    active = _BAND_INDEX.get(str(band or "").strip().lower())
+
+    circles = []
+    for i in range(3):
+        on = (i == active)
+        fill = _TONES[i] if on else _TINTS[i]
+        glyph = "#fff" if on else _TONES[i]
+        circles.append(
+            f'<div data-active="{1 if on else 0}" style="text-align:center;'
+            f'min-width:{size + 26}px">'
+            f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
+            f'margin:0 auto;background:{fill};'
+            f'{"" if on else f"border:1.5px solid {_TONES[i]}66;"}'
+            f'display:flex;align-items:center;justify-content:center;'
+            f'color:{glyph};font-size:{int(size * 0.42)}px;line-height:1;'
+            f'{"box-shadow:0 2px 10px " + _TONES[i] + "40;" if on else "opacity:0.55;"}">'
+            f'{_GLYPHS[i]}</div>'
+            f'<div style="margin-top:7px;font-size:0.68rem;letter-spacing:0.07em;'
+            f'font-weight:{700 if on else 600};'
+            f'color:{text if on else muted};text-transform:uppercase">'
+            f'{escape(str(labels[i]))}</div></div>'
+        )
+    return ('<div style="display:flex;justify-content:center;gap:14px;'
+            'align-items:flex-start">' + "".join(circles) + "</div>")

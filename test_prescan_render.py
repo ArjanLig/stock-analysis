@@ -111,3 +111,43 @@ class TestGauge(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestThreeState(unittest.TestCase):
+    """The weak / mixed / strong selector."""
+
+    def test_the_active_state_is_the_one_named(self):
+        from prescan_render import three_state_html
+        html = three_state_html("robust")
+        # The chosen circle is filled; the other two are outlines.
+        self.assertEqual(html.count("data-active=\"1\""), 1)
+        self.assertEqual(html.count("data-active=\"0\""), 2)
+
+    def test_every_band_name_the_data_actually_uses_resolves(self):
+        """robustness stores robust/mid/fragile, the scorecard green/yellow/red,
+        and the verdict borderline. One vocabulary in, one widget out."""
+        from prescan_render import three_state_html
+        for name in ("robust", "mid", "fragile", "green", "yellow", "red",
+                     "borderline", "strong", "weak"):
+            html = three_state_html(name)
+            self.assertEqual(html.count('data-active="1"'), 1, name)
+
+    def test_an_unknown_band_lights_nothing(self):
+        """Better three grey circles than confidently lighting the wrong one —
+        an unrated axis is not the same as a middling one."""
+        from prescan_render import three_state_html
+        html = three_state_html("not-a-band")
+        self.assertEqual(html.count('data-active="1"'), 0)
+
+    def test_the_labels_can_be_renamed_per_question(self):
+        """"Weak/Mixed/Strong" suits financial health; a moat is
+        "None/Narrow/Wide". Same widget, question-specific words."""
+        from prescan_render import three_state_html
+        html = three_state_html("robust", labels=("None", "Narrow", "Wide"))
+        self.assertIn("Wide", html)
+        self.assertNotIn("STRONG", html.upper().replace("WIDE", ""))
+
+    def test_it_escapes_what_it_is_given(self):
+        from prescan_render import three_state_html
+        html = three_state_html("mid", labels=("<b>x</b>", "b", "c"))
+        self.assertNotIn("<b>x</b>", html)
