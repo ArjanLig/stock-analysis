@@ -184,7 +184,27 @@ def test_render_robustness_table_html_contains_axes_and_verdict():
     assert "ROCE" in html
     assert "Management" in html
     assert "BORDERLINE" in html.upper()
-    assert html.count('class="rb-row"') == 6
+    # Six axes plus the headline verdict, each with exactly one state lit.
+    # Counting the lit states rather than a CSS class: the class is a styling
+    # detail that changed with the layout, the count is the assertion that
+    # every axis actually rendered its assessment.
+    assert html.count('data-active="1"') == 7
+    assert html.count('data-active="0"') == 14
+    assert "net cash" in html          # net_debt -0.4x rendered, not raw
+    assert "30% ROCE" in html
+
+
+def test_render_robustness_table_leaves_an_unrated_axis_dark():
+    """A missing band must light nothing. Lighting the middle circle would
+    turn "not assessed" into "middling", which is a claim the data does not
+    make."""
+    import streamlit_app
+    cfg = {"robustness": {"verdict": "robust",
+                          "axes": {"roce": {"band": "robust", "value": 30.0}}}}
+    html = streamlit_app._render_robustness_table(
+        cfg, theme={"text": "#111", "text_muted": "#888"})
+    # Verdict + the one rated axis; the other five stay dark.
+    assert html.count('data-active="1"') == 2
 
 
 # ── Phase-aware ROCE gate (2026-06-16) ──────────────────────────────────────
