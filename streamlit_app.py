@@ -3223,7 +3223,8 @@ st.markdown(f"""
     }}
 
     /* Deployment card — single continuous white block */
-    .st-key-deployment_block {{
+    .st-key-deployment_block,
+    .st-key-screener_block {{
         background: var(--card);
         border-radius: 24px;
         border-top: 3px solid var(--accent);
@@ -12122,95 +12123,97 @@ elif page == "Screener":
 
     _INDEX_LABELS = {"sp500": "S&P 500", "nasdaq100": "Nasdaq 100",
                      "dow30": "Dow 30"}
-    _pick = st.segmented_control(
-        "Index", ["All", *(_INDEX_LABELS[k] for k in _INDEX_LABELS)],
-        default="All", key="screener_index", label_visibility="collapsed",
-    ) or "All"
-    _pick_key = next((k for k, v in _INDEX_LABELS.items() if v == _pick), None)
+    _screener_card = st.container(key="screener_block")
+    with _screener_card:
+        _pick = st.segmented_control(
+            "Index", ["All", *(_INDEX_LABELS[k] for k in _INDEX_LABELS)],
+            default="All", key="screener_index", label_visibility="collapsed",
+        ) or "All"
+        _pick_key = next((k for k, v in _INDEX_LABELS.items() if v == _pick), None)
 
-    passes = [r for r in _rows if r.get("passes")
-              and (_pick_key is None or _pick_key in (r.get("indices") or []))]
-    passes.sort(key=lambda r: -(r.get("avg_roce") or 0))
+        passes = [r for r in _rows if r.get("passes")
+                  and (_pick_key is None or _pick_key in (r.get("indices") or []))]
+        passes.sort(key=lambda r: -(r.get("avg_roce") or 0))
 
-    # Names already on the watchlist get marked rather than filtered: seeing a
-    # familiar name pass is confirmation, and its absence would read as a miss.
-    _wl = set()
-    try:
-        _wl = {e["ticker"].upper() for e in
-               list_watchlist(_sb_client,
-                              user_id=(st.session_state.get("user") or {}).get("id"))}
-    except Exception as _e:
-        logger.debug("Watchlist unavailable for screener marks: %s", _e)
+        # Names already on the watchlist get marked rather than filtered: seeing a
+        # familiar name pass is confirmation, and its absence would read as a miss.
+        _wl = set()
+        try:
+            _wl = {e["ticker"].upper() for e in
+                   list_watchlist(_sb_client,
+                                  user_id=(st.session_state.get("user") or {}).get("id"))}
+        except Exception as _e:
+            logger.debug("Watchlist unavailable for screener marks: %s", _e)
 
-    if not passes:
-        st.info("No names pass in this index.")
-    else:
-        _th = (f'padding:7px 10px;text-align:right;color:{T["text_muted"]};'
-               f'font-weight:600;white-space:nowrap')
-        _td = ('padding:7px 10px;text-align:right;white-space:nowrap;'
-               'font-variant-numeric:tabular-nums')
-        _bd = f'border-top:1px solid {T["divider"]}'
-        body = ""
-        for r in passes:
-            _logo = _logo_img(r["ticker"], None, "",
-                              "width:20px;height:20px;border-radius:50%;"
-                              "object-fit:cover;vertical-align:middle;"
-                              "margin-right:7px")
-            _mark = (' <span title="on your watchlist" style="font-size:0.7rem">'
-                     '&#9733;</span>' if r["ticker"].upper() in _wl else "")
-            _nd = r.get("net_debt")
-            body += (
-                f'<tr>'
-                f'<td style="{_td};{_bd};text-align:left">{_logo}'
-                f'<b>{r["ticker"]}</b>{_mark}</td>'
-                f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]};'
-                f'max-width:230px;overflow:hidden;text-overflow:ellipsis">'
-                f'{r.get("name") or ""}</td>'
-                f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]}">'
-                f'{r.get("sector") or ""}</td>'
-                f'<td style="{_td};{_bd};font-weight:600">'
-                f'{r["avg_roce"]:.0f}%</td>'
-                f'<td style="{_td};{_bd};color:{T["text_muted"]}">'
-                f'{r.get("years_used", 0)}y</td>'
-                f'<td style="{_td};{_bd}">'
-                f'${-_nd:,.0f}M</td>'
-                f'</tr>'
+        if not passes:
+            st.info("No names pass in this index.")
+        else:
+            _th = (f'padding:7px 10px;text-align:right;color:{T["text_muted"]};'
+                   f'font-weight:600;white-space:nowrap')
+            _td = ('padding:7px 10px;text-align:right;white-space:nowrap;'
+                   'font-variant-numeric:tabular-nums')
+            _bd = f'border-top:1px solid {T["divider"]}'
+            body = ""
+            for r in passes:
+                _logo = _logo_img(r["ticker"], None, "",
+                                  "width:20px;height:20px;border-radius:50%;"
+                                  "object-fit:cover;vertical-align:middle;"
+                                  "margin-right:7px")
+                _mark = (' <span title="on your watchlist" style="font-size:0.7rem">'
+                         '&#9733;</span>' if r["ticker"].upper() in _wl else "")
+                _nd = r.get("net_debt")
+                body += (
+                    f'<tr>'
+                    f'<td style="{_td};{_bd};text-align:left">{_logo}'
+                    f'<b>{r["ticker"]}</b>{_mark}</td>'
+                    f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]};'
+                    f'max-width:230px;overflow:hidden;text-overflow:ellipsis">'
+                    f'{r.get("name") or ""}</td>'
+                    f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]}">'
+                    f'{r.get("sector") or ""}</td>'
+                    f'<td style="{_td};{_bd};font-weight:600">'
+                    f'{r["avg_roce"]:.0f}%</td>'
+                    f'<td style="{_td};{_bd};color:{T["text_muted"]}">'
+                    f'{r.get("years_used", 0)}y</td>'
+                    f'<td style="{_td};{_bd}">'
+                    f'${-_nd:,.0f}M</td>'
+                    f'</tr>'
+                )
+            st.markdown(
+                f'<table style="width:100%;border-collapse:collapse;font-size:0.85rem">'
+                f'<thead><tr>'
+                f'<th style="{_th};text-align:left">Ticker</th>'
+                f'<th style="{_th};text-align:left">Company</th>'
+                f'<th style="{_th};text-align:left">Sector</th>'
+                f'<th style="{_th}">Avg ROCE</th>'
+                f'<th style="{_th}">History</th>'
+                f'<th style="{_th}">Net cash</th>'
+                f'</tr></thead><tbody>{body}</tbody></table>',
+                unsafe_allow_html=True,
             )
-        st.markdown(
-            f'<table style="width:100%;border-collapse:collapse;font-size:0.85rem">'
-            f'<thead><tr>'
-            f'<th style="{_th};text-align:left">Ticker</th>'
-            f'<th style="{_th};text-align:left">Company</th>'
-            f'<th style="{_th};text-align:left">Sector</th>'
-            f'<th style="{_th}">Avg ROCE</th>'
-            f'<th style="{_th}">History</th>'
-            f'<th style="{_th}">Net cash</th>'
-            f'</tr></thead><tbody>{body}</tbody></table>',
-            unsafe_allow_html=True,
-        )
-        st.caption(f"{len(passes)} name(s) · &#9733; = on your watchlist")
+            st.caption(f"{len(passes)} name(s) · &#9733; = on your watchlist")
 
-    # What fell out and why — a screen that hides its rejects looks stricter
-    # than it is.
-    with st.expander("What was excluded"):
-        _reason_labels = {
-            "roce_below_gate": "Average ROCE under 20%",
-            "net_debt": "Net debt on the latest balance sheet",
-            "insufficient_history": "Fewer than five usable years",
-            "debt_tag_suspect": "Debt figure looks like a broken tag — "
-                                "excluded rather than trusted",
-            "no_balance_sheet": "No cash figure to judge net debt with",
-        }
-        for k, n in sorted(_sum.get("reasons", {}).items(), key=lambda x: -x[1]):
-            label = _reason_labels.get(k, k)
-            if k.startswith("fetch"):
-                label = "EDGAR fetch failed"
-            st.markdown(f"- **{n}** × {label}")
-        st.caption(
-            "insufficient_history also catches foreign filers whose IFRS "
-            "statements don't parse — they report fewer usable years, not "
-            "worse businesses."
-        )
+        # What fell out and why — a screen that hides its rejects looks stricter
+        # than it is.
+        with st.expander("What was excluded"):
+            _reason_labels = {
+                "roce_below_gate": "Average ROCE under 20%",
+                "net_debt": "Net debt on the latest balance sheet",
+                "insufficient_history": "Fewer than five usable years",
+                "debt_tag_suspect": "Debt figure looks like a broken tag — "
+                                    "excluded rather than trusted",
+                "no_balance_sheet": "No cash figure to judge net debt with",
+            }
+            for k, n in sorted(_sum.get("reasons", {}).items(), key=lambda x: -x[1]):
+                label = _reason_labels.get(k, k)
+                if k.startswith("fetch"):
+                    label = "EDGAR fetch failed"
+                st.markdown(f"- **{n}** × {label}")
+            st.caption(
+                "insufficient_history also catches foreign filers whose IFRS "
+                "statements don't parse — they report fewer usable years, not "
+                "worse businesses."
+            )
 
 
 # ══════════════════════════════════════════════════════
