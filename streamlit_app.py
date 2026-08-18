@@ -1163,44 +1163,36 @@ STEP 4: Check Revenue Growth (for positive Operating Income)
 - Why These Fit: Traditional growth valuation methods are unreliable for declining businesses due to deteriorating fundamentals.
 - Avoid: Growth multiples, forward earnings, DCF
 
-## OUTPUT TEMPLATE - ONLY OUTPUT WHAT'S BELOW THIS LINE
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
 
-# 📊 Business Phase Analysis: [Company Name]
+# TEMPLATE (output exactly this shape, nothing before or after)
 
-| Category | Value |
-|----------|-------|
-| Current Stage | [Emoji] Phase [#]: [Name] |
-| Stage Confidence Level | ✅ High / ⚠️ Medium / ❌ Low |
-| Evidence | [For Phase 3: • Operating Margin: [X]%]<br>[For Other Phases: • Operating Income: $[X]M ([increasing/decreasing/positive/negative])]<br>• Revenue Growth: [X]%<br>• Capital Returns: [Yes/No with specifics] |
-| Most Useful Valuation Method(s) | [List from approved methods for this phase only] |
-| Why These Methods Fit | [Use exact pre-approved rationale for this phase] |
-| Methods to Avoid | [List other common valuation methods not approved for this phase] |
+**Phase: [Loss-making / Growth / Margin expansion / Profitable growth / Capital return / Decline] · [N]/6**
 
-## 👉 Here's what this means for investors:
+[ONE sentence. What the company is doing with its money right now, and how you
+know. Not a definition of the phase.]
 
-- What they're doing: [Simple explanation of company's focus at this stage]
-- Why it matters: [What this tells us about the company's health]
-- How to value it: Focus on [key metrics for this phase] using methods like [primary valuation method]
-- What to watch: [Key indicator for this phase - e.g., improving losses, margin expansion, capital returns]
+- **[Two-to-three word label]**: [one line with the figure that places it in
+  this phase — operating income, revenue growth, buybacks, dividend]
+- **[Two-to-three word label]**: [one line]
+- **[Two-to-three word label]**: [one line]
 
-## 🔗 Sources
-- [[Company] Q[#] [YYYY] 10-Q](actual SEC URL here)
-- Business Growth Cycle Visual
+**What moves it on:** [one line — the observable change that would put it in
+the next phase, or back into the previous one. Name the metric and the level.]
 
-STOP HERE - DO NOT ADD ANY ADDITIONAL SECTIONS, CALCULATIONS, OR COMMENTARY
+## Sources
+[1] Source - domain.com
 
-## BEHAVIORAL GUARDRAILS
-
-- Output discipline: Generate ONLY the output template. No additional sections, calculations, or explanations beyond what's specified.
-- Data integrity: Use only SEC filings or official company IR sources. Never supplement with third-party data.
-- Classification rigor: Apply the decision tree mechanically without interpretation. The rules are absolute.
-- Confidence honesty: Mark confidence as Low if data is incomplete or ambiguous. Don't pretend certainty.
-- Simple language: Write for a new investor. Avoid jargon and overly technical terms.
-- Conciseness: Keep explanations brief and scannable. Investors should understand the phase in 30 seconds.
-- No speculation: Base classification only on reported financial metrics, not forward guidance or management commentary.
-- Error handling: If unable to retrieve data, state clearly what's missing rather than guessing.
-- Formatting consistency: Always use the exact template structure. Don't add or remove rows from the table.
-- Source transparency: Always provide the specific filing used (10-Q Q# YYYY or 10-K FY YYYY).
+# RULES
+- The number is the phase itself (1-6), not a rating — the name goes
+  before it, the number after, so neither is written twice.
+- Valuation method belongs in the bullets only if the phase changes which one
+  applies. Do not restate the DCF's job.
 """,
     },
     {
@@ -1260,59 +1252,35 @@ Answer these questions in plain English, with citations:
 6. **Can it raise prices?** (Evidence from margins, pricing commentary, risk factors)
 7. **What happens in a recession?** (Cyclicality, past performance, management warnings)
 
-## OUTPUT TEMPLATE
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
 
-# 📊 Business Analysis: [Company Name] ([Ticker])
+# TEMPLATE (output exactly this shape, nothing before or after)
 
-## 🏢 Company Overview
+**Business: [Simple 🟢 / Understandable 🟡 / Opaque 🔴] · [how it earns, in two or three words]**
 
-### 🎯 What does the company do?
-[Answer here]
+[ONE sentence. What you buy when you buy this share — the product, the payer,
+and the geography. Someone who has never heard of the company should be able to
+repeat it.]
 
-### 💰 How does it make money?
-[Answer with revenue streams listed with percentages]
-- [Largest segment]: $XXB (XX% of revenue)
-- [Second segment]: $XXB (XX% of revenue)
-- [Third segment]: $XXB (XX% of revenue)
-- [Continue for all significant segments]
+- **Revenue Mix**: [the segments or geographies that matter, with their share]
+- **[Two-to-three word label]**: [pricing power, repeat purchase, or whatever
+  actually drives the economics — with the number that shows it]
+- **[Two-to-three word label]**: [one line]
 
-### 👥 Who are its customers?
-[Answer here]
+**In a downturn:** [one line — what happens to this business when customers
+spend less, with evidence from a past cycle if there is one.]
 
-### 🌍 Where does it operate?
-[Answer with geographic breakdown if multiple regions]
-- [Region 1]: XX% of revenue
-- [Region 2]: XX% of revenue
-- [Region 3]: XX% of revenue
-- [Continue for all significant regions]
+## Sources
+[1] Source - domain.com
 
-## 🔄 Business Dynamics
-
-### 🛒 How often do customers buy?
-[Answer here]
-
-### 📈 Can it raise prices?
-[Answer here with evidence]
-
-### 📉 What happens in a recession?
-[Answer here with historical evidence if available]
-
-## 🔗 Sources
-[List each source numbered and formatted as:]
-[1] Source Name
-[2] Source Name
-[3] Source Name
-[4] Source Name
-[5] Source Name
-[Continue with all sources used]
-
-## BEHAVIORAL GUARDRAILS
-- Plain-English summary, no jargon (smart 8th grader level)
-- Every claim must have a citation
-- Always prioritize the company's own 10-K wording first
-- Keep answers concise but clear
-- Use bullet points for revenue and geographic breakdowns
-- Include percentages where available
+# RULES
+- "Simple" means you could explain it to someone at dinner. "Opaque" means the
+  filings do not let you see how the money is made — say which part is dark.
 """,
     },
     {
@@ -1474,89 +1442,36 @@ State which documents found: "Analyzing [Company] using 10-K from [date], 10-Q f
 - 🔴 = Weak: Limited or no evidence
 - ⚫ = Not Applicable: No evidence found
 CRITICAL: Only evaluate the 7 specified drivers. Do NOT add bonus categories or additional drivers.
-## OUTPUT TEMPLATE
-# 🚀 Growth Drivers Analysis: [Company Name] ([Ticker])
-## 📊 Executive Summary
-**Primary Growth Strategy:** [New Customers / Existing Customers / Balanced]
-**Top Drivers:** [List 2-3 strongest drivers]
-**Key:** 🟢 Strong | 🟡 Moderate | 🔴 Weak | ⚫ Not Applicable
----
-## 👥 NEW CUSTOMER ACQUISITION
-### 📢 Marketing & Sales Investment
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Specific metric, e.g., "Sales expense up 23% YoY to $2.3B"]
-- **Confidence:** [High/Medium/Low based on data recency]
-### 🌐 New Distribution Channels
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Example: "Launched D2C platform, added 500 retail partners"]
-- **Confidence:** [High/Medium/Low]
-### 🗺️ Geographic/Market Expansion
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Example: "Entered 3 new European markets, international revenue +45%"]
-- **Confidence:** [High/Medium/Low]
-### 🤝 Acquisitions
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Example: "Acquired 2 companies for $1.2B, adding 2M customers"]
-- **Confidence:** [High/Medium/Low]
----
-## 💰 EXISTING CUSTOMER EXPANSION
-### 📈 Pricing Power
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Example: "ASP increased 8%, gross margins expanded 200bps"]
-- **Confidence:** [High/Medium/Low]
-### 🛍️ New Products/Services
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Example: "Launched 5 add-on services, attach rate now 35%"]
-- **Confidence:** [High/Medium/Low]
-### 🔄 Customer Retention
-- **Strength:** [🟢/🟡/🔴/⚫]
-- **Evidence:** [Example: "Net retention 115%, churn decreased to 5%"]
-- **Confidence:** [High/Medium/Low]
----
-## 🎯 Strategic Assessment
-### Primary Drivers (Strongest)
-1. **[Driver Name]**
-   - Why it's primary: [Brief explanation]
-   - Key metric: [Most important data point]
-2. **[Driver Name]**
-   - Why it's primary: [Brief explanation]
-   - Key metric: [Most important data point]
-### Secondary Drivers (Moderate strength)
-- **[Driver Name]**: [One-line explanation]
-- **[Driver Name]**: [One-line explanation]
-### Untapped Opportunities
-- **[Driver Name]**: [Why company isn't leveraging this]
----
-## 📋 Growth Driver Matrix
-### New Customers
-| Growth Driver        | Strength       | Evidence Quality       | Trend    |
-|---------------------|----------------|------------------------|----------|
-| Marketing & Sales   | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
-| New Distribution    | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
-| Market Expansion    | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
-| Acquisitions        | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
-### Existing Customers Spend More
-| Growth Driver        | Strength       | Evidence Quality       | Trend    |
-|---------------------|----------------|------------------------|----------|
-| Pricing Power       | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
-| New Products        | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
-| Retention           | [🟢/🟡/🔴/⚫] | [Strong/Moderate/Weak] | [↗️/→/↘️] |
----
-## 🔗 Sources
-[1] [Company] 10-K [Date] - sec.gov
-[2] [Company] 10-Q [Quarter] - sec.gov
-[3] [Source Name] - domain.com
-[Continue with all sources]
-## BEHAVIORAL GUARDRAILS
-- CRITICAL: Only evaluate the 7 specified drivers - do NOT add bonus categories
-- Use bullet points for all driver evaluations (not paragraphs)
-- Assess strength not scores - this is qualitative not quantitative
-- Prioritize recent data (last 12 months) for strength assessment
-- Default to ⚫ (Not Applicable) if no evidence found
-- Use plain English, accessible to beginner investors
-- Include specific metrics/percentages when available
-- State confidence level based on data quality/recency
-- Both list and matrix views for different reader preferences
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
+
+# TEMPLATE (output exactly this shape, nothing before or after)
+
+**Runway: [Long ↗️ / Moderate ➡️ / Short ↘️] · [0-5]/5**
+
+[ONE sentence. Where the next decade of growth comes from — new customers, more
+per customer, or price — and which of those is doing the work now.]
+
+- **[Two-to-three word label]**: [the driver, with the growth rate or
+  penetration figure that makes it credible]
+- **[Two-to-three word label]**: [one line]
+- **[Two-to-three word label]**: [one line]
+
+**Biggest assumption:** [one line — the thing that must stay true for this
+runway to exist. If it is "the market keeps growing", say what happens if it
+does not.]
+
+## Sources
+[1] Source - domain.com
+
+# RULES
+- 0-1 = the business grows with GDP at best. 4-5 = a decade of reinvestment at
+  high returns is visible in today's disclosures, not in management's ambition.
+- An untapped opportunity the company is not pursuing is not runway. Say so.
 """,
     },
     {
@@ -1652,42 +1567,33 @@ Financial analyst evaluating company's phase-appropriate metrics using Red/Yello
 - **No Debt**: EBIT/Interest automatically Green
 - **Boundary Rule**: When exactly on threshold, use better rating
 ---
-## OUTPUT TEMPLATE - ONLY OUTPUT WHAT'S BELOW THIS LINE
-## 📊 Phase-Based Key Metrics: [Company Name] ([Ticker])
-## 📈 Phase [#] Scorecard
-| Metric     | Score    | Current Value | Target            | Trend    |
-| ---------- | -------- | ------------- | ----------------- | -------- |
-| [Metric 1] | 🔴/🟡/🟢 | [Value]       | [Green threshold] | ↗️/➡️/↘️ |
-| [Metric 2] | 🔴/🟡/🟢 | [Value]       | [Green threshold] | ↗️/➡️/↘️ |
-| [Metric 3] | 🔴/🟡/🟢 | [Value]       | [Green threshold] | ↗️/➡️/↘️ |
-| [Metric 4] | 🔴/🟡/🟢 | [Value]       | [Green threshold] | ↗️/➡️/↘️ |
-| [Metric 5] | 🔴/🟡/🟢 | [Value]       | [Green threshold] | ↗️/➡️/↘️ |
-## 💡 Overall Assessment
-### 🩺 Overall Phase Health: [🟢 Strong (4-5 Green metrics)/🟡 Mixed (2-3 Green metrics)/🔴 Weak (0-1 Green metrics)]
-#### 💪 Key Strengths:
-- [Top 1-2 Green metrics with brief explanation]
-#### ⚠️ Key Concerns:
-- [Top 1-2 Red metrics with brief explanation]
-#### 🚨 Critical Watch Point:
-- [Most important metric to monitor for phase transition]
-#### 📚 Sources
-- [List each source numbered and formatted as:]
-- [Company Name] [Filing Type] - [Date] - sec.gov
-- Source Name
-- Source Name
-- [Continue with all sources used]
----
-## BEHAVIORAL GUARDRAILS
-1. **Output discipline**: Generate ONLY the output template.
-2. **Strict Threshold Application**: Use ONLY the thresholds defined above
-3. **Data Integrity**: Use only SEC filings or official IR sources
-4. **Phase 6 Handling**: If Phase 6 requested, explain framework recommends avoiding
-5. **Missing Data**: Note "Data not available" rather than guessing
-6. **Estimates Optional**: If analyst estimates unavailable, note "N/A - Estimates not available"
-7. **Plain English**: Write for retail investors
-8. **Conservative Scoring**: When unclear, use worse rating EXCEPT at exact boundaries
-9. **Industry Agnostic**: Apply same thresholds to all industries
-10. **No Permission Loops**: Never ask "Would you like me to proceed?" If you have data, use it.
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
+
+# TEMPLATE (output exactly this shape, nothing before or after)
+
+**Metrics: [Strong 🟢 / Mixed 🟡 / Weak 🔴] · [N]/5**
+
+[ONE sentence. What the five phase metrics say together — not a list of them.]
+
+- **[Metric name]**: [value, target, and the direction it is moving]
+- **[Metric name]**: [value, target, direction]
+- **[Metric name]**: [value, target, direction]
+
+**Weakest metric:** [one line — the metric closest to failing its gate, with
+the level at which it would. This line is mandatory even when all five pass.]
+
+## Sources
+[1] Source - domain.com
+
+# RULES
+- The score is how many of the five phase metrics pass their gate.
+- The three bullets are the three that decide it: the failures first, then the
+  ones nearest their threshold. A metric passing comfortably needs no line.
 """,
     },
     {
@@ -1823,76 +1729,36 @@ Summarize 2–3 concise arguments for both the bullish and bearish cases.
  If fewer than 2 sources per side → note "Limited recent coverage."
 
 
-OUTPUT TEMPLATE – ONLY OUTPUT WHAT'S BELOW THIS LINE
-# 📊 Price & Sentiment Analysis: [Company Name] ([Ticker])
-Using price data from [Start Date] – [End Date] and news from the same period
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
 
-## 🧠 1) Overall Takeaway
-- **Why It Moved:** [2 sentences linking cause → effect → impact]
-- **Next Catalyst:** [Upcoming event / earnings date / major launch]
-- **Outlook (12M):** 🟢 Bullish / 🟡 Neutral / 🔴 Bearish — [Plain-English summary referencing bull/bear case]
+# TEMPLATE (output exactly this shape, nothing before or after)
 
-## 🧭 2) Sentiment Snapshot
+**Sentiment: [Bullish 🟢 / Mixed 🟡 / Bearish 🔴] · [what moved the price]**
 
-| Perspective | Tone | Confidence |
-|-------------|------|------------|
-| Analyst | 🟢 Bullish / 🟡 Neutral / 🔴 Bearish | High / Med / Low |
-| Investor | 🟢 Bullish / 🟡 Neutral / 🔴 Bearish | High / Med / Low |
-| Media | 🟢 Positive / 🟡 Mixed / 🔴 Negative | — |
+[ONE sentence. Why the price is where it is, and what the market is currently
+arguing about.]
 
-**Tone Summary (12 Months):** [1-sentence evolution of mood]
+- **Price Action**: [1-year move, distance from the 52-week range, versus the
+  index]
+- **Bull Case**: [the strongest argument the buyers are making, in one line]
+- **Bear Case**: [the strongest argument against, in one line]
 
-**Key Signals:**
-- [Signal] → [Brief summary + link]
-- [Signal] → [Brief summary + link]
+**Next catalyst:** [one line — the dated event that resolves part of the
+argument. "Earnings" is not enough; say which quarter and what to watch in it.]
 
-## 🐂 3) What the Bulls Say
-- [Reason 1]
-- [Reason 2]
-- [Reason 3]
+## Sources
+[1] Source - domain.com
 
-## 🐻 4) What the Bears Say
-- [Reason 1]
-- [Reason 2]
-- [Reason 3]
-
-## 💹 5) 1-Year Price Overview
-
-| Metric | Value |
-|--------|-------|
-| 1-Year Change | +X% / −X% |
-| 52-Week Range | $LOW – $HIGH |
-| Current Price | $XXX |
-| vs 200-Day MA | Above / Below / At |
-| vs S&P 500 | Outperform / Underperform by X pp |
-
-**Price Context:** [Short reason for current level]
-
-## 📚 6) Sources & Links
-1. Bloomberg / Reuters / FactSet / MarketBeat
-2. TipRanks / Yahoo Finance / CNBC
-3. Social / forum sentiment trackers
-4. Recent bull / bear commentary (≤ 90 days old)
-
-
-BEHAVIORAL GUARDRAILS
-Core Principles
-1. Use 8th-grade English.
-2. No fake links or made-up data.
-3. Separate fact from interpretation.
-4. Bold headers and tables for scan readability.
-5. Always include at least 2 bullish + 2 bearish arguments.
-Output Consistency
-- Follow the structure exactly.
-- Keep explanations concise, factual, and verifiable.
-- Do not include speculation or opinions.
-
-
-Quality Checks
-✓ Clear color-coded sentiment
- ✓ ≥ 2 bull + 2 bear points
- ✓ Valid, recent citations
- ✓ Neutral, factual tone
+# RULES
+- Sentiment describes the market's mood, not your verdict on the company. A
+  bearish tape on a good business is information, not a warning.
+- No price targets as a recommendation. Report the consensus as a fact if it
+  is relevant, and never as agreement.
 """,
     },
     {
@@ -1943,41 +1809,37 @@ Scale:
 - 🟢 **Anti-Fragile (Green):** Proprietary Context. The company owns unique, non-public data that AI needs to be effective. Two-sided networks or proprietary security databases cannot be easily replicated.
 - 🔴 **Fragile (Red):** Public Knowledge. The company relies on data that can be quickly migrated to a cheaper platform or scraped from the public web.
 
-## OUTPUT FORMAT
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
 
-# 🤖 SaaSpocalypse Resistance: [Company Name] ([Ticker])
+# TEMPLATE (output exactly this shape, nothing before or after)
 
-## Overview
-- **Overall Rating:** [🟢 Anti-Fragile / 🟡 Robust / 🔴 Fragile]
-- **Confidence:** High / Medium / Low
-- **Key Points:**
-  - [Bullet 1]
-  - [Bullet 2]
-  - [Bullet 3]
+**AI exposure: [Anti-fragile 🟢 / Resilient 🟡 / Exposed 🔴] · [N]/4**
 
-## Scorecard
+[ONE sentence. Whether AI is a tool this company uses, a threat to what it
+sells, or irrelevant to it — and why.]
 
-| Lens | Rating | Justification |
-|------|--------|---------------|
-| Liability Lens | [🟢/🟡/🔴] | [Brief reason] |
-| Business Model Lens | [🟢/🟡/🔴] | [Brief reason with current revenue mix] |
-| Physical World Lens | [🟢/🟡/🔴] | [Brief reason] |
-| Network Lens | [🟢/🟡/🔴] | [Brief reason] |
+- **[Lens name]**: [one line on the lens that decides it, with evidence]
+- **[Lens name]**: [one line]
+- **[Lens name]**: [one line]
 
-## ⚠️ Critical Failure Point
-[Identify the single biggest threat to this stock's longevity in an AI-first world.]
+**Where it would break:** [one line — the specific development that would turn
+this from resilient to exposed. Mandatory even for a physical-goods business:
+if nothing plausible exists, say what you looked for.]
 
-## 📚 Sources
-- [Specific filing(s) used, e.g. 10-K FY2024, 10-Q Q2 2025]
+## Sources
+[1] Source - domain.com
 
-## BEHAVIORAL GUARDRAILS
-- **Revenue Reality Check:** If a company's financial filings show that the vast majority of revenue is still seat-based, you MUST ignore management's "AI-first" marketing and rate the Business Model Lens as 🔴 Fragile.
-- **Confidence honesty:** Mark confidence as Low if data is incomplete or ambiguous. Don't pretend certainty.
-- **Simple language:** Write for a new investor. Avoid jargon and overly technical terms.
-- **Concise:** Keep explanations brief and scannable.
-- **No speculation:** Base classification only on reported financial metrics, not forward guidance.
-- **Formatting consistency:** Always use the exact template structure.
-- **Source transparency:** Always provide the specific filing used (10-Q Q# YYYY or 10-K FY YYYY).
+# RULES
+- The score is how many of the four lenses (liability, business model,
+  physical world, network) come back resilient.
+- Seat-based pricing on knowledge work is the exposure that matters. A company
+  selling units of a physical thing is not exposed just because it uses
+  software.
 """,
     },
     {
@@ -2018,64 +1880,37 @@ Read all the prior research below for this company and produce a concise, decisi
 
 ---
 
-## OUTPUT TEMPLATE
+Write for someone scanning ten of these. The verdict must be readable without
+reading the body; the body justifies it rather than restating it. EXACTLY three
+bullets, each carrying a figure or a filing fact — a bullet that could be
+swapped onto any company in the sector is a description, not a finding.
+No tables, no subsections. You still do the full analysis above; you report
+only what decides the answer.
 
-# 🎯 Prescan Verdict: [Company Name] ([Ticker])
+# TEMPLATE (output exactly this shape, nothing before or after)
 
-## ⭐ Verdict
-**[🟢 DEEP DIVE / 🟡 REVISIT / 🔴 PASS]** — Conviction: [High / Medium / Low]
+**Verdict: [Deep dive 🟢 / Revisit 🟡 / Pass 🔴] · [High / Medium / Low] conviction**
 
-- **DEEP DIVE:** Worth investing hours in full due diligence right now.
-- **REVISIT:** Not compelling enough now — park it and come back when something changes (valuation pullback, earnings confirmation, improving fundamentals, catalyst).
-- **PASS:** Move on; unlikely to be worth the time unless the thesis fundamentally changes.
+[ONE sentence thesis. What this company is and why it is or is not worth more
+work. This sentence is the one that gets quoted back — make it carry.]
 
-**One-line thesis:** [Single sentence capturing the core investment case.]
+- **Strongest point**: [one line, with the figure behind it]
+- **Biggest concern**: [one line, with the figure behind it]
+- **[Two-to-three word label]**: [the third thing that actually moves the
+  decision — not a filler strength]
 
-## 🧭 Key Findings
+**What would change this:** [one line — the observable event that flips the
+verdict, in either direction. Name the metric and the level.]
 
-### 💪 Strengths (top 3)
-1. **[Strength]** — [Brief evidence drawn from prior analyses, citing which one]
-2. **[Strength]** — [...]
-3. **[Strength]** — [...]
+## Sources
+[1] Source - domain.com
 
-### ⚠️ Concerns (top 3)
-1. **[Concern]** — [Brief evidence]
-2. **[Concern]** — [Brief evidence]
-3. **[Concern]** — [Brief evidence]
-
-## 📐 Quality Snapshot
-
-| Dimension | Score | Notes |
-|-----------|-------|-------|
-| Business Quality | 🟢/🟡/🔴 | [1-line] |
-| Moat Strength | 🟢/🟡/🔴 | [1-line] |
-| Growth Runway | 🟢/🟡/🔴 | [1-line] |
-| Financial Health | 🟢/🟡/🔴 | [1-line] |
-| Risk Profile | 🟢/🟡/🔴 | [1-line] |
-| AI Resilience | 🟢/🟡/🔴 | [1-line] |
-
-## 🎯 Recommended Next Step
-- **Action:** [Deep dive now / Add to revisit list / Skip + reasoning, 1-2 sentences]
-- **If REVISIT, what to wait for:** [Specific condition, e.g. "P/E below 25", "Q3 earnings", "margin stabilization"]
-
-## 🚨 Thesis Triggers
-- **DEEP DIVE → PASS:** [Single most important development that would invalidate the thesis]
-- **REVISIT → DEEP DIVE:** [Single most important development that would unlock value]
-
-## 📋 Watch List
-3 specific metrics or events to monitor over the next 12 months:
-1. [Metric/event]
-2. [Metric/event]
-3. [Metric/event]
-
-## BEHAVIORAL GUARDRAILS
-- Synthesize, don't repeat. Reference the prior analyses, but do not re-explain them.
-- Be decisive: pick BUY, HOLD, or AVOID. No fence-sitting.
-- If a prior analysis is missing or empty, note it explicitly and lower confidence.
-- Use plain English (smart 8th grader).
-- Keep the output scannable: bullet points and tables, no walls of text.
-- Cite which prior analysis supports each claim (e.g. "per Moat Analysis", "per Risk Analysis").
-- Do NOT fabricate data — only use what the prior analyses contain.
+# RULES
+- Say nothing about whether the shares are cheap. The DCF owns that judgement,
+  and a prose opinion next to a computed fair value is the one that gets
+  quoted. Verdict means "is this worth the work", not "is this a buy".
+- Conviction is about the evidence, not the outcome: Low conviction on a Deep
+  dive is a legitimate and useful answer.
 """,
     },
     {
