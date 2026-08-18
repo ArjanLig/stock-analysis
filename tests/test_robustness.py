@@ -341,3 +341,69 @@ def test_build_table_phase5_unchanged_strict_gate():
     table = robustness.build_table(headline, ai_notes)
     assert table["axes"]["roce"]["band"] == "fragile"
     assert table["verdict"] == "fragile"  # ROCE is a deal-breaker
+
+
+# ── Scorecard rendering (2026-08-18) ────────────────────────────────────────
+
+def _scorecard_data(**kw):
+    data = {
+        "phase": {"number": 5, "name": "Capital Return"},
+        "all_phases": {
+            "business_description": {"rating": "green", "note": "simple"},
+            "moat": {"rating": "yellow", "note": "narrow"},
+            "long_term_potential": {"rating": "green", "note": "runway"},
+        },
+        "key_metrics": [
+            {"name": "Revenue CAGR", "rating": "green", "value": "20%"},
+            {"name": "FCF / NI", "rating": "red", "value": "76%"},
+        ],
+        "execution_risk": {"rating": "yellow", "note": "medium"},
+        "verdict": "deep_dive",
+        "summary": "Three sentences.",
+    }
+    data.update(kw)
+    return data
+
+
+_THEME = {"text": "#111", "text_muted": "#888"}
+
+
+def test_scorecard_lights_one_state_per_rated_row():
+    """Verdict, three quality rows, two metrics, execution risk — seven rows,
+    seven lit states, fourteen dark."""
+    import streamlit_app
+    html = streamlit_app._render_scorecard(_scorecard_data(), _THEME, "X", "Co")
+    assert html.count('data-active="1"') == 7
+    assert html.count('data-active="0"') == 14
+
+
+def test_scorecard_verdict_maps_onto_the_shared_scale():
+    """pass/revisit/deep_dive are the same three-point scale as everything
+    else, so they reuse the selector rather than a bespoke pill."""
+    import streamlit_app
+    for verdict, label in (("pass", "Pass"), ("revisit", "Revisit"),
+                           ("deep_dive", "Deep dive")):
+        html = streamlit_app._render_scorecard(
+            _scorecard_data(verdict=verdict), _THEME, "X", "Co")
+        assert label in html
+        assert html.count('data-active="1"') == 7
+
+
+def test_scorecard_with_an_unknown_verdict_lights_nothing_for_it():
+    """A scorecard saved before the verdict key existed must not be shown as a
+    Revisit — that is a call nobody made."""
+    import streamlit_app
+    html = streamlit_app._render_scorecard(
+        _scorecard_data(verdict=""), _THEME, "X", "Co")
+    assert html.count('data-active="1"') == 6
+
+
+def test_scorecard_renders_no_valuation_row():
+    """Valuation left the pre-scan; a stored block must not resurface here."""
+    import streamlit_app
+    data = _scorecard_data()
+    data["valuation"] = {"primary": {"name": "P/E", "rating": "yellow",
+                                     "note": "Fairly valued"}}
+    html = streamlit_app._render_scorecard(data, _THEME, "X", "Co")
+    assert "Fairly valued" not in html
+    assert html.count('data-active="1"') == 7

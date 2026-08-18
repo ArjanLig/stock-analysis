@@ -921,36 +921,30 @@ def _render_scorecard(data: dict, theme: dict, ticker: str, company: str) -> str
     pill. Flat (transparent) — the hero-card expander provides the white card."""
     import html as _html
 
+    from prescan_render import three_state_html
+
     text = theme.get("text", "#111")
     muted = theme.get("text_muted", "#888")
     card = theme.get("card", "#fff")
     border_light = theme.get("border_light", "#e8e8ed")
-    band_color = {"red": "#e07a5f", "yellow": "#f2cc8f", "green": "#81b29a"}
-    band_fill = {"green": "#d9e7dd", "yellow": "#fbedd2", "red": "#f7dfd7"}
-    band_pos = {"green": 12.0, "yellow": 50.0, "red": 88.0}
     font = ("'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', "
             "Arial, sans-serif")
-    lw, dw, tw = 172, 10, 120
+    lw = 172
 
     def _row(label, rating, note):
-        rating = (rating or "").lower()
-        color = band_color.get(rating, muted)
-        left = band_pos.get(rating, 50.0)
+        # Three circles, not a marker on a gradient: red/yellow/green are three
+        # states, and a continuous track invited reading a position between
+        # them that the rating does not carry.
         note = _html.escape(note or "")
         label = _html.escape(label or "")
         return (
-            f'<div style="display:flex;align-items:center;gap:12px;height:30px;'
-            f'font-size:0.82rem">'
+            f'<div style="display:flex;align-items:center;gap:14px;'
+            f'padding:6px 0;font-size:0.82rem">'
             f'<div style="width:{lw}px;flex:none;color:{text};white-space:nowrap;'
             f'overflow:hidden;text-overflow:ellipsis">{label}</div>'
-            f'<span style="width:{dw}px;height:{dw}px;border-radius:50%;'
-            f'background:{color};flex:none"></span>'
-            f'<div style="width:{tw}px;flex:none;position:relative;height:6px;'
-            f'border-radius:980px;background:linear-gradient(90deg,'
-            f'{band_fill["green"]},{band_fill["yellow"]},{band_fill["red"]})">'
-            f'<div style="position:absolute;left:{left:.0f}%;top:50%;width:12px;'
-            f'height:12px;border-radius:50%;background:{color};border:2px solid '
-            f'{card};transform:translate(-50%,-50%)"></div></div>'
+            f'<div style="flex:none">'
+            + three_state_html(rating, ("", "", ""), size=17, theme=theme)
+            + f'</div>'
             f'<div title="{note}" style="flex:1;min-width:0;color:{muted};'
             f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{note}</div>'
             f'</div>'
@@ -986,22 +980,27 @@ def _render_scorecard(data: dict, theme: dict, ticker: str, company: str) -> str
     # quoted. Existing scorecards may still carry the key; it is simply not
     # rendered.
 
+    # Verdict as the large selector, same treatment as the robustness card:
+    # it is the answer, and the rows below it are the working. The three
+    # verdicts map onto the same scale everything else uses.
     verdict = (data.get("verdict") or "").lower()
-    vmap = {"pass": ("PASS", "red"), "revisit": ("REVISIT", "yellow"),
-            "deep_dive": ("DEEP DIVE", "green")}
-    vlabel, vk = vmap.get(verdict, ("—", "yellow"))
-    vcolor, vfill = band_color[vk], band_fill[vk]
-    pill = (f'<span style="padding:3px 13px;border-radius:980px;background:{vfill};'
-            f'border:1px solid {vcolor};color:{text};font-weight:600;'
-            f'font-size:0.7rem;letter-spacing:0.06em">{vlabel}</span>')
+    _vband = {"pass": "red", "revisit": "yellow", "deep_dive": "green"}.get(verdict)
     phase = data.get("phase", {}) or {}
     phase_label = _html.escape(f"{company} ({ticker}) · Phase "
                                f"{phase.get('number', '?')} · "
                                f"{phase.get('name', '')}")
-    header = (f'<div style="display:flex;justify-content:space-between;'
-              f'align-items:center;margin-bottom:2px"><span style="color:{muted};'
-              f'font-size:0.7rem;font-weight:600;letter-spacing:0.04em">'
-              f'{phase_label}</span>{pill}</div>')
+    header = (
+        f'<div style="background:{theme.get("bg_secondary", "#f4f2ee")};'
+        f'border-radius:16px;padding:18px 20px 14px;margin-bottom:16px">'
+        f'<div style="text-align:center;font-size:0.7rem;font-weight:700;'
+        f'letter-spacing:0.09em;color:{muted};text-transform:uppercase;'
+        f'margin-bottom:14px">Is this worth the work?</div>'
+        + three_state_html(_vband, ("Pass", "Revisit", "Deep dive"),
+                           size=48, theme=theme)
+        + f'<div style="text-align:center;margin-top:14px;color:{muted};'
+        f'font-size:0.7rem;font-weight:600;letter-spacing:0.04em">'
+        f'{phase_label}</div></div>'
+    )
 
     summary = (data.get("summary") or "").strip()
     foot = ""
