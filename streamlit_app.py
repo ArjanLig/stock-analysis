@@ -62,6 +62,7 @@ from portfolio_metrics import (compute_deployment, display_basis, has_option_leg
                                valuation_stance, lots_cover,
                                average_buy_price, hindsight,
                                DEFAULT_TARGET_POS_PCT)
+from prescan_render import parse_verdict_section, gauge_fraction
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -8061,7 +8062,11 @@ def _dcf_editor(ticker):
 
                     if _content.strip():
                         with st.container(key=f"ai_out_{_li}"):
-                            st.markdown(_content)
+                            _card = _verdict_card_html(_content, _title)
+                            if _card:
+                                st.markdown(_card, unsafe_allow_html=True)
+                            else:
+                                st.markdown(_content)
                     else:
                         st.caption("_No output yet. Click ▶ Run or paste manually via Edit._")
                     with st.container(key=f"prescan_card_{_li}_edit"), \
@@ -8944,6 +8949,103 @@ def _to_time_col(values):
     """
     parsed = pd.to_datetime(values, format="mixed", utc=True)
     return parsed.dt.tz_localize(None)
+
+
+def _verdict_card_html(content, title=""):
+    """A summary card for a verdict-shaped pre-scan section, or None.
+
+    None means "not in that shape" — sections written under the older, longer
+    templates fall through to plain markdown rather than being squeezed into a
+    card that would only half fill.
+    """
+    v = parse_verdict_section(content)
+    if not v:
+        return None
+
+    # Colour reads the verdict, not the number, because the two scales run
+    # opposite ways: a high moat score is good and a high risk rating is not.
+    _low = title.lower()
+    _label = v["label"].lower()
+    if "risk" in _low:
+        tone = {"low": T["accent"], "medium": "#d9a441", "high": T["red"]}.get(
+            _label, T["text_muted"])
+    else:
+        tone = {"wide": T["accent"], "narrow": "#d9a441", "none": T["red"]}.get(
+            _label, T["accent"])
+
+    # The dial. An arc rather than a bar because the score is a position on a
+    # scale, not a quantity — and a word where there is no number, since Risk
+    # has three levels and a 0-5 dial would invent precision it does not have.
+    if v["score"] is not None:
+        _r, _c = 46, 52
+        _circ = 2 * 3.14159 * _r
+        _fill = gauge_fraction(v["score"], v["out_of"]) * _circ * 0.75
+        _score_txt = f'{v["score"]:g}'
+        dial = (
+            f'<svg viewBox="0 0 104 104" style="width:104px;height:104px">'
+            f'<circle cx="{_c}" cy="{_c}" r="{_r}" fill="none" '
+            f'stroke="rgba(255,255,255,0.16)" stroke-width="9" '
+            f'stroke-dasharray="{_circ * 0.75:.1f} {_circ}" stroke-linecap="round" '
+            f'transform="rotate(135 {_c} {_c})"/>'
+            f'<circle cx="{_c}" cy="{_c}" r="{_r}" fill="none" stroke="{tone}" '
+            f'stroke-width="9" stroke-dasharray="{_fill:.1f} {_circ}" '
+            f'stroke-linecap="round" transform="rotate(135 {_c} {_c})"/>'
+            f'<text x="{_c}" y="{_c + 10}" text-anchor="middle" fill="#fff" '
+            f'font-size="30" font-weight="700">{_score_txt}</text></svg>'
+        )
+    else:
+        dial = (f'<div style="font-size:1.6rem;font-weight:700;color:{tone};'
+                f'padding:22px 0">{_html_escape(v["label"])}</div>')
+
+    _cap = _html_escape(v["label"].upper() if v["score"] is not None
+                        else " · ".join(v["qualifiers"]) or "")
+    bullets = "".join(
+        f'<li style="margin-bottom:10px;line-height:1.5">'
+        f'<b>{_html_escape(b["label"])}</b>'
+        f'{": " + _html_escape(b["text"]) if b["text"] else ""}</li>'
+        for b in v["bullets"]
+    )
+    footer = ""
+    if v["footer_text"]:
+        footer = (
+            f'<div style="margin-top:14px;padding-top:12px;'
+            f'border-top:1px solid {T["divider"]};font-size:0.85rem;'
+            f'color:{T["text_muted"]}">'
+            + (f'<b style="color:{T["text"]}">{_html_escape(v["footer_label"])}:</b> '
+               if v["footer_label"] else "")
+            + _html_escape(v["footer_text"]) + '</div>'
+        )
+    quals = ""
+    if v["qualifiers"] and v["score"] is not None:
+        quals = (f'<span style="font-size:0.8rem;color:{T["text_muted"]};'
+                 f'margin-left:8px">{_html_escape(" · ".join(v["qualifiers"]))}</span>')
+
+    return (
+        f'<div style="background:{T["bg_secondary"]};border-radius:16px;'
+        f'padding:20px 22px">'
+        f'<p style="margin:0 0 16px 0;font-size:1.02rem;line-height:1.55;'
+        f'color:{T["text"]}">{_md_bold(v["summary"])}{quals}</p>'
+        f'<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">'
+        f'<div style="background:#2b2b2f;border-radius:14px;padding:14px 18px;'
+        f'text-align:center;min-width:132px">{dial}'
+        f'<div style="color:rgba(255,255,255,0.72);font-size:0.7rem;'
+        f'font-weight:700;letter-spacing:0.08em;margin-top:2px">{_cap}</div></div>'
+        f'<ul style="flex:1;min-width:240px;margin:2px 0 0 0;padding-left:20px;'
+        f'color:{T["text"]}">{bullets}</ul>'
+        f'</div>{footer}</div>'
+    )
+
+
+def _html_escape(text):
+    import html as _h
+    return _h.escape(str(text or ""))
+
+
+def _md_bold(text):
+    """Render **bold** inside an otherwise escaped sentence."""
+    import re as _re
+    out = _html_escape(text)
+    return _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
 
 
 def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
