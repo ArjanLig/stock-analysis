@@ -159,3 +159,64 @@ class TestSuspectDebtTag(unittest.TestCase):
                                  total_debt=[30, 30, 30, 30, 30, 2],
                                  cash=[100] * 6))
         self.assertTrue(r["passes"])
+
+
+class TestBatch(unittest.TestCase):
+    """Screening a universe, index by index."""
+
+    _UNIVERSE = {
+        "as_of": "2026-08-06",
+        "constituents": [
+            {"ticker": "GOOD", "name": "Good Co", "gics_sector": "IT",
+             "indices": ["sp500", "nasdaq100"]},
+            {"ticker": "DEBT", "name": "Levered Co", "gics_sector": "Staples",
+             "indices": ["sp500", "dow30"]},
+            {"ticker": "GONE", "name": "Broken Co", "gics_sector": "Energy",
+             "indices": ["sp500"]},
+        ],
+    }
+
+    @staticmethod
+    def _fetch(ticker):
+        if ticker == "GONE":
+            raise RuntimeError("EDGAR 404")
+        if ticker == "DEBT":
+            return _fund([300] * 6, [1500] * 6, [500] * 6,
+                         total_debt=[900] * 6, cash=[100] * 6)
+        return _fund([300] * 6, [1500] * 6, [500] * 6,
+                     total_debt=[0] * 6, cash=[100] * 6)
+
+    def _run(self):
+        from screener import compute_screener
+        return compute_screener(self._UNIVERSE, fetch=self._fetch, max_workers=2)
+
+    def test_every_name_comes_back_with_its_verdict(self):
+        rows = {r["ticker"]: r for r in self._run()["rows"]}
+        self.assertTrue(rows["GOOD"]["passes"])
+        self.assertFalse(rows["DEBT"]["passes"])
+        self.assertEqual(rows["DEBT"]["reason"], "net_debt")
+
+    def test_a_fetch_failure_is_recorded_not_dropped(self):
+        """A name that vanishes silently looks identical to a name that
+        failed the screen. It has to say which it is."""
+        rows = {r["ticker"]: r for r in self._run()["rows"]}
+        self.assertEqual(rows["GONE"]["status"], "failed")
+        self.assertFalse(rows["GONE"]["passes"])
+
+    def test_index_membership_travels_with_each_row(self):
+        """The page filters by index; a row that lost its membership would
+        appear nowhere."""
+        rows = {r["ticker"]: r for r in self._run()["rows"]}
+        self.assertIn("nasdaq100", rows["GOOD"]["indices"])
+        self.assertIn("dow30", rows["DEBT"]["indices"])
+
+    def test_the_summary_counts_passes_per_index(self):
+        s = self._run()["summary"]
+        self.assertEqual(s["passes"], 1)
+        self.assertEqual(s["per_index"]["sp500"]["total"], 3)
+        self.assertEqual(s["per_index"]["sp500"]["passes"], 1)
+        self.assertEqual(s["per_index"]["nasdaq100"]["passes"], 1)
+        self.assertEqual(s["per_index"]["dow30"]["passes"], 0)
+
+    def test_the_universe_date_is_kept(self):
+        self.assertEqual(self._run()["universe_as_of"], "2026-08-06")

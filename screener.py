@@ -127,3 +127,63 @@ def screen_quality(fund, min_roce=DEFAULT_MIN_ROCE,
 
     result["passes"] = True
     return result
+
+
+def compute_screener(universe, fetch, max_workers=5):
+    """Screen every constituent of a universe. Returns rows plus a summary.
+
+    `fetch` is injected (ticker -> fundamentals dict) so the arithmetic can be
+    tested without EDGAR, and so the runner decides about caching and
+    throttling rather than this function.
+
+    A fetch failure is recorded as its own row with status "failed" — a name
+    that vanishes silently looks identical to a name that failed the screen,
+    and the two mean opposite things.
+    """
+    from collections import Counter
+    from concurrent.futures import ThreadPoolExecutor
+
+    constituents = universe.get("constituents") or []
+
+    def one(c):
+        ticker = c.get("ticker")
+        base = {
+            "ticker": ticker,
+            "name": c.get("name"),
+            "sector": c.get("gics_sector"),
+            "indices": c.get("indices") or [],
+            "passes": False,
+        }
+        try:
+            fund = fetch(ticker)
+        except Exception as e:
+            base.update(status="failed", reason=f"fetch:{type(e).__name__}",
+                        avg_roce=None, years_used=0, net_debt=None)
+            return base
+        r = screen_quality(fund)
+        base.update(status="ok", reason=r["reason"],
+                    avg_roce=r["avg_roce"], years_used=r["years_used"],
+                    net_debt=r["net_debt"], passes=r["passes"])
+        return base
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        rows = list(pool.map(one, constituents))
+
+    per_index: dict = {}
+    for r in rows:
+        for idx in r["indices"]:
+            entry = per_index.setdefault(idx, {"total": 0, "passes": 0})
+            entry["total"] += 1
+            entry["passes"] += 1 if r["passes"] else 0
+
+    reasons = Counter(r["reason"] for r in rows if not r["passes"])
+    return {
+        "universe_as_of": universe.get("as_of"),
+        "rows": rows,
+        "summary": {
+            "total": len(rows),
+            "passes": sum(1 for r in rows if r["passes"]),
+            "per_index": per_index,
+            "reasons": dict(reasons),
+        },
+    }

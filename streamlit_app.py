@@ -8538,7 +8538,7 @@ with st.sidebar:
         """Clear account page override when user clicks a main nav item."""
         st.session_state.pop("_account_page", None)
 
-    _all_pages = ["Portfolio", "Cost Basis", "Results", "Watchlist", "Cashflow Champions"]
+    _all_pages = ["Portfolio", "Cost Basis", "Results", "Watchlist", "Screener"]
 
     # CSS to add a visual separator after "Results" (3rd item)
     st.markdown(
@@ -12064,237 +12064,152 @@ elif page == "Results":
 #  CASHFLOW CHAMPIONS — Liontrust two-ratio screen
 # ══════════════════════════════════════════════════════
 
-elif page == "Cashflow Champions":
-    import html as _html
+elif page == "Screener":
 
-    import cashflow_champions as _cc
-
-    _snap = None
-    try:
-        _snap = _cc.load_latest_snapshot(_sb_client)
-    except Exception as e:
-        st.error(f"Could not load the ranking: {e}")
-
-    # ── Hero header ──
-    _ts = str((_snap or {}).get("computed_at", ""))[:16].replace("T", " ")
-    _uasof = (_snap or {}).get("universe_as_of", "—")
-    _meta = (
-        f'<p class="hero-sub" style="font-size:0.8rem;margin-top:14px;opacity:0.75">'
-        f'Last computed {_ts or "—"} &nbsp;·&nbsp; universe as-of {_uasof}</p>'
-    ) if _snap else ""
     st.markdown(
-        '<div class="hero-card">'
-        '<p class="hero-value" style="font-size:1.8rem;letter-spacing:-0.02em">Cashflow Champions</p>'
-        '<p class="hero-sub" style="font-size:0.95rem;max-width:480px;margin:8px auto 0">'
-        'Ranks the S&amp;P 500, Nasdaq-100 and Dow 30 on two ratios: Cash Return on '
-        'Assets (quality) and Price-to-Cash-Flow (value). The top 20% are the Champions.</p>'
-        f'{_meta}'
-        '</div>',
+        "<style>.block-container { max-width: 1000px; margin: auto; }</style>",
         unsafe_allow_html=True,
     )
 
-    _do_refresh = st.button("↻ Refresh ranking", type="primary")
+    # One snapshot, computed locally by scripts/run_screener.py — EDGAR is not
+    # reliably reachable from Streamlit Cloud, and a 516-name batch does not
+    # belong in a page load anyway.
+    @st.cache_data(ttl=600, show_spinner=False)
+    def _screener_snapshot():
+        resp = (_sb_client.table("screener_snapshots")
+                .select("computed_at, universe_as_of, summary, rows")
+                .order("created_at", desc=True).limit(1).execute())
+        return resp.data[0] if resp.data else None
 
-    if _do_refresh:
-        with st.spinner("Recomputing across ~514 names — fetching EDGAR + prices. "
-                        "This takes a few minutes…"):
-            try:
-                _res = _cc.compute_champions(concurrency=8)
-                _cc.store_champions_snapshot(_cc.to_snapshot(_res), client=_sb_client)
-                st.success("Ranking refreshed.")
-                _snap = _cc.load_latest_snapshot(_sb_client)
-            except Exception as e:
-                st.error(
-                    f"Refresh failed: {e}\n\nThe heavy refresh is meant to run as "
-                    "a batch where EDGAR/Yahoo are reachable and the service-role "
-                    "key is set:  `python cashflow_champions.py --compute --store`"
-                )
+    snap = _screener_snapshot()
 
-    if not _snap:
-        st.info(
-            "No ranking stored yet. Run the batch to populate it:\n\n"
-            "```\npython cashflow_champions.py --refresh-universe\n"
-            "python cashflow_champions.py --compute --store\n```"
-        )
+    st.markdown(
+        f'<div class="hero-card">'
+        f'<p class="hero-label">Screener</p>'
+        f'<p class="hero-value" style="font-size:1.6rem">Quality, plainly defined</p>'
+        f'<p class="hero-sub">Average ROCE of at least 20% over the last five to '
+        f'ten reported years, and no net debt on the latest balance sheet. '
+        f'Same ROCE as the watchlist — one definition, one answer.</p>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not snap:
+        st.info("No screener snapshot yet. Run `python3 scripts/run_screener.py` "
+                "locally to compute one.")
+        st.stop()
+
+    _rows = snap["rows"]
+    _sum = snap["summary"]
+
+    # Age up front: half the point of the last page's troubles was a stale
+    # snapshot nobody could see was stale.
+    _age_days = None
+    try:
+        from datetime import datetime, UTC as _UTC
+        _ts = datetime.fromisoformat(snap["computed_at"].replace("Z", "+00:00"))
+        _age_days = (datetime.now(_UTC) - _ts).days
+    except (ValueError, KeyError, TypeError):
+        pass
+    _age_txt = (f"computed {_age_days} day(s) ago" if _age_days is not None
+                else "computed at unknown time")
+    st.caption(f"Universe of {snap.get('universe_as_of', '?')} · {_age_txt} · "
+               f"{_sum['passes']} of {_sum['total']} names pass. "
+               f"Refresh locally with `scripts/run_screener.py`.")
+    if _age_days is not None and _age_days > 45:
+        st.warning(f"This snapshot is {_age_days} days old — a new annual "
+                   "report may have landed since. Refresh before acting on it.")
+
+    _INDEX_LABELS = {"sp500": "S&P 500", "nasdaq100": "Nasdaq 100",
+                     "dow30": "Dow 30"}
+    _pick = st.segmented_control(
+        "Index", ["All", *(_INDEX_LABELS[k] for k in _INDEX_LABELS)],
+        default="All", key="screener_index", label_visibility="collapsed",
+    ) or "All"
+    _pick_key = next((k for k, v in _INDEX_LABELS.items() if v == _pick), None)
+
+    passes = [r for r in _rows if r.get("passes")
+              and (_pick_key is None or _pick_key in (r.get("indices") or []))]
+    passes.sort(key=lambda r: -(r.get("avg_roce") or 0))
+
+    # Names already on the watchlist get marked rather than filtered: seeing a
+    # familiar name pass is confirmation, and its absence would read as a miss.
+    _wl = set()
+    try:
+        _wl = {e["ticker"].upper() for e in
+               list_watchlist(_sb_client,
+                              user_id=(st.session_state.get("user") or {}).get("id"))}
+    except Exception as _e:
+        logger.debug("Watchlist unavailable for screener marks: %s", _e)
+
+    if not passes:
+        st.info("No names pass in this index.")
     else:
-        _summary = _snap.get("summary") or {}
-        _rows = _snap.get("rows") or []
-
-        def _metric_card(col, label, value, accent=False):
-            _left = T["accent"] if accent else T["border_medium"]
-            col.markdown(
-                f'<div style="border-top:1px solid {T["border_medium"]};'
-                f'border-right:1px solid {T["border_medium"]};'
-                f'border-bottom:1px solid {T["border_medium"]};border-left:3px solid {_left};'
-                f'border-radius:12px;padding:16px 20px;text-align:center;'
-                f'background:{T["card"]};box-shadow:{T["shadow"]}">'
-                f'<div style="color:{T["text_muted"]};font-size:0.7rem;text-transform:uppercase;'
-                f'letter-spacing:0.05em;font-weight:600">{label}</div>'
-                f'<div style="font-size:1.8rem;font-weight:700;margin-top:6px;'
-                f'color:{T["text"]}">{value}</div></div>',
-                unsafe_allow_html=True,
+        _th = (f'padding:7px 10px;text-align:right;color:{T["text_muted"]};'
+               f'font-weight:600;white-space:nowrap')
+        _td = ('padding:7px 10px;text-align:right;white-space:nowrap;'
+               'font-variant-numeric:tabular-nums')
+        _bd = f'border-top:1px solid {T["divider"]}'
+        body = ""
+        for r in passes:
+            _logo = _logo_img(r["ticker"], None, "",
+                              "width:20px;height:20px;border-radius:50%;"
+                              "object-fit:cover;vertical-align:middle;"
+                              "margin-right:7px")
+            _mark = (' <span title="on your watchlist" style="font-size:0.7rem">'
+                     '&#9733;</span>' if r["ticker"].upper() in _wl else "")
+            _nd = r.get("net_debt")
+            body += (
+                f'<tr>'
+                f'<td style="{_td};{_bd};text-align:left">{_logo}'
+                f'<b>{r["ticker"]}</b>{_mark}</td>'
+                f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]};'
+                f'max-width:230px;overflow:hidden;text-overflow:ellipsis">'
+                f'{r.get("name") or ""}</td>'
+                f'<td style="{_td};{_bd};text-align:left;color:{T["text_muted"]}">'
+                f'{r.get("sector") or ""}</td>'
+                f'<td style="{_td};{_bd};font-weight:600">'
+                f'{r["avg_roce"]:.0f}%</td>'
+                f'<td style="{_td};{_bd};color:{T["text_muted"]}">'
+                f'{r.get("years_used", 0)}y</td>'
+                f'<td style="{_td};{_bd}">'
+                f'${-_nd:,.0f}M</td>'
+                f'</tr>'
             )
-
-        _m = st.columns(5)
-        _metric_card(_m[0], "Ranked", _summary.get("ranked", 0), accent=True)
-        _metric_card(_m[1], "Champions", _summary.get("champions", 0), accent=True)
-        _metric_card(_m[2], "Failed", _summary.get("failed", 0), accent=True)
-        _metric_card(_m[3], "Excluded", _summary.get("excluded", 0), accent=True)
-        _metric_card(_m[4], "Financials excl.", _summary.get("excluded_financials", 0), accent=True)
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-
-        # ── Branded HTML table (matches the Watchlist list: logos, badges,
-        #    colored cells) — scales to 500+ rows without per-row widgets ──
-        _IDX_LABEL = {"sp500": "S&P", "nasdaq100": "NDX", "dow30": "DOW"}
-        _REASON_LABEL = {
-            "financial": "Financial", "missing_data": "Missing data",
-            "negative_cfo": "Negative CFO", "data_quality": "Data quality",
-        }
-
-        def _badges(indices):
-            return "".join(
-                f'<span style="display:inline-block;font-size:0.62rem;font-weight:600;'
-                f'background:{T["pill_bg"]};border:1px solid {T["pill_border"]};'
-                f'color:{T["text_muted"]};border-radius:6px;padding:1px 6px;'
-                f'margin-right:3px">{_IDX_LABEL.get(i, i)}</span>'
-                for i in (indices or [])
-            )
-
-        def _score_bar(score):
-            pct = max(0, min(100, round((score or 0) * 100)))
-            return (
-                f'<div style="display:flex;align-items:center;gap:8px">'
-                f'<div style="flex:1;min-width:46px;height:6px;border-radius:3px;'
-                f'background:{T["border_light"]}"><div style="width:{pct}%;height:6px;'
-                f'border-radius:3px;background:{T["accent"]}"></div></div>'
-                f'<span style="font-weight:700;color:{T["text"]};font-size:0.8rem">{pct}</span></div>'
-            )
-
-        def _table(rows, title, subtitle, with_status=False, scroll=False,
-                   rank_key="rank"):
-            _th = (f'padding:10px 14px;color:{T["text_muted"]};font-size:0.68rem;'
-                   f'text-transform:uppercase;letter-spacing:0.05em;font-weight:600;'
-                   f'position:sticky;top:0;background:{T["card"]};z-index:1;'
-                   f'border-bottom:1px solid {T["border_medium"]}')
-            heads = [("#", "left"), ("Ticker", "left"), ("Company", "left"),
-                     ("Sector", "left"),
-                     ("Cash ROA", "right"), ("P/CF", "right"),
-                     ("Score", "left"), ("Index", "left")]
-            if with_status:
-                heads.append(("Status", "left"))
-            head_html = "".join(f'<th style="{_th};text-align:{a}">{h}</th>' for h, a in heads)
-
-            body = ""
-            for r in rows:
-                champ, ok = r.get("is_champion"), r.get("status") == "ok"
-                rowbg = T["accent_light"] if champ else "transparent"
-                td = (f'padding:9px 14px;border-bottom:1px solid {T["border_light"]};'
-                      f'font-size:0.85rem;vertical-align:middle;'
-                      f'color:{T["text"] if ok else T["text_muted"]}')
-                lb = f'border-left:3px solid {T["accent"] if champ else "transparent"}'
-                rank_txt = str(r.get(rank_key)) if r.get(rank_key) else "·"
-                logo = (_logo_img(r["ticker"], None, "",
-                                  "width:20px;height:20px;border-radius:50%;"
-                                  "object-fit:cover;vertical-align:middle;"
-                                  "margin-right:6px")
-                        + f'<strong>{r["ticker"]}</strong>')
-                cells = [
-                    f'<td style="{td};{lb};font-weight:600;white-space:nowrap">{rank_txt}</td>',
-                    f'<td style="{td};white-space:nowrap">{logo}</td>',
-                    f'<td style="{td};max-width:230px;overflow:hidden;text-overflow:ellipsis;'
-                    f'white-space:nowrap">{_html.escape(r.get("name") or "")}</td>',
-                    f'<td style="{td};color:{T["text_muted"]};font-size:0.78rem;'
-                    f'white-space:nowrap">{_html.escape(r.get("sector") or "—")}</td>',
-                ]
-                if ok:
-                    cells += [
-                        f'<td style="{td};text-align:right;white-space:nowrap">{r["cash_roa"] * 100:.1f}%</td>',
-                        f'<td style="{td};text-align:right;white-space:nowrap">{r["price_to_cf"]:.1f}×</td>',
-                        f'<td style="{td};min-width:110px">{_score_bar(r.get("composite"))}</td>',
-                        f'<td style="{td};white-space:nowrap">{_badges(r.get("indices"))}</td>',
-                    ]
-                else:
-                    cells += [f'<td style="{td};text-align:right">—</td>',
-                              f'<td style="{td};text-align:right">—</td>',
-                              f'<td style="{td}">—</td>',
-                              f'<td style="{td};white-space:nowrap">{_badges(r.get("indices"))}</td>']
-                if with_status:
-                    if ok:
-                        cells.append(f'<td style="{td}">—</td>')
-                    else:
-                        lab = _REASON_LABEL.get(r.get("reason"), r.get("reason") or "—")
-                        col = T["delete_text"] if r.get("reason") in ("negative_cfo", "data_quality") else T["text_muted"]
-                        cells.append(
-                            f'<td style="{td};white-space:nowrap"><span style="font-size:0.7rem;'
-                            f'color:{col};border:1px solid {T["border_medium"]};border-radius:6px;'
-                            f'padding:1px 6px">{lab}</span></td>')
-                body += f'<tr style="background:{rowbg}">{"".join(cells)}</tr>'
-
-            inner = (f'<table style="width:100%;border-collapse:collapse;'
-                     f'font-family:\'DM Sans\',-apple-system,BlinkMacSystemFont,Arial,sans-serif">'
-                     f'<thead><tr>{head_html}</tr></thead><tbody>{body}</tbody></table>')
-            scroll_css = "max-height:620px;overflow-y:auto;" if scroll else ""
-            header = (
-                f'<div style="padding:20px 24px 16px;border-bottom:1px solid {T["border_light"]}">'
-                f'<div style="font-family:\'DM Serif Display\',Georgia,serif;font-size:1.4rem;'
-                f'color:{T["text"]};line-height:1.2">{title}</div>'
-                f'<div style="color:{T["text_muted"]};font-size:0.9rem;margin-top:6px">{subtitle}</div>'
-                f'</div>'
-            )
-            return (f'<div style="background:{T["card"]};border-radius:16px;'
-                    f'box-shadow:{T["shadow"]};border:1px solid {T["border_light"]};'
-                    f'overflow:hidden;margin-bottom:22px">{header}'
-                    f'<div style="{scroll_css}">{inner}</div></div>')
-
-        # ── Champions (top 20% of each sector) ──
-        # A snapshot computed before sector ranking has no sector fields; say so
-        # rather than rendering a table full of em-dashes.
-        if _rows and not any(r.get("sector") for r in _rows):
-            st.info(
-                "This snapshot predates sector ranking, so the Sector column is "
-                "empty and Champions are still the old universe-wide top 20%. "
-                "Re-run `python cashflow_champions.py --backfill-sectors` then "
-                "`--compute --store` to rebuild it."
-            )
-
-        _champ = [r for r in _rows if r.get("is_champion")]
-        _sectors = sorted({r.get("sector") for r in _champ if r.get("sector")})
-        if _sectors:
-            _picked = st.multiselect(
-                "Sectors", _sectors, default=_sectors, key="champ_sectors",
-                help="Ranking is per sector, so each sector contributes its own "
-                     "top 20%. Uncheck the ones you don't want to look at today.",
-            )
-            _champ = [r for r in _champ if r.get("sector") in _picked]
-
-        _champ.sort(key=lambda r: (r.get("sector") or "", r.get("sector_rank") or 0))
-        if _champ:
-            st.markdown(
-                _table(
-                    _champ,
-                    f"Champions — top 20% per sector ({len(_champ)})",
-                    "Each name is ranked against its own sector, not the whole "
-                    "market — so a commodity producer at a cycle peak can no "
-                    "longer crowd out everything else. # is the rank within the sector.",
-                    rank_key="sector_rank",
-                ),
-                unsafe_allow_html=True,
-            )
-        elif _sectors:
-            st.caption("No sectors selected.")
-
-        # ── Full universe ──
-        _ranked = sorted((r for r in _rows if r.get("status") == "ok"), key=lambda r: r["rank"])
-        _rest = sorted((r for r in _rows if r.get("status") != "ok"),
-                       key=lambda r: (r.get("status") or "", r.get("ticker") or ""))
         st.markdown(
-            _table(
-                _ranked + _rest,
-                f"Full universe ({len(_rows)})",
-                "Everything screened — ranked names first, then excluded/failed with the reason.",
-                with_status=True, scroll=True,
-            ),
+            f'<table style="width:100%;border-collapse:collapse;font-size:0.85rem">'
+            f'<thead><tr>'
+            f'<th style="{_th};text-align:left">Ticker</th>'
+            f'<th style="{_th};text-align:left">Company</th>'
+            f'<th style="{_th};text-align:left">Sector</th>'
+            f'<th style="{_th}">Avg ROCE</th>'
+            f'<th style="{_th}">History</th>'
+            f'<th style="{_th}">Net cash</th>'
+            f'</tr></thead><tbody>{body}</tbody></table>',
             unsafe_allow_html=True,
+        )
+        st.caption(f"{len(passes)} name(s) · &#9733; = on your watchlist")
+
+    # What fell out and why — a screen that hides its rejects looks stricter
+    # than it is.
+    with st.expander("What was excluded"):
+        _reason_labels = {
+            "roce_below_gate": "Average ROCE under 20%",
+            "net_debt": "Net debt on the latest balance sheet",
+            "insufficient_history": "Fewer than five usable years",
+            "debt_tag_suspect": "Debt figure looks like a broken tag — "
+                                "excluded rather than trusted",
+            "no_balance_sheet": "No cash figure to judge net debt with",
+        }
+        for k, n in sorted(_sum.get("reasons", {}).items(), key=lambda x: -x[1]):
+            label = _reason_labels.get(k, k)
+            if k.startswith("fetch"):
+                label = "EDGAR fetch failed"
+            st.markdown(f"- **{n}** × {label}")
+        st.caption(
+            "insufficient_history also catches foreign filers whose IFRS "
+            "statements don't parse — they report fewer usable years, not "
+            "worse businesses."
         )
 
 

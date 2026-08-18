@@ -10,7 +10,7 @@ Live at [lazytheta.io](https://lazytheta.io)
 - **Watchlist** — DCF valuations using Damodaran methodology with automated SEC EDGAR data, peer comparison, and scenario analysis
 - **Cost Basis** — Per-ticker cost basis and full trade history, for wheels (covered calls + cash-secured puts) and plain holdings alike, open and closed
 - **Results** — Performance tracking with net liquidation history, benchmark comparison, and yearly returns
-- **Cashflow Champions** — Screener ranking the index universe on cash generation, within GICS sector
+- **Screener** — Index universe (S&P 500, Nasdaq 100, Dow 30) filtered on quality: average ROCE ≥ 20% over the last 5-10 years and no net debt
 
 ## Built with
 
