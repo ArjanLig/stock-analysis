@@ -62,7 +62,7 @@ from portfolio_metrics import (compute_deployment, display_basis, has_option_leg
                                valuation_stance, lots_cover,
                                average_buy_price, hindsight,
                                DEFAULT_TARGET_POS_PCT)
-from prescan_render import parse_verdict_section, gauge_fraction
+from prescan_render import parse_verdict_section, gauge_fraction, band_tone
 from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
@@ -8799,14 +8799,10 @@ def _verdict_card_html(content, title=""):
 
     # Colour reads the verdict, not the number, because the two scales run
     # opposite ways: a high moat score is good and a high risk rating is not.
-    _low = title.lower()
-    _label = v["label"].lower()
-    if "risk" in _low:
-        tone = {"low": T["accent"], "medium": "#d9a441", "high": T["red"]}.get(
-            _label, T["text_muted"])
-    else:
-        tone = {"wide": T["accent"], "narrow": "#d9a441", "none": T["red"]}.get(
-            _label, T["accent"])
+    # band_tone owns the whole vocabulary — this used to keep its own small
+    # lookup that knew wide/narrow/none and painted everything else green,
+    # which is how "Mixed" came out as a pass.
+    tone = band_tone(v["label"]) or T["text_muted"]
 
     # The dial. An arc rather than a bar because the score is a position on a
     # scale, not a quantity — and a word where there is no number, since Risk

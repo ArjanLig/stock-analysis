@@ -151,3 +151,50 @@ class TestThreeState(unittest.TestCase):
         from prescan_render import three_state_html
         html = three_state_html("mid", labels=("<b>x</b>", "b", "c"))
         self.assertNotIn("<b>x</b>", html)
+
+
+class TestBandTone(unittest.TestCase):
+    """The colour a verdict label earns."""
+
+    def test_mixed_is_the_middle_colour(self):
+        """It rendered green because the card kept its own small lookup that
+        only knew wide/narrow/none, and everything else fell through to the
+        good colour. One vocabulary, one source of colour."""
+        from prescan_render import band_tone, _TONES
+        self.assertEqual(band_tone("Mixed"), _TONES[1])
+
+    def test_every_label_the_templates_emit_lands_somewhere(self):
+        from prescan_render import band_tone, _TONES
+        cases = {
+            "None": 0, "Narrow": 1, "Wide": 2,
+            "Opaque": 0, "Understandable": 1, "Simple": 2,
+            "Short": 0, "Moderate": 1, "Long": 2,
+            "Weak": 0, "Mixed": 1, "Strong": 2,
+            "Bearish": 0, "Bullish": 2,
+            "Exposed": 0, "Resilient": 1, "Anti-fragile": 2,
+            "Pass": 0, "Revisit": 1, "Deep dive": 2,
+        }
+        for label, idx in cases.items():
+            self.assertEqual(band_tone(label), _TONES[idx], label)
+
+    def test_risk_runs_the_other_way(self):
+        """High risk is bad and low risk is good — the opposite of every other
+        scale here. Colouring by position alone would paint High green."""
+        from prescan_render import band_tone, _TONES
+        self.assertEqual(band_tone("High"), _TONES[0])
+        self.assertEqual(band_tone("Medium"), _TONES[1])
+        self.assertEqual(band_tone("Low"), _TONES[2])
+
+    def test_a_business_phase_gets_no_judgement_colour(self):
+        """Phase 5 is not better than phase 3 — it is a different stage. A
+        green circle would turn a description into a compliment."""
+        from prescan_render import band_tone
+        for phase in ("Capital return", "Growth", "Margin expansion",
+                      "Decline", "Loss-making", "Profitable growth"):
+            self.assertIsNone(band_tone(phase), phase)
+
+    def test_an_unknown_label_is_not_coloured(self):
+        from prescan_render import band_tone
+        self.assertIsNone(band_tone("Fettuccine"))
+        self.assertIsNone(band_tone(""))
+        self.assertIsNone(band_tone(None))

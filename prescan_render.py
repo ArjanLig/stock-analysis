@@ -101,17 +101,53 @@ def parse_verdict_section(content):
 # One vocabulary in, one widget out. Robustness stores robust/mid/fragile, the
 # scorecard green/yellow/red, and the overall verdict says "borderline" — all
 # three are the same three-point scale wearing different words.
-_BAND_INDEX = {
-    "fragile": 0, "red": 0, "weak": 0, "poor": 0, "none": 0,
-    "mid": 1, "yellow": 1, "borderline": 1, "mixed": 1, "moderate": 1, "narrow": 1,
-    "robust": 2, "green": 2, "strong": 2, "wide": 2,
-}
-
 _DEFAULT_LABELS = ("Weak", "Mixed", "Strong")
 _GLYPHS = ("&#10005;", "&#8211;", "&#10003;")          # ✕  –  ✓
 _TONES = ("#c0603f", "#c79a3a", "#2f8f4e")
 _TINTS = ("#f7dfd7", "#fbedd2", "#d9e7dd")
 
+
+# Ordered worst to best. Risk is the one scale that runs the other way in
+# plain English — "high" is the bad end — so it is mapped by meaning rather
+# than by the word's position.
+_BAND_INDEX = {
+    # stored band names
+    "fragile": 0, "red": 0, "mid": 1, "yellow": 1, "borderline": 1,
+    "robust": 2, "green": 2,
+    # moat
+    "none": 0, "narrow": 1, "wide": 2,
+    # business clarity
+    "opaque": 0, "understandable": 1, "simple": 2,
+    # growth runway
+    "short": 0, "moderate": 1, "long": 2,
+    # metrics / general strength
+    "weak": 0, "poor": 0, "mixed": 1, "strong": 2,
+    # market sentiment
+    "bearish": 0, "neutral": 1, "bullish": 2,
+    # AI exposure
+    "exposed": 0, "resilient": 1, "anti-fragile": 2, "antifragile": 2,
+    # verdict
+    "pass": 0, "revisit": 1, "deep dive": 2, "deep_dive": 2,
+    # risk — inverted on purpose
+    "high": 0, "medium": 1, "low": 2,
+}
+
+# Business phases are stages, not grades: phase 5 is not better than phase 3.
+# Colouring them would turn a description into a compliment, so they resolve to
+# no colour at all.
+_NOT_A_JUDGEMENT = frozenset({
+    "loss-making", "loss making", "growth", "margin expansion",
+    "profitable growth", "capital return", "decline",
+})
+
+
+def band_tone(label):
+    """The colour a verdict label earns, or None when it is not a judgement."""
+    key = str(label or "").strip().lower()
+    if not key or key in _NOT_A_JUDGEMENT:
+        return None
+    idx = _BAND_INDEX.get(key)
+    return _TONES[idx] if idx is not None else None
 
 def three_state_html(band, labels=None, size=44, theme=None):
     """A weak / mixed / strong selector with one state lit.
