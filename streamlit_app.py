@@ -8943,29 +8943,53 @@ def _md_bold(text):
     return _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _logo_resolves(url):
+    """Does parqet actually serve this logo? Cached a day per URL.
+
+    The earlier server-side check failed and was abandoned for the wrong
+    reason: parqet answers 404 to anything without a browser User-Agent, so
+    the check itself was broken, not the idea. With the UA it is reliable —
+    and it has to be server-side, because Streamlit strips onerror handlers
+    from rendered HTML, so a browser-side fallback never runs and a 404 shows
+    a broken-image icon. That is how MNST looked wrong.
+
+    On a network error assume it resolves: hiding every logo over one slow
+    moment punishes the wrong thing.
+    """
+    import requests
+    try:
+        return requests.head(url, timeout=3, allow_redirects=True,
+                             headers={"User-Agent": "Mozilla/5.0"}
+                             ).status_code == 200
+    except Exception:
+        return True
+
+
 def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
-    """An <img> for a ticker's logo, addressed by ISIN when we have one.
+    """An <img> for a ticker's logo, or a monogram disc when none exists.
 
     Parqet indexes logos both ways, but the symbol index only resolves
     US-style tickers: the Amundi ETF WEBN 404s there while its ISIN serves the
-    real Amundi mark. So the ISIN leads whenever a broker gave us one.
-
-    Two earlier attempts failed for reasons worth writing down. A HEAD request
-    from the server to pick the working URL: parqet answers 404 to anything
-    without a browser User-Agent, so the check failed and then fell back to the
-    very URL that 404s. Then a browser-side onerror chain: Streamlit sanitises
-    the HTML it renders, so an event handler is not something to depend on.
-    Choosing the right src up front needs neither.
+    real Amundi mark. So the ISIN leads whenever a broker gave us one, the
+    bare symbol is checked before use, and a name parqet does not know at all
+    gets its initial in a disc — deliberate-looking, unlike the broken-image
+    icon a stripped onerror leaves behind.
     """
-    symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
-    isin_url = f"https://assets.parqet.com/logos/isin/{isin}" if isin else ""
-    src = isin_url or symbol_url
-    # A courtesy for when the handler does survive; nothing depends on it.
-    onerror = (f"this.onerror=null;this.src='{symbol_url}'" if isin_url
-               else "this.style.display='none'")
+    if isin:
+        src = f"https://assets.parqet.com/logos/isin/{isin}"
+    else:
+        symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
+        src = symbol_url if _logo_resolves(symbol_url) else None
     _cls = f'class="{css_class}" ' if css_class else ""
     _sty = f'style="{style}" ' if style else ""
-    return f'<img {_cls}{_sty}src="{src}" onerror="{onerror}">' 
+    if src:
+        return f'<img {_cls}{_sty}src="{src}">'
+    initial = (str(symbol or "?")[:1]).upper()
+    mono = ("display:inline-flex;align-items:center;justify-content:center;"
+            "background:#d9e7dd;color:#2f6f4f;font-weight:700;"
+            "font-size:0.62rem;")
+    return f'<span {_cls}style="{mono}{style}">{initial}</span>'
 
 
 def _color_val(val):
