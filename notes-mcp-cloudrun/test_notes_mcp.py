@@ -62,3 +62,28 @@ def test_note_path_is_the_inverse_of_storage_key():
     from vault_paths import note_path, storage_key
     key = storage_key(USER, "lazytheta-vault", "06 Open Issues.md")
     assert note_path(USER, "lazytheta-vault", key) == "06 Open Issues.md"
+
+
+def test_double_url_encoding_is_refused():
+    """Double-encoding (e.g., %25 → %) can bypass single-pass decoding.
+    A path that looks safe after one decode might be unsafe after two."""
+    from vault_paths import UnsafePath, storage_key
+    with pytest.raises(UnsafePath):
+        storage_key(USER, "portfolio-vault", "..%252Fx.md")
+
+
+def test_vault_name_is_decoded_and_validated():
+    """The vault name must also be decoded and checked for traversal.
+    ..%2Fandere-user decodes to ../andere-user and should be refused."""
+    from vault_paths import UnsafePath, storage_key
+    with pytest.raises(UnsafePath):
+        storage_key(USER, "..%2Fandere-user", "x.md")
+
+
+def test_single_dot_segments_are_filtered():
+    """A path like ./x.md should be equivalent to x.md.
+    Both refer to the same note; single-dot segments should be normalized away."""
+    from vault_paths import storage_key
+    path_with_dot = storage_key(USER, "vault", "./x.md")
+    path_without_dot = storage_key(USER, "vault", "x.md")
+    assert path_with_dot == path_without_dot
