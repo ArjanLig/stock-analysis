@@ -265,3 +265,57 @@ def test_snippet_shows_context_around_the_match():
 def test_snippet_without_a_match_returns_the_opening():
     from notes_tools import snippet
     assert snippet("korte notitie", "bestaat niet").startswith("korte")
+
+
+def test_list_vaults_detects_unfiled_notes():
+    """Notities zonder vaultmap (los onder de user-prefix) moeten zichtbaar
+    zijn; anders kan de gebruiker niet zien of configuratie fout is."""
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/los.md": ("losse notitie", '"l1"'),
+        f"{USER}/vault1/x.md": ("in vault", '"v1"'),
+    }
+    from notes_tools import list_vaults
+    got = {v["vault"]: v for v in list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)}
+    assert "(unfiled)" in got
+    assert got["(unfiled)"]["notes"] == 1
+    assert got["(unfiled)"]["claude_md"] is None
+
+
+def test_search_in_unfiled_notes():
+    """Losse notities moeten ook doorzoekbaar zijn."""
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/los.md": ("losse notitie met zoekvraag", '"l1"'),
+    }
+    from notes_tools import search_notes
+    hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")
+    assert len(hits) == 1
+    assert hits[0]["vault"] == "(unfiled)"
+    assert hits[0]["path"] == "los.md"
+
+
+def test_list_vaults_shows_attachments_only_vault_with_zero_notes():
+    """Een vault met alleen bijlagen (geen .md) moet wel verschijnen met notes: 0,
+    niet verdwijnen. Anders is dat dezelfde blinde vlek als losse notities."""
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/attachments-only/image.png": ("binair", '"i1"'),
+        f"{USER}/attachments-only/video.mp4": ("binair", '"v1"'),
+    }
+    from notes_tools import list_vaults
+    got = {v["vault"]: v for v in list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)}
+    assert "attachments-only" in got
+    assert got["attachments-only"]["notes"] == 0
+    assert got["attachments-only"]["claude_md"] is None
+
+
+def test_search_skips_unfiled_attachments():
+    """Bijlagen buiten elke vault moeten niet doorzoekbaar zijn."""
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/plaatje.png": ("binair data met zoekvraag", '"p1"'),
+    }
+    from notes_tools import search_notes
+    hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")
+    assert hits == []
