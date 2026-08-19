@@ -1360,10 +1360,25 @@ gcloud run deploy notes-mcp \
     --min-instances 0 \
     --max-instances 3 \
     --set-env-vars="SUPABASE_S3_ENDPOINT=https://dacmqkjvofqqjfsfrtlp.storage.supabase.co/storage/v1/s3,SUPABASE_S3_REGION=eu-west-3,VAULT_BUCKET=vaults" \
-    --set-secrets="JWT_SIGNING_KEY=JWT_SIGNING_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_S3_ACCESS_KEY_ID=SUPABASE_S3_ACCESS_KEY_ID:latest,SUPABASE_S3_SECRET_ACCESS_KEY=SUPABASE_S3_SECRET_ACCESS_KEY:latest"
+    --set-secrets="JWT_SIGNING_KEY=NOTES_JWT_SIGNING_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_S3_ACCESS_KEY_ID=SUPABASE_S3_ACCESS_KEY_ID:latest,SUPABASE_S3_SECRET_ACCESS_KEY=SUPABASE_S3_SECRET_ACCESS_KEY:latest"
 ```
 
 `SUPABASE_SERVICE_KEY` gaat er bewust **niet** in: deze service heeft geen database nodig.
+
+**Let op de sleutel: `JWT_SIGNING_KEY` wordt gevuld uit een ánder secret dan bij LazyTheta.** Dat is geen slordigheid maar de kern van de scheiding. `mcp_auth.verify_jwt` controleert alleen de handtekening — geen `aud`, geen `iss`, geen service-claim. Delen beide services hetzelfde ondertekeningsgeheim, dan opent elk dertig dagen geldig token van de portefeuilleserver ook `/mcp` van de notitieserver, en andersom bedient een notitietoken alle 34 LazyTheta-tools inclusief de schrijvende. Daarmee zou de hele reden om dit als aparte service te bouwen vervallen: de blast radius wordt weer één geheel.
+
+Twee aparte geheimen kosten niets in code — `mcp_auth` leest gewoon zijn eigen omgevingsvariabele — en maken de scheiding echt.
+
+Maak dat geheim vóór de deploy:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(48))" \
+  | tr -d '\n' \
+  | gcloud secrets create NOTES_JWT_SIGNING_KEY \
+        --project stock-analysis-489016 --data-file=-
+```
+
+Gevolg voor de gebruiker: je logt bij deze connector één keer apart in via Supabase. Dat is precies de bedoeling.
 
 - [ ] **Step 4: Controleer dat hij leeft**
 

@@ -157,6 +157,7 @@ Een nieuwe notitie mag zonder `base_revision`, maar faalt als het pad al bestaat
 - **`user_id` komt uit het JWT, nooit uit een argument.** Objecten liggen onder `{user_id}/{vault}/...`; de prefix wordt serverkant voorgezet en is voor de aanroeper onbereikbaar. Dit is de les uit het `load_credential`-lek: zodra een functie ook in een service-role-context draait, is "RLS regelt het" een aanname en geen bescherming.
 - **Padvalidatie** serverkant: geen `..`, niets absoluuts, moet op `.md` eindigen.
 - **S3-sleutels** in Secret Manager, nooit in code of image.
+- **Elke service ondertekent met zijn eigen sleutel.** `mcp_auth.verify_jwt` controleert alleen de handtekening en kent geen `aud` of service-claim, dus een gedeeld ondertekeningsgeheim zou betekenen dat een LazyTheta-token deze vault opent en een notitietoken alle portefeuilletools bedient. De scheiding tussen de twee services zou dan alleen op papier bestaan. De notities-service krijgt daarom een eigen `NOTES_JWT_SIGNING_KEY`; in code verandert er niets, alleen de herkomst van de omgevingsvariabele.
 - Remotely Save's end-to-end-encryptie staat uit; de vertrouwelijkheid leunt op de buckettoegang en de S3-sleutels.
 
 ## Foutafhandeling
