@@ -181,3 +181,87 @@ def test_get_many_returns_every_requested_note():
     got = store.get_many(list(objects))
     assert len(got) == 20
     assert got[f"{USER}/v/n7.md"] == "tekst 7"
+
+
+# ── notes_tools ────────────────────────────────────────────────────────────
+
+def _store_with_vaults():
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/portfolio-vault/CLAUDE.md": ("# regels\nfrontmatter verplicht", '"c1"'),
+        f"{USER}/portfolio-vault/Tickers/DECK.md": (
+            "---\nticker: DECK\n---\nDe wheel op DECK liep goed dit jaar.", '"d1"'),
+        f"{USER}/portfolio-vault/Tickers/MSFT.md": ("MSFT is een compounder.", '"m1"'),
+        f"{USER}/lazytheta-vault/06 Open Issues.md": ("Kapotte fair values.", '"o1"'),
+        f"{USER}/portfolio-vault/Attachments/plaatje.png": ("binair", '"p1"'),
+    }
+    return VaultStore(FakeS3(objects), "vaults")
+
+
+def test_list_vaults_counts_notes_and_finds_the_rules():
+    """De CLAUDE.md van een vault beschrijft hoe erin geschreven hoort te
+    worden. Die moet vindbaar zijn voordat fase 2 iets wegschrijft."""
+    from notes_tools import list_vaults
+    got = {v["vault"]: v for v in list_vaults(_store_with_vaults(), USER)}
+    assert set(got) == {"portfolio-vault", "lazytheta-vault"}
+    assert got["portfolio-vault"]["notes"] == 3        # de png telt niet mee
+    assert got["portfolio-vault"]["claude_md"] == "CLAUDE.md"
+    assert got["lazytheta-vault"]["claude_md"] is None
+
+
+def test_read_note_returns_content_and_revision():
+    from notes_tools import read_note
+    got = read_note(_store_with_vaults(), USER, "portfolio-vault", "Tickers/DECK.md")
+    assert "wheel op DECK" in got["content"]
+    assert got["revision"] == "d1"
+    assert got["path"] == "Tickers/DECK.md"
+
+
+def test_read_note_refuses_to_leave_the_vault():
+    from notes_tools import read_note
+    from vault_paths import UnsafePath
+    with pytest.raises(UnsafePath):
+        read_note(_store_with_vaults(), USER, "portfolio-vault", "../lazytheta-vault/x.md")
+
+
+def test_search_finds_the_note_and_shows_why():
+    from notes_tools import search_notes
+    hits = search_notes(_store_with_vaults(), USER, "wheel")
+    assert len(hits) == 1
+    assert hits[0]["path"] == "Tickers/DECK.md"
+    assert hits[0]["vault"] == "portfolio-vault"
+    assert "wheel" in hits[0]["snippet"].lower()
+
+
+def test_search_is_case_insensitive():
+    from notes_tools import search_notes
+    assert search_notes(_store_with_vaults(), USER, "COMPOUNDER")
+
+
+def test_search_can_be_scoped_to_one_vault():
+    """Alles doorzoeken kost bij portfolio-vault 177 objecten; op naam
+    beperken scheelt tijd en egress."""
+    from notes_tools import search_notes
+    assert search_notes(_store_with_vaults(), USER, "fair values",
+                        vault="portfolio-vault") == []
+    assert search_notes(_store_with_vaults(), USER, "fair values",
+                        vault="lazytheta-vault")
+
+
+def test_search_skips_attachments():
+    from notes_tools import search_notes
+    assert search_notes(_store_with_vaults(), USER, "binair") == []
+
+
+def test_snippet_shows_context_around_the_match():
+    from notes_tools import snippet
+    text = "a" * 300 + "NAALD" + "b" * 300
+    got = snippet(text, "naald", radius=20)
+    assert "NAALD" in got
+    assert len(got) < 100
+    assert got.startswith("…") and got.endswith("…")
+
+
+def test_snippet_without_a_match_returns_the_opening():
+    from notes_tools import snippet
+    assert snippet("korte notitie", "bestaat niet").startswith("korte")
