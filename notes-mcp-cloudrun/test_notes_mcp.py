@@ -408,6 +408,29 @@ def test_a_real_unfiled_vault_no_longer_collides_with_loose_notes():
     assert by_name[None]["claude_md"] is None
 
 
+def test_an_uninterpretable_key_is_skipped_and_not_fatal():
+    """Eén rare sleutel in de bucket legde list_vaults plat met UnsafePath: de
+    hele tool gaf een fout in plaats van de overige vaults. Een sleutel die we
+    niet kunnen duiden hoort overgeslagen te worden."""
+    from notes_tools import list_vaults, search_notes
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/../x.md": ("rare sleutel met naald", '"x1"'),
+        f"{USER}/./y.md": ("nog een rare, met naald", '"y1"'),
+        f"{USER}/echte-vault/n.md": ("gewone notitie met naald", '"n1"'),
+        f"{USER}/los.md": ("losse notitie met naald", '"l1"'),
+    }
+    store = VaultStore(FakeS3(objects), "vaults")
+
+    vaults = list_vaults(store, USER)
+    assert [v["vault"] for v in vaults] == ["echte-vault", None]
+    assert vaults[0]["notes"] == 1
+    assert vaults[-1]["notes"] == 1          # alleen los.md, niet de rare sleutels
+
+    hits = search_notes(store, USER, "naald")["hits"]
+    assert sorted(h["path"] for h in hits) == ["los.md", "n.md"]
+
+
 def test_loose_notes_appear_last_in_list():
     """De null-vermelding moet achteraan staan, niet vooraan. Dat betekent dat
     losse notities pas na de echte vaults zichtbaar zijn."""

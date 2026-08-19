@@ -12,7 +12,7 @@ bestanden boven ~1.000.
 
 from __future__ import annotations
 
-from vault_paths import NOTE_SUFFIX, note_path, storage_key, vault_prefix
+from vault_paths import NOTE_SUFFIX, UnsafePath, storage_key, vault_prefix
 from vault_storage import NoteNotFound
 
 CLAUDE_MD = "CLAUDE.md"
@@ -22,26 +22,34 @@ def _is_note(key: str) -> bool:
     return key.lower().endswith(NOTE_SUFFIX)
 
 
-def _is_unfiled(user_id: str, key: str) -> bool:
-    """Check if a note is directly under user prefix (no vault subdirectory)."""
-    prefix = vault_prefix(user_id)
-    if not key.startswith(prefix):
-        return False
-    rest = key[len(prefix):]
-    return "/" not in rest
+def _split_key(user_id: str, key: str) -> tuple[str | None, str] | None:
+    """(vault, pad) van een objectsleutel, of None als die niet te duiden is.
 
+    De bucket kan sleutels bevatten die deze server nooit zelf zou bouwen --
+    '<user>/../x.md' bijvoorbeeld, of een pad met een leeg segment. Zo'n
+    sleutel is niet adresseerbaar en dus niet aan te bieden aan read_note, maar
+    dat is geen reden om de hele tool te laten falen: eerder legde één zo'n
+    sleutel list_vaults plat met UnsafePath en verdwenen álle vaults. Overslaan.
 
-def _vault_of(user_id: str, key: str) -> str | None:
-    """Extract vault name from key. Returns None for notes not in a vault,
-    or for unfiled notes (use _is_unfiled to detect those separately)."""
+    `vault=None` betekent: los onder de gebruikersprefix.
+    """
     prefix = vault_prefix(user_id)
     if not key.startswith(prefix):
         return None
     rest = key[len(prefix):]
-    # Only return vault name if there's a slash (real vault structure)
-    if "/" in rest:
-        return rest.split("/", 1)[0]
-    return None
+    vault, separator, path = rest.partition("/")
+    if not separator:
+        vault, path = None, rest
+    if not path:
+        return None                       # 'vault/' zonder bestandsnaam
+    if vault is not None:
+        try:
+            vault_prefix(user_id, vault)  # keurt de vaultnaam als padsegment
+        except UnsafePath:
+            return None
+    if any(p in ("", ".", "..") for p in path.split("/")):
+        return None
+    return vault, path
 
 
 def snippet(text: str, query: str, radius: int = 120) -> str:
@@ -76,25 +84,22 @@ def list_vaults(store, user_id: str) -> list[dict]:
     unfiled_count = 0
 
     for key in keys:
-        # Vaults met bijlagen moeten ook verschijnen (met notes: 0)
-        prefix = vault_prefix(user_id)
-        if key.startswith(prefix):
-            rest = key[len(prefix):]
-            if "/" in rest:
-                vault_name = rest.split("/", 1)[0]
-                vaults.setdefault(vault_name, {"vault": vault_name, "notes": 0, "claude_md": None})
+        split = _split_key(user_id, key)
+        if split is None:
+            continue                 # niet te duiden: overslaan, niet fataal
+        vault, path = split
 
-        # Tel notities (apart voor losse notities)
-        if _is_note(key):
-            if _is_unfiled(user_id, key):
+        if vault is None:
+            if _is_note(key):
                 unfiled_count += 1
-            else:
-                vault = _vault_of(user_id, key)
-                if vault:
-                    entry = vaults.setdefault(vault, {"vault": vault, "notes": 0, "claude_md": None})
-                    entry["notes"] += 1
-                    if note_path(user_id, vault, key) == CLAUDE_MD:
-                        entry["claude_md"] = CLAUDE_MD
+            continue
+
+        # Vaults met alleen bijlagen moeten ook verschijnen, met notes: 0
+        entry = vaults.setdefault(vault, {"vault": vault, "notes": 0, "claude_md": None})
+        if _is_note(key):
+            entry["notes"] += 1
+            if path == CLAUDE_MD:
+                entry["claude_md"] = CLAUDE_MD
 
     result = [vaults[v] for v in sorted(vaults)]
     if unfiled_count > 0:
@@ -157,21 +162,19 @@ def search_notes(store, user_id: str, query: str, vault: str | None = None,
         # gebruikersprefix. Geen sentinel-string, zodat de treffer niet kan
         # botsen met een échte vault die toevallig zo heet -- read_note op de
         # treffer levert altijd dezelfde notitie op als waar hij vandaan komt.
-        if vault:
-            found_in = vault
-        elif _is_unfiled(user_id, key):
-            found_in = None
-        else:
-            found_in = _vault_of(user_id, key)
-            if found_in is None:
-                continue          # sleutel hoort niet bij deze gebruiker
+        # Een sleutel die niet te duiden is wordt overgeslagen: hem als treffer
+        # aanbieden zou een notitie adverteren die read_note niet kan openen.
+        split = _split_key(user_id, key)
+        if split is None:
+            continue
+        found_in, path = split
 
         total += 1
         # Doortellen na de limiet, maar geen snippets meer bouwen.
         if len(hits) < limit:
             hits.append({
                 "vault": found_in,
-                "path": note_path(user_id, found_in, key),
+                "path": path,
                 "snippet": snippet(text, needle),
             })
 
