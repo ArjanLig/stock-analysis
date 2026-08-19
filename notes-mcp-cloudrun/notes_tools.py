@@ -16,7 +16,6 @@ from vault_paths import NOTE_SUFFIX, note_path, storage_key, vault_prefix
 from vault_storage import NoteNotFound
 
 CLAUDE_MD = "CLAUDE.md"
-UNFILED = "(unfiled)"
 
 
 def _is_note(key: str) -> bool:
@@ -63,11 +62,15 @@ def list_vaults(store, user_id: str) -> list[dict]:
     """Welke vaults er zijn, hoeveel notities erin staan, en of er een
     CLAUDE.md ligt met de schrijfregels van die vault.
 
-    Notities zonder vaultmap staan in (unfiled); dit is geen echte vault maar
-    een signaal dat de synchronisatieplugin verkeerd is ingesteld. read_note
-    werkt niet op (unfiled). Merk op: bestaat er toevallig een echte vault
-    genaamd (unfiled), dan verschijnt die normaal in de lijst en daarna de
-    losse notities met dezelfde naam. Dat is ongebruikelijk maar eerlijk."""
+    Staan er notities buiten elke vaultmap -- los onder de gebruikersprefix --
+    dan volgt als laatste een vermelding met `vault: null`. Meestal betekent
+    dat een verkeerd ingestelde remote prefix in de synchronisatieplugin.
+
+    `null` en geen sentinel-string, omdat een vaultnaam een padsegment is en
+    `null` daar per definitie niet mee kan botsen. De vorige sentinel
+    "(unfiled)" kon dat wel: bestond er een échte vault met die naam, dan wees
+    een treffer of leesverzoek naar de verkeerde notitie. read_note(vault=None)
+    leest zo'n losse notitie gewoon."""
     keys = store.list_keys(vault_prefix(user_id))
     vaults: dict[str, dict] = {}
     unfiled_count = 0
@@ -95,13 +98,16 @@ def list_vaults(store, user_id: str) -> list[dict]:
 
     result = [vaults[v] for v in sorted(vaults)]
     if unfiled_count > 0:
-        result.append({"vault": UNFILED, "notes": unfiled_count, "claude_md": None})
+        result.append({"vault": None, "notes": unfiled_count, "claude_md": None})
     return result
 
 
-def read_note(store, user_id: str, vault: str, path: str) -> dict:
+def read_note(store, user_id: str, vault: str | None, path: str) -> dict:
     """Eén notitie, met revisie. De revisie doet in fase 1 niets, maar staat
-    er zodat het contract bij het toevoegen van schrijven niet verandert."""
+    er zodat het contract bij het toevoegen van schrijven niet verandert.
+
+    `vault=None` leest een notitie die los onder de gebruikersprefix staat --
+    precies wat list_vaults en search_notes met `vault: null` aanduiden."""
     key = storage_key(user_id, vault, path)
     text, revision = store.get(key)
     return {"vault": vault, "path": path, "revision": revision, "content": text}
@@ -123,27 +129,22 @@ def search_notes(store, user_id: str, query: str, vault: str | None = None,
         if text is None or needle.lower() not in text.lower():
             continue
 
-        # Determine which vault this note belongs to
+        # In welke vault ligt deze notitie? None betekent: los onder de
+        # gebruikersprefix. Geen sentinel-string, zodat de treffer niet kan
+        # botsen met een échte vault die toevallig zo heet -- read_note op de
+        # treffer levert altijd dezelfde notitie op als waar hij vandaan komt.
         if vault:
             found_in = vault
         elif _is_unfiled(user_id, key):
-            found_in = UNFILED
+            found_in = None
         else:
             found_in = _vault_of(user_id, key)
-
-        if not found_in:
-            continue
-
-        # For unfiled notes, compute path relative to user prefix
-        if found_in == UNFILED:
-            prefix = vault_prefix(user_id)
-            path = key[len(prefix):]
-        else:
-            path = note_path(user_id, found_in, key)
+            if found_in is None:
+                continue          # sleutel hoort niet bij deze gebruiker
 
         hits.append({
             "vault": found_in,
-            "path": path,
+            "path": note_path(user_id, found_in, key),
             "snippet": snippet(text, needle),
         })
         if len(hits) >= max_results:

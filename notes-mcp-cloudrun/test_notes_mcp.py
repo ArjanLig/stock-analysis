@@ -342,9 +342,9 @@ def test_list_vaults_detects_unfiled_notes():
     }
     from notes_tools import list_vaults
     got = {v["vault"]: v for v in list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)}
-    assert "(unfiled)" in got
-    assert got["(unfiled)"]["notes"] == 1
-    assert got["(unfiled)"]["claude_md"] is None
+    assert None in got                       # geen sentinel-string: null
+    assert got[None]["notes"] == 1
+    assert got[None]["claude_md"] is None
 
 
 def test_search_in_unfiled_notes():
@@ -356,7 +356,7 @@ def test_search_in_unfiled_notes():
     from notes_tools import search_notes
     hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")
     assert len(hits) == 1
-    assert hits[0]["vault"] == "(unfiled)"
+    assert hits[0]["vault"] is None
     assert hits[0]["path"] == "los.md"
 
 
@@ -386,9 +386,11 @@ def test_search_skips_unfiled_attachments():
     assert hits == []
 
 
-def test_list_vaults_separates_unfiled_from_real_unfiled_vault():
-    """Bestaat er echt een vault genaamd (unfiled), moet die apart staan van
-    de losse notities. De echte vault toont notes en claude_md correct."""
+def test_a_real_unfiled_vault_no_longer_collides_with_loose_notes():
+    """Bestaat er echt een vault genaamd (unfiled), dan is die nu ondubbelzinnig
+    te onderscheiden van de losse notities: de echte vault houdt haar naam, de
+    losse notities krijgen null. Twee vermeldingen met dezelfde naam bestaan
+    niet meer."""
     from vault_storage import VaultStore
     objects = {
         f"{USER}/(unfiled)/real.md": ("in de echte vault", '"r1"'),
@@ -397,21 +399,17 @@ def test_list_vaults_separates_unfiled_from_real_unfiled_vault():
     }
     from notes_tools import list_vaults
     vaults = list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)
-    vault_by_name = {v["vault"]: v for v in vaults}
-    # Twee aparte vermeldingen met dezelfde naam
-    unfiled_entries = [v for v in vaults if v["vault"] == "(unfiled)"]
-    assert len(unfiled_entries) == 2
-    # Eerste is de echte vault
-    assert unfiled_entries[0]["notes"] == 2
-    assert unfiled_entries[0]["claude_md"] == "CLAUDE.md"
-    # Tweede is de losse notities
-    assert unfiled_entries[1]["notes"] == 1
-    assert unfiled_entries[1]["claude_md"] is None
+    by_name = {v["vault"]: v for v in vaults}
+    assert len(by_name) == len(vaults) == 2      # geen dubbele naam meer
+    assert by_name["(unfiled)"]["notes"] == 2
+    assert by_name["(unfiled)"]["claude_md"] == "CLAUDE.md"
+    assert by_name[None]["notes"] == 1
+    assert by_name[None]["claude_md"] is None
 
 
-def test_unfiled_appears_last_in_list():
-    """De (unfiled)-vermelding moet achteraan staan, niet vooraan. Dat
-    beteken dat losse notities pas na de echte vaults zichtbaar zijn."""
+def test_loose_notes_appear_last_in_list():
+    """De null-vermelding moet achteraan staan, niet vooraan. Dat betekent dat
+    losse notities pas na de echte vaults zichtbaar zijn."""
     from vault_storage import VaultStore
     objects = {
         f"{USER}/alice/x.md": ("", '"a1"'),
@@ -421,8 +419,46 @@ def test_unfiled_appears_last_in_list():
     }
     from notes_tools import list_vaults
     vaults = list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)
-    assert vaults[-1]["vault"] == "(unfiled)"
-    assert [v["vault"] for v in vaults] == ["alice", "bob", "charlie", "(unfiled)"]
+    assert vaults[-1]["vault"] is None
+    assert [v["vault"] for v in vaults] == ["alice", "bob", "charlie", None]
+
+
+def test_every_search_hit_reads_back_as_the_same_note():
+    """De kern van punt 5. Met de sentinel-string leverde een losse treffer
+    ofwel NoteNotFound op (zoeken adverteerde onleesbare notities), ofwel --
+    met een échte vault (unfiled) erbij -- stilletjes de inhoud van een andere
+    notitie. Een treffer moet altijd terugleiden naar precies die notitie."""
+    from notes_tools import read_note, search_notes
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/(unfiled)/los.md": ("in de echte vault, met naald", '"a1"'),
+        f"{USER}/los.md": ("los onder de gebruiker, met naald", '"b1"'),
+        f"{USER}/echte-vault/diep/los.md": ("diep in een vault, met naald", '"c1"'),
+    }
+    store = VaultStore(FakeS3(objects), "vaults")
+    hits = search_notes(store, USER, "naald")
+
+    assert len(hits) == 3
+    assert {h["vault"] for h in hits} == {"(unfiled)", None, "echte-vault"}
+    for hit in hits:
+        got = read_note(store, USER, hit["vault"], hit["path"])
+        assert got["content"] == hit["snippet"]
+
+
+def test_read_note_works_on_a_loose_note_with_vault_none():
+    from notes_tools import read_note
+    from vault_storage import VaultStore
+    store = VaultStore(FakeS3({f"{USER}/los.md": ("losse notitie", '"l1"')}), "vaults")
+    got = read_note(store, USER, None, "los.md")
+    assert got["content"] == "losse notitie"
+    assert got["vault"] is None
+
+
+def test_storage_key_without_a_vault_sits_under_the_user():
+    from vault_paths import note_path, storage_key
+    key = storage_key(USER, None, "los.md")
+    assert key == f"{USER}/los.md"
+    assert note_path(USER, None, key) == "los.md"
 
 
 # ── MCP-laag ───────────────────────────────────────────────────────────────

@@ -49,7 +49,10 @@ async def _tool_search_notes(user_id: str, args: dict):
 
 
 async def _tool_read_note(user_id: str, args: dict):
-    return notes_tools.read_note(_store(), user_id, args["vault"], args["path"])
+    # args.get: `vault` mag null of afwezig zijn, en betekent dan "los onder
+    # de gebruikersprefix" -- de vorm waarin list_vaults en search_notes zulke
+    # notities aanduiden sinds de sentinel-string weg is.
+    return notes_tools.read_note(_store(), user_id, args.get("vault"), args["path"])
 
 
 TOOL_HANDLERS = {
@@ -64,7 +67,10 @@ TOOLS: list[dict] = [
         "description": (
             "List the Obsidian vaults, how many notes each holds, and whether "
             "it carries a CLAUDE.md with that vault's own conventions. Read "
-            "that file before writing anything into a vault."
+            "that file before writing anything into a vault. An entry with "
+            "`vault: null` means notes sit outside any vault folder, directly "
+            "under the user prefix — usually a misconfigured remote prefix in "
+            "the sync plugin. Pass that same null to read_note to read them."
         ),
         "inputSchema": {"type": "object", "properties": {}, "required": []},
     },
@@ -89,16 +95,17 @@ TOOLS: list[dict] = [
         "name": "read_note",
         "description": (
             "Read one note in full. `path` is relative to the vault root, for "
-            "example 'Tickers/DECK.md'. Returns the content and a revision "
-            "marker."
+            "example 'Tickers/DECK.md'. Pass `vault` exactly as list_vaults or "
+            "search_notes reported it; null (or omitted) reads a note that sits "
+            "outside any vault. Returns the content and a revision marker."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "vault": {"type": "string"},
+                "vault": {"type": ["string", "null"]},
                 "path": {"type": "string"},
             },
-            "required": ["vault", "path"],
+            "required": ["path"],
         },
     },
 ]

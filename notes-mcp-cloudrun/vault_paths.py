@@ -70,7 +70,7 @@ def vault_prefix(user_id: str, vault: str | None = None) -> str:
     return f"{user}/{_safe_segment(vault, 'vault')}/"
 
 
-def storage_key(user_id: str, vault: str, path: str) -> str:
+def storage_key(user_id: str, vault: str | None, path: str) -> str:
     """Volledige objectsleutel voor een notitie. Werpt UnsafePath.
 
     Validatie gebeurt op de gedecodeerde vorm, de sleutel wordt gebouwd uit de
@@ -101,8 +101,10 @@ def storage_key(user_id: str, vault: str, path: str) -> str:
     return prefix + "/".join(parts)
 
 
-def note_path(user_id: str, vault: str, key: str) -> str:
-    """Sleutel terug naar het pad zoals de aanroeper het kent."""
+def note_path(user_id: str, vault: str | None, key: str) -> str:
+    """Sleutel terug naar het pad zoals de aanroeper het kent.
+
+    `vault=None` staat voor een notitie los onder de gebruikersprefix."""
     prefix = vault_prefix(user_id, vault)
     if not key.startswith(prefix):
         raise UnsafePath(f"sleutel hoort niet bij {vault}: {key!r}")
