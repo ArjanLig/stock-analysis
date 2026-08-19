@@ -358,3 +358,77 @@ def test_unfiled_appears_last_in_list():
     vaults = list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)
     assert vaults[-1]["vault"] == "(unfiled)"
     assert [v["vault"] for v in vaults] == ["alice", "bob", "charlie", "(unfiled)"]
+
+
+# ── MCP-laag ───────────────────────────────────────────────────────────────
+
+import asyncio
+
+
+@pytest.fixture(autouse=True)
+def _set_jwt_key(monkeypatch):
+    """mcp_auth.py vereist JWT_SIGNING_KEY zodra hij geimporteerd en gebruikt
+    wordt (via main.py). Zelfde patroon als lazytheta-mcp-cloudrun/test_app.py."""
+    monkeypatch.setenv("JWT_SIGNING_KEY", "test-key-not-for-production")
+
+
+def test_the_three_tools_are_advertised():
+    import mcp_handler
+    assert {t["name"] for t in mcp_handler.TOOLS} == {
+        "list_vaults", "search_notes", "read_note"}
+
+
+def test_no_write_tool_exists_in_phase_one():
+    """Fase 1 schrijft niet. Een tool die er per ongeluk in sluipt is de
+    enige manier waarop deze fase notities kan beschadigen."""
+    import mcp_handler
+    names = {t["name"] for t in mcp_handler.TOOLS}
+    assert not (names & {"write_note", "append_to_note", "delete_note"})
+
+
+def test_every_tool_declares_a_schema():
+    import mcp_handler
+    for tool in mcp_handler.TOOLS:
+        assert tool["inputSchema"]["type"] == "object"
+        assert tool["description"]
+
+
+def test_a_call_without_a_user_is_refused():
+    """user_id komt uit het JWT. Geen JWT, geen toegang tot notities."""
+    import mcp_handler
+    resp = asyncio.run(mcp_handler._handle_one(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "list_vaults", "arguments": {}}}, None))
+    assert resp["error"]["code"] == -32001
+
+
+def test_the_user_id_in_the_arguments_is_ignored(monkeypatch):
+    """Meesturen van een andere user_id mag niets doen -- de server neemt
+    hem uit het token. Dit is het load_credential-lek in testvorm."""
+    import mcp_handler
+    seen = {}
+
+    def fake_list_vaults(store, user_id):
+        seen["user_id"] = user_id
+        return []
+
+    monkeypatch.setattr(mcp_handler, "_store", lambda: object())
+    monkeypatch.setattr(mcp_handler.notes_tools, "list_vaults", fake_list_vaults)
+    asyncio.run(mcp_handler._handle_one(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "list_vaults",
+                    "arguments": {"user_id": "iemand-anders"}}}, USER))
+    assert seen["user_id"] == USER
+
+
+def test_tools_list_needs_no_user():
+    import mcp_handler
+    resp = asyncio.run(mcp_handler._handle_one(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, None))
+    assert len(resp["result"]["tools"]) == 3
+
+
+def test_the_app_exposes_health_and_mcp():
+    import main
+    app = main.create_app()
+    assert app is not None
