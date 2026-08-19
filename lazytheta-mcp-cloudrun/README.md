@@ -14,9 +14,16 @@ Deployed 2026-05-11 to project `stock-analysis-489016`, region `europe-west4`.
 
 ## Local development
 
+Run from the **repo root**, not from this directory. `main.py` imports
+`mcp_auth` and `mcp_server`, and those live in the repo root — the Dockerfile
+copies them next to `main.py` at build time, but locally they are only
+importable if the repo root is on `PYTHONPATH`. Starting with
+`cd lazytheta-mcp-cloudrun && python3 main.py` fails with
+`ModuleNotFoundError: No module named 'mcp_auth'`.
+
 ```bash
-cd lazytheta-mcp-cloudrun
-pip install -r requirements.txt
+cd /Users/administrator/Documents/github/stock-analysis
+pip install -r lazytheta-mcp-cloudrun/requirements.txt
 
 # Set required env vars
 export JWT_SIGNING_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
@@ -25,8 +32,11 @@ export SUPABASE_ANON_KEY="..."
 export SUPABASE_SERVICE_KEY="..."
 
 # Run dev server
-python3 main.py
+PYTHONPATH=. python3 lazytheta-mcp-cloudrun/main.py
 # Server listens on http://localhost:8080
+
+curl http://localhost:8080/health
+# {"status":"ok","service":"lazytheta-mcp"}
 ```
 
 ## Tests
@@ -36,7 +46,15 @@ cd lazytheta-mcp-cloudrun
 python3 -m pytest test_app.py -v
 ```
 
-All 25 tests offline-mocked; no network or Supabase access required.
+32 tests, all offline-mocked; no network or Supabase access required. The
+per-directory `conftest.py` makes sure `import main` / `import mcp_handler`
+resolve to *this* service and not to the notes service, which has files by the
+same names. Run both suites together from the repo root:
+
+```bash
+python3 -m pytest notes-mcp-cloudrun/test_notes_mcp.py \
+                  lazytheta-mcp-cloudrun/test_app.py -q
+```
 
 ## Deploy
 
