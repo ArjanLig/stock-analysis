@@ -27,24 +27,28 @@ _loaded: dict[str, object] = {}
 def _ensure_loaded() -> dict[str, object]:
     if _loaded:
         return _loaded
-    for path in (str(REPO_ROOT), str(HERE)):
-        if path in sys.path:
-            sys.path.remove(path)
-        sys.path.insert(0, path)
-    saved = {name: sys.modules.pop(name, None) for name in OWNED_MODULES}
+    _saved_path = list(sys.path)
     try:
-        for name in OWNED_MODULES:
-            spec = importlib.util.spec_from_file_location(name, HERE / f"{name}.py")
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[name] = module
-            spec.loader.exec_module(module)
-            _loaded[name] = module
-    finally:
-        for name, module in saved.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
+        for path in (str(REPO_ROOT), str(HERE)):
+            if path in sys.path:
+                sys.path.remove(path)
+            sys.path.insert(0, path)
+        saved = {name: sys.modules.pop(name, None) for name in OWNED_MODULES}
+        try:
+            for name in OWNED_MODULES:
+                spec = importlib.util.spec_from_file_location(name, HERE / f"{name}.py")
+                module = importlib.util.module_from_spec(spec)
                 sys.modules[name] = module
+                spec.loader.exec_module(module)
+                _loaded[name] = module
+        finally:
+            for name, module in saved.items():
+                if module is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+    finally:
+        sys.path[:] = _saved_path
     return _loaded
 
 
