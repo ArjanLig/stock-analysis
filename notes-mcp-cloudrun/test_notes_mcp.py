@@ -194,6 +194,51 @@ def test_get_raises_when_the_connection_breaks():
         store.get(f"{USER}/v/a.md")
 
 
+class _RaisingClient:
+    """Een client die bij get_object altijd dezelfde exceptie werpt."""
+
+    def __init__(self, exc):
+        self._exc = exc
+
+    def get_object(self, Bucket, Key):
+        raise self._exc
+
+
+def _client_error(code):
+    from botocore.exceptions import ClientError
+    return ClientError({"Error": {"Code": code, "Message": code}}, "GetObject")
+
+
+def test_a_missing_bucket_is_not_a_missing_note():
+    """NoSuchBucket telde als 'ontbrekend' en werd dus NoteNotFound: "die
+    notitie is er niet", terwijl de hele bucket weg of verkeerd is. Precies de
+    storing-als-data die dit project verbiedt."""
+    from vault_storage import StorageUnavailable, VaultStore
+    store = VaultStore(_RaisingClient(_client_error("NoSuchBucket")), "vaults")
+    with pytest.raises(StorageUnavailable):
+        store.get(f"{USER}/v/a.md")
+
+
+def test_an_exception_without_a_response_does_not_crash():
+    """Een exceptie met .response is None liet _is_missing met AttributeError
+    klappen, en die crash ontsnapte aan de except van get()."""
+    from vault_storage import StorageUnavailable, VaultStore
+
+    class _Weird(Exception):
+        response = None
+
+    store = VaultStore(_RaisingClient(_Weird("kapot")), "vaults")
+    with pytest.raises(StorageUnavailable):
+        store.get(f"{USER}/v/a.md")
+
+
+def test_only_nosuchkey_counts_as_missing():
+    from vault_storage import NoteNotFound, VaultStore
+    store = VaultStore(_RaisingClient(_client_error("NoSuchKey")), "vaults")
+    with pytest.raises(NoteNotFound):
+        store.get(f"{USER}/v/a.md")
+
+
 def test_get_many_returns_every_requested_note():
     from vault_storage import VaultStore
     objects = {f"{USER}/v/n{i}.md": (f"tekst {i}", f'"e{i}"') for i in range(20)}

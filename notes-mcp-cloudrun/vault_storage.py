@@ -24,8 +24,22 @@ class NoteNotFound(LookupError):
 
 
 def _is_missing(exc) -> bool:
-    code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
-    return code in ("NoSuchKey", "404", "NoSuchBucket")
+    """Alleen een ontbrekende sleutel telt als 'niet gevonden'.
+
+    NoSuchBucket stond hier eerder ook in, en dan meldde de server "die notitie
+    bestaat niet" terwijl de hele bucket weg of verkeerd geconfigureerd was --
+    een storing die als data leest. Datzelfde geldt voor de kale "404" van
+    sommige S3-compatibele endpoints: te grof om er een uitspraak over één
+    notitie op te baseren. Alles wat geen NoSuchKey is wordt StorageUnavailable.
+
+    getattr(...) or {}: botocore-excepties hebben niet altijd een .response, en
+    soms is hij None. Die AttributeError ontsnapte aan de except van get().
+    """
+    response = getattr(exc, "response", None) or {}
+    if not isinstance(response, dict):
+        return False
+    code = (response.get("Error") or {}).get("Code", "")
+    return code == "NoSuchKey"
 
 
 class VaultStore:
