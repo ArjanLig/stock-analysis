@@ -87,3 +87,97 @@ def test_single_dot_segments_are_filtered():
     path_with_dot = storage_key(USER, "vault", "./x.md")
     path_without_dot = storage_key(USER, "vault", "x.md")
     assert path_with_dot == path_without_dot
+
+
+# ── vault_storage ──────────────────────────────────────────────────────────
+
+class FakeS3:
+    """Genoeg van de boto3-client om VaultStore te testen. Elke sleutel
+    bevat (inhoud, etag); een sleutel in `broken` gooit een transportfout."""
+
+    def __init__(self, objects=None, broken=()):
+        self.objects = objects or {}
+        self.broken = set(broken)
+        self.calls = []
+
+    def get_paginator(self, name):
+        assert name == "list_objects_v2"
+        outer = self
+
+        class _Pager:
+            def paginate(self, Bucket, Prefix):
+                if "LIST" in outer.broken:
+                    raise OSError("bucket unreachable")
+                keys = sorted(k for k in outer.objects if k.startswith(Prefix))
+                # twee pagina's, zodat paginering echt getest wordt
+                half = max(1, len(keys) // 2)
+                for chunk in (keys[:half], keys[half:]):
+                    yield {"Contents": [{"Key": k} for k in chunk]} if chunk else {}
+
+        return _Pager()
+
+    def get_object(self, Bucket, Key):
+        self.calls.append(Key)
+        if Key in self.broken:
+            raise OSError("connection reset")
+        if Key not in self.objects:
+            from botocore.exceptions import ClientError
+            raise ClientError(
+                {"Error": {"Code": "NoSuchKey", "Message": "not found"}}, "GetObject")
+        body, etag = self.objects[Key]
+
+        class _Body:
+            def read(self_inner):
+                return body.encode("utf-8")
+
+        return {"Body": _Body(), "ETag": etag}
+
+
+def test_list_keys_walks_every_page():
+    """Eén pagina lezen en stoppen laat notities onzichtbaar achter -- het
+    soort stille verlies waar de floor-guard in refresh_universe voor is."""
+    from vault_storage import VaultStore
+    objects = {f"{USER}/v/n{i}.md": (f"tekst {i}", f'"e{i}"') for i in range(9)}
+    store = VaultStore(FakeS3(objects), "vaults")
+    assert len(store.list_keys(f"{USER}/v/")) == 9
+
+
+def test_get_returns_text_and_revision():
+    from vault_storage import VaultStore
+    store = VaultStore(FakeS3({f"{USER}/v/a.md": ("hallo", '"abc123"')}), "vaults")
+    text, revision = store.get(f"{USER}/v/a.md")
+    assert text == "hallo"
+    assert revision == "abc123"          # zonder de aanhalingstekens van S3
+
+
+def test_a_missing_note_is_not_an_empty_note():
+    from vault_storage import NoteNotFound, VaultStore
+    store = VaultStore(FakeS3({}), "vaults")
+    with pytest.raises(NoteNotFound):
+        store.get(f"{USER}/v/weg.md")
+
+
+def test_a_transport_failure_never_looks_like_data():
+    """Een lege lijst teruggeven terwijl de bucket plat ligt is een onware
+    uitspraak over de vault. Zelfde regel als EdgarFetchError."""
+    from vault_storage import StorageUnavailable, VaultStore
+    store = VaultStore(FakeS3({}, broken=["LIST"]), "vaults")
+    with pytest.raises(StorageUnavailable):
+        store.list_keys(f"{USER}/")
+
+
+def test_get_raises_when_the_connection_breaks():
+    from vault_storage import StorageUnavailable, VaultStore
+    store = VaultStore(FakeS3({f"{USER}/v/a.md": ("x", '"e"')}, broken=[f"{USER}/v/a.md"]),
+                       "vaults")
+    with pytest.raises(StorageUnavailable):
+        store.get(f"{USER}/v/a.md")
+
+
+def test_get_many_returns_every_requested_note():
+    from vault_storage import VaultStore
+    objects = {f"{USER}/v/n{i}.md": (f"tekst {i}", f'"e{i}"') for i in range(20)}
+    store = VaultStore(FakeS3(objects), "vaults")
+    got = store.get_many(list(objects))
+    assert len(got) == 20
+    assert got[f"{USER}/v/n7.md"] == "tekst 7"
