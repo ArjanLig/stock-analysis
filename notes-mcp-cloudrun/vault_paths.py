@@ -19,22 +19,25 @@ class UnsafePath(ValueError):
     """Het pad klimt uit de vault, is absoluut, of is geen notitie."""
 
 
-def _decode_until_stable(text: str) -> str:
-    """Decode URL-encoding repeatedly until stable or iteration limit reached.
+def _fully_decoded(text: str, what: str) -> str:
+    """De volledig gedecodeerde vorm, of UnsafePath als die er niet is.
 
-    Defense against double-encoding attacks like ..%252Fx.md (where %25 decodes
-    to %, creating ..%2Fx.md which then decodes to ../x.md). We decode iteratively
-    to catch multi-level attacks, with a reasonable limit to prevent infinite loops.
+    "..%252Fx.md" decodeert naar "..%2Fx.md" en daarna naar "../x.md"; alleen
+    iteratief decoderen ziet zo'n aanval. De vorige versie gaf bij het bereiken
+    van de limiet de half-gedecodeerde vorm terug en gebruikte die ook als
+    sleutel -- dat viel fail-open: vanaf vijf lagen (..%252525252Fx.md) werd de
+    invoer geaccepteerd met een gecodeerde padscheiding er nog in.
+
+    Niet stabiel binnen de limiet betekent dat we niet weten waar de invoer
+    naar wijst, en dan is weigeren het enige veilige antwoord.
     """
-    previous = text
+    current = text
     for _ in range(MAX_DECODE_ITERATIONS):
-        decoded = unquote(previous)
-        if decoded == previous:
-            # Stable: no more encoding detected
+        decoded = unquote(current)
+        if decoded == current:
             return decoded
-        previous = decoded
-    # If we hit the iteration limit, return the last decode (safety fallback)
-    return previous
+        current = decoded
+    raise UnsafePath(f"{what} blijft na {MAX_DECODE_ITERATIONS} decodeerslagen gecodeerd: {text!r}")
 
 
 def _check_segment(name: str, what: str) -> str:
@@ -46,36 +49,54 @@ def _check_segment(name: str, what: str) -> str:
     return cleaned
 
 
+def _safe_segment(raw: str, what: str) -> str:
+    """Keur af op de gedecodeerde vorm, maar geef de oorspronkelijke terug.
+
+    De gedecodeerde vorm zegt waar de invoer naar wijst; de oorspronkelijke is
+    hoe het object in de bucket heet. Decoderen en dan de decode gebruiken
+    herschrijft legitieme namen ('Rendement 100%2B.md' werd '...100+.md') en
+    maakt zulke notities onbereikbaar.
+    """
+    original = (raw or "").strip()
+    _check_segment(_fully_decoded(original, what), what)
+    return _check_segment(original, what)
+
+
 def vault_prefix(user_id: str, vault: str | None = None) -> str:
     """De sleutelprefix van een gebruiker, of van een vault daarbinnen."""
-    user = _decode_until_stable(user_id or "").strip()
-    user = _check_segment(user, "user_id")
+    user = _safe_segment(user_id, "user_id")
     if vault is None:
         return f"{user}/"
-    vault_decoded = _decode_until_stable(vault or "").strip()
-    vault_checked = _check_segment(vault_decoded, "vault")
-    return f"{user}/{vault_checked}/"
+    return f"{user}/{_safe_segment(vault, 'vault')}/"
 
 
 def storage_key(user_id: str, vault: str, path: str) -> str:
-    """Volledige objectsleutel voor een notitie. Werpt UnsafePath."""
+    """Volledige objectsleutel voor een notitie. Werpt UnsafePath.
+
+    Validatie gebeurt op de gedecodeerde vorm, de sleutel wordt gebouwd uit de
+    oorspronkelijke invoer. Zie _fully_decoded en _safe_segment.
+    """
     prefix = vault_prefix(user_id, vault)
 
-    # Percent-encoding iteratively weghalen: "..%252Fx.md" (double-encoded)
-    # decodes to "..%2Fx.md", which then decodes to "../x.md" and must be
-    # rejected. We iterate until stable to catch multi-level encoding attacks.
-    candidate = _decode_until_stable(path or "").strip()
-    if not candidate:
+    original = (path or "").strip()
+    decoded = _fully_decoded(original, "pad")
+    if not original or not decoded:
         raise UnsafePath("pad is leeg")
-    if candidate.startswith("/") or candidate.startswith("\\"):
-        raise UnsafePath(f"pad moet relatief zijn: {path!r}")
-    if not candidate.lower().endswith(NOTE_SUFFIX):
+    for form in (original, decoded):
+        if form.startswith("/") or form.startswith("\\"):
+            raise UnsafePath(f"pad moet relatief zijn: {path!r}")
+    if not decoded.lower().endswith(NOTE_SUFFIX):
         raise UnsafePath(f"alleen {NOTE_SUFFIX}-notities: {path!r}")
 
-    # Filter out empty segments and single dots (./x.md → x.md)
-    parts = [p for p in candidate.replace("\\", "/").split("/") if p not in ("", ".")]
-    if any(p == ".." for p in parts):
+    # Alleen de gedecodeerde vorm laat traversal zien: '..%2Fx.md' is één
+    # segment tot je het decodeert.
+    if any(p == ".." for p in decoded.replace("\\", "/").split("/")):
         raise UnsafePath(f"pad klimt uit de vault: {path!r}")
+
+    # Lege segmenten en losse punten weg (./x.md → x.md), op de invoer zelf.
+    parts = [p for p in original.replace("\\", "/").split("/") if p not in ("", ".")]
+    if not parts:
+        raise UnsafePath("pad is leeg")
 
     return prefix + "/".join(parts)
 

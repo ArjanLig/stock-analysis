@@ -72,6 +72,26 @@ def test_double_url_encoding_is_refused():
         storage_key(USER, "portfolio-vault", "..%252Fx.md")
 
 
+def test_deep_encoding_is_refused_instead_of_falling_open():
+    """Vanaf vijf lagen stopte de decodeerlus en werd de half-gedecodeerde
+    vorm zowel gevalideerd als gebruikt -- de sleutel bevatte dan nog een
+    gecodeerde padscheiding. Niet stabiel binnen de limiet is geen reden om
+    door te gaan, maar om te weigeren."""
+    from vault_paths import UnsafePath, storage_key
+    for bad in ("..%252525252Fx.md", "..%25252525252Fx.md"):
+        with pytest.raises(UnsafePath):
+            storage_key(USER, "v", bad)
+
+
+def test_a_percent_in_a_real_filename_is_preserved():
+    """De sleutel wordt uit de oorspronkelijke invoer gebouwd, niet uit de
+    gedecodeerde vorm. Anders is een notitie die werkelijk '%20' of '%2B' in
+    haar naam heeft onbereikbaar, met NoteNotFound als misleidende melding."""
+    from vault_paths import storage_key
+    assert storage_key(USER, "v", "Q1 %20 review.md") == f"{USER}/v/Q1 %20 review.md"
+    assert storage_key(USER, "v", "Rendement 100%2B.md") == f"{USER}/v/Rendement 100%2B.md"
+
+
 def test_vault_name_is_decoded_and_validated():
     """The vault name must also be decoded and checked for traversal.
     ..%2Fandere-user decodes to ../andere-user and should be refused."""
