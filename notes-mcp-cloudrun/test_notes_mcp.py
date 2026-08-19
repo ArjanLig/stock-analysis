@@ -554,7 +554,137 @@ def test_tools_list_needs_no_user():
     assert len(resp["result"]["tools"]) == 3
 
 
-def test_the_app_exposes_health_and_mcp():
+def test_health_names_this_service_and_not_the_other():
+    """Deze test stond er als `assert app is not None` en slaagde daarmee ook
+    toen `import main` LazyTheta's module opleverde. De servicenaam is het
+    kleinste dat werkelijk deze app vastlegt."""
+    from starlette.testclient import TestClient
+
+    from main import app
+    response = TestClient(app).get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "notes-mcp"}
+
+
+def test_mcp_without_a_token_is_401():
+    from starlette.testclient import TestClient
+
+    from main import app
+    response = TestClient(app).post(
+        "/mcp", json={"jsonrpc": "2.0", "method": "ping", "id": 1})
+    assert response.status_code == 401
+    assert "resource_metadata" in response.headers.get("www-authenticate", "")
+
+
+def test_both_services_run_the_same_auth_middleware():
+    """SmartAuthMiddleware stond in tweevoud in de twee main.py's -- twee
+    handgehouden kopieën van de code die bepaalt óf je binnenkomt en als wie.
+    Nu één definitie in mcp_auth; hier vastgelegd zodat er niet stilletjes een
+    tweede terugkomt."""
+    import mcp_auth
     import main
-    app = main.create_app()
-    assert app is not None
+    assert type(main.create_app()) is mcp_auth.SmartAuthMiddleware
+
+
+# ── de kernregel: storing is geen data, en users zien elkaar niet ───────────
+
+def _call_tool(monkeypatch, store, tool, args, user_id=USER):
+    """Roep een tool aan door de hele MCP-laag heen, met een nep-bucket."""
+    import mcp_handler
+    monkeypatch.setattr(mcp_handler, "_store", lambda: store)
+    return asyncio.run(mcp_handler._handle_one(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": tool, "arguments": args}}, user_id))
+
+
+def _call_json(monkeypatch, store, tool, args, user_id=USER):
+    """Als _call_tool, maar geeft terug wat de client werkelijk te zien krijgt."""
+    import json
+    resp = _call_tool(monkeypatch, store, tool, args, user_id)
+    assert "error" not in resp, resp
+    assert not resp["result"].get("isError"), resp
+    return json.loads(resp["result"]["content"][0]["text"])
+
+
+def test_tools_report_an_unreachable_bucket_as_an_error(monkeypatch):
+    """De -32002-tak, voor elke tool die de bucket oplijst. Een geslaagd
+    resultaat met een lege lijst zou zeggen "je hebt geen vaults" terwijl de
+    bucket onbereikbaar is -- de storing die als data leest."""
+    from vault_storage import VaultStore
+    store = VaultStore(FakeS3({}, broken=["LIST"]), "vaults")
+    for tool, args in (("list_vaults", {}), ("search_notes", {"query": "naald"})):
+        resp = _call_tool(monkeypatch, store, tool, args)
+        assert resp["error"]["code"] == -32002
+        assert "result" not in resp
+
+
+def test_a_broken_key_among_good_ones_surfaces(monkeypatch):
+    """get_many mag een transportfout niet stil laten wegvallen zoals het een
+    verdwenen sleutel doet: dan zou zoeken een notitie overslaan zonder dat
+    iemand het merkt."""
+    from vault_storage import StorageUnavailable, VaultStore
+    objects = {f"{USER}/v/n{i:02d}.md": (f"naald {i}", f'"e{i}"') for i in range(20)}
+    store = VaultStore(FakeS3(objects, broken=[f"{USER}/v/n07.md"]), "vaults")
+    with pytest.raises(StorageUnavailable):
+        store.get_many(list(objects))
+
+    resp = _call_tool(monkeypatch, store, "search_notes", {"query": "naald"})
+    assert resp["error"]["code"] == -32002
+
+
+def test_an_empty_note_is_empty_and_not_missing():
+    """Een leeg bestand is een bestaand bestand. NoteNotFound zou zeggen dat
+    de notitie er niet is, en dat is een andere uitspraak."""
+    from notes_tools import read_note
+    from vault_storage import VaultStore
+    store = VaultStore(FakeS3({f"{USER}/v/leeg.md": ("", '"z1"')}), "vaults")
+    got = read_note(store, USER, "v", "leeg.md")
+    assert got["content"] == ""
+    assert got["revision"] == "z1"
+
+
+USER_B = "9f2c1a44-0000-4000-8000-abcdefabcdef"
+
+
+def _two_user_store():
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/mijn-vault/geheim.md": ("naald van user-a", '"a1"'),
+        f"{USER}/los-a.md": ("losse naald van user-a", '"a2"'),
+        f"{USER_B}/mijn-vault/geheim.md": ("naald van user-b", '"b1"'),
+        f"{USER_B}/los-b.md": ("losse naald van user-b", '"b2"'),
+        f"{USER_B}/alleen-b/CLAUDE.md": ("naald in regels van user-b", '"b3"'),
+    }
+    return VaultStore(FakeS3(objects), "vaults")
+
+
+def test_one_user_never_sees_another_users_notes(monkeypatch):
+    """De kern van de hele service. De server draait met een sleutel die de
+    hele bucket kan lezen, dus de scheiding zit uitsluitend in de prefix die
+    hier wordt voorgezet -- en die komt uit het JWT, niet uit de argumenten."""
+    store = _two_user_store()
+
+    vaults = _call_json(monkeypatch, store, "list_vaults", {})
+    assert [v["vault"] for v in vaults] == ["mijn-vault", None]
+
+    found = _call_json(monkeypatch, store, "search_notes", {"query": "naald"})
+    assert found["total_matches"] == 2
+    assert all("user-a" in h["snippet"] for h in found["hits"])
+
+    note = _call_json(monkeypatch, store, "read_note",
+                      {"vault": "mijn-vault", "path": "geheim.md"})
+    assert note["content"] == "naald van user-a"
+
+    # En de omgekeerde kant: user-b ziet niets van user-a.
+    b_found = _call_json(monkeypatch, store, "search_notes", {"query": "naald"},
+                         user_id=USER_B)
+    assert b_found["total_matches"] == 3
+    assert all("user-b" in h["snippet"] for h in b_found["hits"])
+
+
+def test_no_tool_can_be_talked_into_another_users_prefix(monkeypatch):
+    """Klimmen naar de buurman moet UnsafePath geven, niet zijn notitie."""
+    resp = _call_tool(monkeypatch, _two_user_store(), "read_note",
+                      {"vault": "mijn-vault", "path": f"../../{USER_B}/los-b.md"})
+    assert resp["result"]["isError"] is True
+    assert "losse naald van user-b" not in resp["result"]["content"][0]["text"]
