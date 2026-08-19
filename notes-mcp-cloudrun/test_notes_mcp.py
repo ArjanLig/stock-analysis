@@ -319,3 +319,42 @@ def test_search_skips_unfiled_attachments():
     from notes_tools import search_notes
     hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")
     assert hits == []
+
+
+def test_list_vaults_separates_unfiled_from_real_unfiled_vault():
+    """Bestaat er echt een vault genaamd (unfiled), moet die apart staan van
+    de losse notities. De echte vault toont notes en claude_md correct."""
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/(unfiled)/real.md": ("in de echte vault", '"r1"'),
+        f"{USER}/(unfiled)/CLAUDE.md": ("regels voor deze vault", '"c1"'),
+        f"{USER}/loose.md": ("losse notitie", '"l1"'),
+    }
+    from notes_tools import list_vaults
+    vaults = list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)
+    vault_by_name = {v["vault"]: v for v in vaults}
+    # Twee aparte vermeldingen met dezelfde naam
+    unfiled_entries = [v for v in vaults if v["vault"] == "(unfiled)"]
+    assert len(unfiled_entries) == 2
+    # Eerste is de echte vault
+    assert unfiled_entries[0]["notes"] == 2
+    assert unfiled_entries[0]["claude_md"] == "CLAUDE.md"
+    # Tweede is de losse notities
+    assert unfiled_entries[1]["notes"] == 1
+    assert unfiled_entries[1]["claude_md"] is None
+
+
+def test_unfiled_appears_last_in_list():
+    """De (unfiled)-vermelding moet achteraan staan, niet vooraan. Dat
+    beteken dat losse notities pas na de echte vaults zichtbaar zijn."""
+    from vault_storage import VaultStore
+    objects = {
+        f"{USER}/alice/x.md": ("", '"a1"'),
+        f"{USER}/bob/y.md": ("", '"b1"'),
+        f"{USER}/charlie/z.md": ("", '"c1"'),
+        f"{USER}/loose.md": ("", '"l1"'),
+    }
+    from notes_tools import list_vaults
+    vaults = list_vaults(VaultStore(FakeS3(objects), "vaults"), USER)
+    assert vaults[-1]["vault"] == "(unfiled)"
+    assert [v["vault"] for v in vaults] == ["alice", "bob", "charlie", "(unfiled)"]

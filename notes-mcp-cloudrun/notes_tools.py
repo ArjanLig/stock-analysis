@@ -19,23 +19,30 @@ CLAUDE_MD = "CLAUDE.md"
 UNFILED = "(unfiled)"
 
 
+def _is_note(key: str) -> bool:
+    return key.lower().endswith(NOTE_SUFFIX)
+
+
+def _is_unfiled(user_id: str, key: str) -> bool:
+    """Check if a note is directly under user prefix (no vault subdirectory)."""
+    prefix = vault_prefix(user_id)
+    if not key.startswith(prefix):
+        return False
+    rest = key[len(prefix):]
+    return "/" not in rest
+
+
 def _vault_of(user_id: str, key: str) -> str | None:
-    """Extract vault name from key, or return None if not under a vault.
-    Returns UNFILED for notes directly under the user prefix."""
+    """Extract vault name from key. Returns None for notes not in a vault,
+    or for unfiled notes (use _is_unfiled to detect those separately)."""
     prefix = vault_prefix(user_id)
     if not key.startswith(prefix):
         return None
     rest = key[len(prefix):]
+    # Only return vault name if there's a slash (real vault structure)
     if "/" in rest:
         return rest.split("/", 1)[0]
-    # No slash: it's a note directly under the user prefix (unfiled)
-    if _is_note(key):
-        return UNFILED
     return None
-
-
-def _is_note(key: str) -> bool:
-    return key.lower().endswith(NOTE_SUFFIX)
 
 
 def snippet(text: str, query: str, radius: int = 120) -> str:
@@ -58,9 +65,13 @@ def list_vaults(store, user_id: str) -> list[dict]:
 
     Notities zonder vaultmap staan in (unfiled); dit is geen echte vault maar
     een signaal dat de synchronisatieplugin verkeerd is ingesteld. read_note
-    werkt niet op (unfiled)."""
+    werkt niet op (unfiled). Merk op: bestaat er toevallig een echte vault
+    genaamd (unfiled), dan verschijnt die normaal in de lijst en daarna de
+    losse notities met dezelfde naam. Dat is ongebruikelijk maar eerlijk."""
     keys = store.list_keys(vault_prefix(user_id))
     vaults: dict[str, dict] = {}
+    unfiled_count = 0
+
     for key in keys:
         # Vaults met bijlagen moeten ook verschijnen (met notes: 0)
         prefix = vault_prefix(user_id)
@@ -70,15 +81,22 @@ def list_vaults(store, user_id: str) -> list[dict]:
                 vault_name = rest.split("/", 1)[0]
                 vaults.setdefault(vault_name, {"vault": vault_name, "notes": 0, "claude_md": None})
 
-        # Tel notities
+        # Tel notities (apart voor losse notities)
         if _is_note(key):
-            vault = _vault_of(user_id, key)
-            if vault:
-                entry = vaults.setdefault(vault, {"vault": vault, "notes": 0, "claude_md": None})
-                entry["notes"] += 1
-                if vault != UNFILED and note_path(user_id, vault, key) == CLAUDE_MD:
-                    entry["claude_md"] = CLAUDE_MD
-    return [vaults[v] for v in sorted(vaults)]
+            if _is_unfiled(user_id, key):
+                unfiled_count += 1
+            else:
+                vault = _vault_of(user_id, key)
+                if vault:
+                    entry = vaults.setdefault(vault, {"vault": vault, "notes": 0, "claude_md": None})
+                    entry["notes"] += 1
+                    if note_path(user_id, vault, key) == CLAUDE_MD:
+                        entry["claude_md"] = CLAUDE_MD
+
+    result = [vaults[v] for v in sorted(vaults)]
+    if unfiled_count > 0:
+        result.append({"vault": UNFILED, "notes": unfiled_count, "claude_md": None})
+    return result
 
 
 def read_note(store, user_id: str, vault: str, path: str) -> dict:
@@ -104,7 +122,15 @@ def search_notes(store, user_id: str, query: str, vault: str | None = None,
         text = contents.get(key)
         if text is None or needle.lower() not in text.lower():
             continue
-        found_in = vault or _vault_of(user_id, key)
+
+        # Determine which vault this note belongs to
+        if vault:
+            found_in = vault
+        elif _is_unfiled(user_id, key):
+            found_in = UNFILED
+        else:
+            found_in = _vault_of(user_id, key)
+
         if not found_in:
             continue
 
