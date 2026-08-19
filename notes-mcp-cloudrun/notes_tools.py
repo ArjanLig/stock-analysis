@@ -114,16 +114,40 @@ def read_note(store, user_id: str, vault: str | None, path: str) -> dict:
 
 
 def search_notes(store, user_id: str, query: str, vault: str | None = None,
-                 max_results: int = 20) -> list[dict]:
-    """Zoek op inhoud. Zonder vault doorzoekt hij alles, inclusief losse notities."""
+                 max_results: int = 20) -> dict:
+    """Zoek op inhoud. Zonder vault doorzoekt hij alles, inclusief losse notities.
+
+    Geeft een omhullende dict terug:
+
+        {"hits": [...], "returned": n, "total_matches": N, "truncated": bool}
+
+    en niet, zoals eerder, een kale lijst treffers. Een kale lijst kan niet
+    zeggen dat hij is afgekapt: met 50 treffers en max_results=20 kwamen er 20
+    terug, altijd het alfabetische begin, zonder markering. Op "heb ik ooit
+    over X geschreven?" is dat een onvolledig antwoord dat niet van een
+    volledig antwoord te onderscheiden is -- dezelfde soort stille onwaarheid
+    als een lege lijst bij een onbereikbare bucket.
+
+    Waarom een dict en geen extra laatste element in de lijst: een lijst waarin
+    het laatste element geen treffer is, is een lijst waarover len() liegt en
+    waar elke gewone iteratie overheen struikelt. De dict maakt de drie feiten
+    (deze treffers, zoveel gevonden, wel/niet afgekapt) los benoembaar, en de
+    MCP-laag geeft hem ongewijzigd door als JSON.
+
+    Daarom telt hij ook dóór na de limiet: total_matches is het aantal notities
+    dat de zoekterm bevat, niet het aantal dat je terugkrijgt.
+    """
     needle = (query or "").strip()
+    empty = {"hits": [], "returned": 0, "total_matches": 0, "truncated": False}
     if not needle:
-        return []
+        return empty
 
     keys = [k for k in store.list_keys(vault_prefix(user_id, vault)) if _is_note(k)]
     contents = store.get_many(keys)
 
-    hits = []
+    hits: list[dict] = []
+    total = 0
+    limit = max(0, int(max_results))
     for key in keys:
         text = contents.get(key)
         if text is None or needle.lower() not in text.lower():
@@ -142,14 +166,17 @@ def search_notes(store, user_id: str, query: str, vault: str | None = None,
             if found_in is None:
                 continue          # sleutel hoort niet bij deze gebruiker
 
-        hits.append({
-            "vault": found_in,
-            "path": note_path(user_id, found_in, key),
-            "snippet": snippet(text, needle),
-        })
-        if len(hits) >= max_results:
-            break
-    return hits
+        total += 1
+        # Doortellen na de limiet, maar geen snippets meer bouwen.
+        if len(hits) < limit:
+            hits.append({
+                "vault": found_in,
+                "path": note_path(user_id, found_in, key),
+                "snippet": snippet(text, needle),
+            })
+
+    return {"hits": hits, "returned": len(hits), "total_matches": total,
+            "truncated": total > len(hits)}
 
 
 __all__ = ["NoteNotFound", "list_vaults", "read_note", "search_notes", "snippet"]

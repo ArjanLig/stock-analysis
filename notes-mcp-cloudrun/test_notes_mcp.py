@@ -291,7 +291,8 @@ def test_read_note_refuses_to_leave_the_vault():
 
 def test_search_finds_the_note_and_shows_why():
     from notes_tools import search_notes
-    hits = search_notes(_store_with_vaults(), USER, "wheel")
+    got = search_notes(_store_with_vaults(), USER, "wheel")
+    hits = got["hits"]
     assert len(hits) == 1
     assert hits[0]["path"] == "Tickers/DECK.md"
     assert hits[0]["vault"] == "portfolio-vault"
@@ -300,7 +301,7 @@ def test_search_finds_the_note_and_shows_why():
 
 def test_search_is_case_insensitive():
     from notes_tools import search_notes
-    assert search_notes(_store_with_vaults(), USER, "COMPOUNDER")
+    assert search_notes(_store_with_vaults(), USER, "COMPOUNDER")["hits"]
 
 
 def test_search_can_be_scoped_to_one_vault():
@@ -308,14 +309,14 @@ def test_search_can_be_scoped_to_one_vault():
     beperken scheelt tijd en egress."""
     from notes_tools import search_notes
     assert search_notes(_store_with_vaults(), USER, "fair values",
-                        vault="portfolio-vault") == []
+                        vault="portfolio-vault")["hits"] == []
     assert search_notes(_store_with_vaults(), USER, "fair values",
-                        vault="lazytheta-vault")
+                        vault="lazytheta-vault")["hits"]
 
 
 def test_search_skips_attachments():
     from notes_tools import search_notes
-    assert search_notes(_store_with_vaults(), USER, "binair") == []
+    assert search_notes(_store_with_vaults(), USER, "binair")["hits"] == []
 
 
 def test_snippet_shows_context_around_the_match():
@@ -354,7 +355,7 @@ def test_search_in_unfiled_notes():
         f"{USER}/los.md": ("losse notitie met zoekvraag", '"l1"'),
     }
     from notes_tools import search_notes
-    hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")
+    hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")["hits"]
     assert len(hits) == 1
     assert hits[0]["vault"] is None
     assert hits[0]["path"] == "los.md"
@@ -382,8 +383,8 @@ def test_search_skips_unfiled_attachments():
         f"{USER}/plaatje.png": ("binair data met zoekvraag", '"p1"'),
     }
     from notes_tools import search_notes
-    hits = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "zoekvraag")
-    assert hits == []
+    assert search_notes(VaultStore(FakeS3(objects), "vaults"), USER,
+                        "zoekvraag")["hits"] == []
 
 
 def test_a_real_unfiled_vault_no_longer_collides_with_loose_notes():
@@ -423,6 +424,30 @@ def test_loose_notes_appear_last_in_list():
     assert [v["vault"] for v in vaults] == ["alice", "bob", "charlie", None]
 
 
+def test_search_says_that_it_truncated_and_how_many_it_found():
+    """"Heb ik ooit over X geschreven?" met 50 treffers en max_results=20 gaf
+    20 resultaten zonder enige markering -- een onvolledig antwoord dat niet
+    van een volledig te onderscheiden was."""
+    from notes_tools import search_notes
+    from vault_storage import VaultStore
+    objects = {f"{USER}/v/n{i:03d}.md": ("naald in deze notitie", f'"e{i}"')
+               for i in range(50)}
+    got = search_notes(VaultStore(FakeS3(objects), "vaults"), USER, "naald",
+                       max_results=20)
+    assert len(got["hits"]) == 20
+    assert got["returned"] == 20
+    assert got["total_matches"] == 50
+    assert got["truncated"] is True
+
+
+def test_search_says_it_did_not_truncate_when_everything_fits():
+    from notes_tools import search_notes
+    got = search_notes(_store_with_vaults(), USER, "wheel")
+    assert got["total_matches"] == 1
+    assert got["returned"] == 1
+    assert got["truncated"] is False
+
+
 def test_every_search_hit_reads_back_as_the_same_note():
     """De kern van punt 5. Met de sentinel-string leverde een losse treffer
     ofwel NoteNotFound op (zoeken adverteerde onleesbare notities), ofwel --
@@ -436,7 +461,7 @@ def test_every_search_hit_reads_back_as_the_same_note():
         f"{USER}/echte-vault/diep/los.md": ("diep in een vault, met naald", '"c1"'),
     }
     store = VaultStore(FakeS3(objects), "vaults")
-    hits = search_notes(store, USER, "naald")
+    hits = search_notes(store, USER, "naald")["hits"]
 
     assert len(hits) == 3
     assert {h["vault"] for h in hits} == {"(unfiled)", None, "echte-vault"}

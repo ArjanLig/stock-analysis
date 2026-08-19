@@ -43,6 +43,9 @@ async def _tool_list_vaults(user_id: str, args: dict):
 
 
 async def _tool_search_notes(user_id: str, args: dict):
+    # search_notes geeft een omhullende dict terug (hits + total_matches +
+    # truncated) in plaats van een kale lijst; die gaat ongewijzigd als JSON
+    # naar de client, zodat afkappen zichtbaar is in het antwoord zelf.
     return notes_tools.search_notes(
         _store(), user_id, query=args["query"], vault=args.get("vault"),
         max_results=int(args.get("max_results", 20)))
@@ -77,9 +80,15 @@ TOOLS: list[dict] = [
     {
         "name": "search_notes",
         "description": (
-            "Search note contents across the vaults. Returns the path plus the "
-            "surrounding text of each match. Pass `vault` to narrow the search "
-            "when you already know where to look."
+            "Search note contents across the vaults. Returns "
+            "{hits, returned, total_matches, truncated}: each hit carries the "
+            "vault, the path and the surrounding text. `total_matches` counts "
+            "every matching note, also beyond `max_results`, so `truncated: "
+            "true` tells you the answer is partial — raise `max_results` or "
+            "narrow the query before concluding anything from it. A hit with "
+            "`vault: null` sits outside any vault; pass that null straight to "
+            "read_note. Pass `vault` to narrow the search when you already "
+            "know where to look."
         ),
         "inputSchema": {
             "type": "object",
