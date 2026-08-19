@@ -12145,8 +12145,10 @@ elif page == "Screener":
         st.warning(f"This snapshot is {_age_days} days old — a new annual "
                    "report may have landed since. Refresh before acting on it.")
 
+    # Order is the order of the buttons: large caps first, then the mid- and
+    # small-cap benches where a 20% return on capital is rarer and less known.
     _INDEX_LABELS = {"sp500": "S&P 500", "nasdaq100": "Nasdaq 100",
-                     "dow30": "Dow 30"}
+                     "dow30": "Dow 30", "sp400": "S&P 400", "sp600": "S&P 600"}
     _screener_card = st.container(key="screener_block")
     with _screener_card:
         _pick = st.segmented_control(

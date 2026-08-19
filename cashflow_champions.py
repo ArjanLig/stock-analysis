@@ -46,10 +46,17 @@ SP500_CSV_URL = (
     "s-and-p-500-companies/main/data/constituents.csv"
 )
 # Wikipedia dropped the Nasdaq-100 constituent table in 2026 — the article now
-# only links out to nasdaq.com — so the list comes from stockanalysis.com,
-# which still publishes it as a plain HTML table.
+# only links out to nasdaq.com — and the Dow article went the same way: its 21
+# tables are all price history, so the parser found a single stray ticker and
+# the floor guard refused to write. Both lists now come from stockanalysis.com,
+# which still publishes them as plain HTML tables.
 NASDAQ100_URL = "https://stockanalysis.com/list/nasdaq-100-stocks/"
-DOW30_WIKI_URL = "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+DOW30_URL = "https://stockanalysis.com/list/dow-jones-stocks/"
+# Mid- and small-cap benches. Unlike the Dow article these pages carry a full
+# constituents table with GICS columns — which matters, because none of these
+# names appear in the S&P 500 CSV that supplies sectors for everything else.
+SP400_WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"
+SP600_WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies"
 
 # SIC codes 6000–6999 are finance/insurance/real-estate. Their asset bases
 # dwarf operating cash flow, so Cash ROA is not comparable — excluded by default.
@@ -120,6 +127,42 @@ def _parse_index_tickers(html: str, valid: set) -> list[str]:
     return sorted(set(best))
 
 
+def _parse_wiki_constituents(html: str) -> list[tuple]:
+    """Parse a Wikipedia index page whose constituents table carries GICS
+    columns (the S&P 400 and 600 lists). Returns (symbol, sector, sub_industry)
+    tuples.
+
+    The table is found by its header rather than by size: the 600 article's
+    "changes" table has almost as many rows as the constituents table, so the
+    biggest-table heuristic _parse_index_tickers uses would be one Wikipedia
+    edit away from returning delisted names.
+    """
+    for table in re.findall(r"<table[^>]*>(.*?)</table>", html, re.S | re.I):
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S | re.I)
+        if not rows:
+            continue
+        head = [re.sub(r"<[^>]+>", "", h).strip()
+                for h in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", rows[0], re.S | re.I)]
+        try:
+            i_sym = head.index("Symbol")
+            i_sec = head.index("GICS Sector")
+            i_sub = head.index("GICS Sub-Industry")
+        except ValueError:
+            continue
+        out = []
+        for tr in rows[1:]:
+            cells = [re.sub(r"<[^>]+>", "", c).strip().replace("&amp;", "&")
+                     for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S | re.I)]
+            if len(cells) <= max(i_sym, i_sec, i_sub):
+                continue
+            sym = cells[i_sym]
+            if re.fullmatch(r"[A-Z]{1,5}(\.[A-Z])?", sym):
+                out.append((sym.upper(), cells[i_sec] or None, cells[i_sub] or None))
+        if out:
+            return out
+    return []
+
+
 def _gics_lookup(sp_rows: list[dict]) -> dict:
     """Map normalised ticker → (gics_sector, gics_sub_industry) from the S&P 500
     CSV rows. The CSV already carries both columns; they were parsed and thrown
@@ -179,7 +222,27 @@ def refresh_universe(today: str | None = None) -> dict:
         return _parse_index_tickers(_get(url).decode("utf-8", "ignore"), valid)
 
     nasdaq100 = _constituents(NASDAQ100_URL)
-    dow30 = _constituents(DOW30_WIKI_URL)
+    dow30 = _constituents(DOW30_URL)
+
+    # The mid- and small-cap lists bring their own GICS sectors along, because
+    # nothing else in this pipeline knows them: the S&P 500 CSV covers the 500,
+    # and the override table is a hand-maintained list of a dozen names.
+    wiki_gics: dict[str, tuple] = {}
+    extra: dict[str, list] = {}
+    for idx_name, url in (("sp400", SP400_WIKI_URL), ("sp600", SP600_WIKI_URL)):
+        rows = _parse_wiki_constituents(_get(url).decode("utf-8", "ignore"))
+        syms = []
+        for sym, sector, sub in rows:
+            nk = _norm(sym)
+            if nk not in valid:
+                # Not in the SEC ticker file — a foreign listing or a stale row.
+                # It could not be screened anyway; EDGAR is the only data source.
+                continue
+            syms.append(sym)
+            if sector:
+                wiki_gics.setdefault(nk, (sector, sub))
+        extra[idx_name] = sorted(set(syms))
+    sp400, sp600 = extra["sp400"], extra["sp600"]
 
     # A scraped source that silently returns almost nothing must not quietly
     # shrink the universe: _wiki_constituents falls back to scanning the whole
@@ -187,7 +250,9 @@ def refresh_universe(today: str | None = None) -> dict:
     # than an error. Refuse to write instead of losing constituents.
     for label, got, floor in (("S&P 500", len(sp500), 400),
                               ("Nasdaq-100", len(nasdaq100), 50),
-                              ("Dow 30", len(dow30), 20)):
+                              ("Dow 30", len(dow30), 20),
+                              ("S&P 400", len(sp400), 350),
+                              ("S&P 600", len(sp600), 500)):
         if got < floor:
             raise RuntimeError(
                 f"{label} source returned only {got} constituents (expected "
@@ -196,7 +261,8 @@ def refresh_universe(today: str | None = None) -> dict:
             )
 
     membership: dict[str, set] = {}
-    for idx_name, syms in (("sp500", sp500), ("nasdaq100", nasdaq100), ("dow30", dow30)):
+    for idx_name, syms in (("sp500", sp500), ("nasdaq100", nasdaq100),
+                           ("dow30", dow30), ("sp400", sp400), ("sp600", sp600)):
         for s in syms:
             membership.setdefault(_norm(s), set()).add(idx_name)
 
@@ -214,6 +280,8 @@ def refresh_universe(today: str | None = None) -> dict:
             continue
         sector, sub = gics.get(nk, (None, None))
         if not sector:
+            sector, sub = wiki_gics.get(nk, (None, None))
+        if not sector:
             sector = GICS_OVERRIDES.get(meta["ticker"].upper())
         if not sector:
             no_sector.append(meta["ticker"])
@@ -227,7 +295,9 @@ def refresh_universe(today: str | None = None) -> dict:
         "sources": {
             "sp500": {"url": SP500_CSV_URL, "as_of": today, "count": len(sp500)},
             "nasdaq100": {"url": NASDAQ100_URL, "as_of": today, "count": len(nasdaq100)},
-            "dow30": {"url": DOW30_WIKI_URL, "as_of": today, "count": len(dow30)},
+            "dow30": {"url": DOW30_URL, "as_of": today, "count": len(dow30)},
+            "sp400": {"url": SP400_WIKI_URL, "as_of": today, "count": len(sp400)},
+            "sp600": {"url": SP600_WIKI_URL, "as_of": today, "count": len(sp600)},
             "sec_exchange": {"url": SEC_EXCHANGE_URL, "as_of": today},
         },
         "unresolved": sorted(unresolved),
@@ -266,6 +336,11 @@ def backfill_sectors() -> dict:
         sector, sub = gics.get(_norm(c["ticker"]), (None, None))
         if not sector:
             sector = GICS_OVERRIDES.get(c["ticker"].upper())
+        if not sector:
+            # Mid- and small-cap sectors come from the Wikipedia tables, which
+            # this path deliberately does not fetch. Keeping what refresh_universe
+            # stored beats overwriting a thousand known sectors with None.
+            sector, sub = c.get("gics_sector"), c.get("gics_sub_industry")
         if not sector:
             missing.append(c["ticker"])
         c["gics_sector"] = sector

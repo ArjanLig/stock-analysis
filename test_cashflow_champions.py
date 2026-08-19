@@ -331,3 +331,53 @@ def test_parse_index_tickers_empty_when_no_table_matches():
     """No recognisable table → empty, which the constituent-count floor in
     refresh_universe turns into a loud failure rather than a silent shrink."""
     assert cc._parse_index_tickers("<p>no tables here</p>", _VALID) == []
+
+
+# ── Wikipedia constituent tables (S&P 400 / 600) ──────────────────────────────
+
+_SP400_LIKE = """
+  <table class="wikitable sortable"><tbody>
+    <tr><th>Symbol</th><th>Security</th><th>GICS Sector</th>
+        <th>GICS Sub-Industry</th><th>Headquarters Location</th></tr>
+    <tr><td><a href="/x">AA</a></td><td>Alcoa</td><td>Materials</td>
+        <td>Aluminum</td><td>Pittsburgh, Pennsylvania</td></tr>
+    <tr><td><a href="/y">YETI</a></td><td>Yeti Holdings</td>
+        <td>Consumer Discretionary</td><td>Leisure Products</td>
+        <td>Austin, Texas</td></tr>
+  </tbody></table>
+"""
+
+
+def test_parse_wiki_constituents_returns_symbol_and_sector():
+    """The 400 and 600 lists are the only source for their members' sectors —
+    the S&P 500 CSV that feeds every other name does not contain them."""
+    assert cc._parse_wiki_constituents(_SP400_LIKE) == [
+        ("AA", "Materials", "Aluminum"),
+        ("YETI", "Consumer Discretionary", "Leisure Products"),
+    ]
+
+
+def test_parse_wiki_constituents_skips_the_changes_table():
+    """The S&P 600 article's "selected changes" table has almost as many rows
+    as the constituents table and lists names that have LEFT the index. Picking
+    the biggest table would put delisted companies in the universe, so the
+    header is what identifies the right one."""
+    changes = """
+      <table><tbody>
+        <tr><th>Date</th><th>Added</th><th>Removed</th><th>Reason</th></tr>
+        <tr><td>2026-01-02</td><td>MSFT</td><td>WMT</td><td>Market cap</td></tr>
+        <tr><td>2026-01-03</td><td>GS</td><td>MMM</td><td>Acquired</td></tr>
+        <tr><td>2026-01-04</td><td>AAPL</td><td>AA</td><td>Merger</td></tr>
+      </tbody></table>
+    """
+    assert cc._parse_wiki_constituents(changes + _SP400_LIKE) == [
+        ("AA", "Materials", "Aluminum"),
+        ("YETI", "Consumer Discretionary", "Leisure Products"),
+    ]
+
+
+def test_parse_wiki_constituents_empty_without_gics_columns():
+    """A restructured article yields nothing rather than a partial list; the
+    constituent-count floor in refresh_universe then refuses to write."""
+    html = "<table><tr><th>Symbol</th><th>Company</th></tr><tr><td>AA</td><td>Alcoa</td></tr></table>"
+    assert cc._parse_wiki_constituents(html) == []
