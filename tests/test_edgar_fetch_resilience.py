@@ -175,3 +175,56 @@ def test_ticker_index_downloaded_once_under_concurrent_fanout(monkeypatch):
 
     assert results == [1141391] * 8
     assert len(downloads) == 1, f"index re-downloaded {len(downloads)}x"
+
+
+# ── Debt tags whole sectors actually use ──────────────────────────────────
+
+def _facts(**tags):
+    """company-facts JSON carrying one annual value per named tag."""
+    return {"facts": {"us-gaap": {
+        tag: {"units": {"USD": [{"end": f"{2025}-12-31", "val": val, "form": "10-K",
+                                "fy": 2025, "fp": "FY", "start": "2025-01-01"}]}}
+        for tag, val in tags.items()
+    }}}
+
+
+def test_named_instrument_debt_tags_are_read(monkeypatch):
+    """Homebuilders file NotesPayable, REITs SeniorNotes and some software
+    filers UnsecuredLongTermDebt — none of them ever file a LongTermDebt tag.
+    Read literally they are debt-free, which is the one error a screen whose
+    second test is "no net debt" cannot afford: VeriSign's $1.8bn of senior
+    notes made it look like a net-cash business."""
+    for tag in ("SeniorNotes", "NotesPayable", "UnsecuredLongTermDebt",
+                "SecuredDebt", "DebtAndCapitalLeaseObligations"):
+        monkeypatch.setattr(g, "get_cik", lambda t: 1)
+        monkeypatch.setattr(g, "fetch_company_facts",
+                            lambda cik, _t=tag: _facts(Assets=10_000e6, Revenues=5_000e6, **{_t: 1_788e6}))
+        f = g.fetch_fundamentals("X", n_years=3)
+        debt = [v for v in (f.get("total_debt") or []) if v is not None]
+        assert debt and debt[-1] == 1788, f"{tag} was not read as debt"
+
+
+def test_bond_holdings_are_not_mistaken_for_borrowings(monkeypatch):
+    """AvailableForSaleSecuritiesDebt* is the filer's own bond portfolio — an
+    asset. Matching debt tags by the word "Debt" would turn Veeva's $5bn cash
+    pile into $5bn of borrowings and fail it on the very test it passes."""
+    monkeypatch.setattr(g, "get_cik", lambda t: 1)
+    monkeypatch.setattr(g, "fetch_company_facts", lambda cik: _facts(
+        Assets=10_000e6, Revenues=5_000e6,
+        AvailableForSaleSecuritiesDebtSecuritiesNoncurrent=5_140e6,
+        AvailableForSaleDebtSecuritiesAmortizedCostBasis=5_111e6,
+    ))
+    f = g.fetch_fundamentals("X", n_years=3)
+    assert not [v for v in (f.get("total_debt") or []) if v]
+
+
+def test_primary_debt_tag_wins_over_the_named_fallback(monkeypatch):
+    """The fallback fills gaps; it must never overwrite a figure the filer
+    already reported, or a company with both a term loan and senior notes
+    would report only the notes."""
+    monkeypatch.setattr(g, "get_cik", lambda t: 1)
+    monkeypatch.setattr(g, "fetch_company_facts", lambda cik: _facts(
+        Assets=10_000e6, Revenues=5_000e6, LongTermDebt=3_000e6, SeniorNotes=1_000e6))
+    f = g.fetch_fundamentals("X", n_years=3)
+    debt = [v for v in (f.get("total_debt") or []) if v is not None]
+    assert debt[-1] == 3000

@@ -3072,6 +3072,26 @@ def fetch_fundamentals(ticker, n_years=10):
                 if nc is not None or cu is not None:
                     d["total_debt"] = round(((nc or 0) + (cu or 0)) / M, 0)
 
+        # Named-instrument fallback: whole sectors never file any LongTermDebt
+        # tag at all. Homebuilders report NotesPayable (D.R. Horton: $5,966M),
+        # REITs SeniorNotes (Extra Space: $9,432M), and some software filers
+        # UnsecuredLongTermDebt (Cadence: $2,480M). All three read as debt-free
+        # before this, which is the worst possible failure for a screen whose
+        # second test is "no net debt" — 46 of the 118 names that passed had no
+        # debt figure at all, and most of them genuinely have none, which is
+        # exactly why the few that don't were invisible.
+        #
+        # Applied only to years still missing, so no already-resolved figure
+        # changes. Tags are listed explicitly rather than matched on "Debt":
+        # AvailableForSaleSecuritiesDebt* are the filer's bond HOLDINGS, and
+        # picking those up would turn a company's cash pile into borrowings.
+        for _debt_tag in ("SeniorNotes", "NotesPayable", "UnsecuredLongTermDebt",
+                          "SecuredDebt", "DebtAndCapitalLeaseObligations"):
+            for yr_val, val in _extract_annual_values(facts, _debt_tag, n_years, "USD"):
+                d = data_by_year.setdefault(yr_val, {})
+                if d.get("total_debt") is None:
+                    d["total_debt"] = round(val / M, 0)
+
         # ── Extended debt-like obligations for adjusted Net Debt ──
         # Moody's / S&P style: treat operating leases, finance leases, and
         # underfunded pension as debt-equivalent for credit analysis.
