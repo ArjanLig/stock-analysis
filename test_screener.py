@@ -48,6 +48,34 @@ class TestAverageRoce(unittest.TestCase):
         self.assertFalse(r["passes"])
         self.assertEqual(r["reason"], "insufficient_history")
 
+    def test_a_bank_reads_as_not_measurable_not_as_a_short_record(self):
+        """Banks and insurers do not report operating income — it is not a line
+        their statements have — and REITs and homebuilders file an
+        unclassified balance sheet with no current liabilities. Both leave ROCE
+        without a numerator or a denominator, which is a permanent fact about
+        the filing, not a record that will lengthen with time. Calling it a
+        short history hid 297 of 410 exclusions behind a wrong reason."""
+        r = screen_quality(_fund([None] * 10, [1500] * 10, [500] * 10,
+                                 total_debt=[0] * 10, cash=[10] * 10))
+        self.assertFalse(r["passes"])
+        self.assertEqual(r["reason"], "roce_not_measurable")
+        self.assertEqual(r["years_used"], 0)
+
+    def test_unclassified_balance_sheet_is_also_not_measurable(self):
+        """No current liabilities tagged: capital employed has no denominator."""
+        r = screen_quality(_fund([300] * 10, [1500] * 10, [None] * 10,
+                                 total_debt=[0] * 10, cash=[10] * 10))
+        self.assertEqual(r["reason"], "roce_not_measurable")
+
+    def test_a_recent_ipo_still_reads_as_a_short_record(self):
+        """The split must not swallow the genuine case: a company with three
+        measurable years has a real but short record, and five years at the
+        gate is the whole test."""
+        r = screen_quality(_fund([400] * 3, [1500] * 3, [500] * 3,
+                                 total_debt=[0] * 3, cash=[10] * 3))
+        self.assertEqual(r["reason"], "insufficient_history")
+        self.assertEqual(r["years_used"], 3)
+
     def test_only_the_most_recent_years_count(self):
         """A decade of brilliance in 2010 says nothing about today, so the
         window is capped at the latest max_years."""

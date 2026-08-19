@@ -12249,7 +12249,12 @@ elif page == "Screener":
             _reason_labels = {
                 "roce_below_gate": "Average ROCE under 20%",
                 "net_debt": "Net debt on the latest balance sheet",
-                "insufficient_history": "Fewer than five usable years",
+                "insufficient_history": "Too short a record — under five "
+                                        "measurable years",
+                "roce_not_measurable": "ROCE does not apply to this filer — "
+                                       "banks, insurers and REITs report "
+                                       "neither operating income nor current "
+                                       "liabilities",
                 "debt_tag_suspect": "Debt figure looks like a broken tag — "
                                     "excluded rather than trusted",
                 "no_balance_sheet": "No cash figure to judge net debt with",
@@ -12260,9 +12265,11 @@ elif page == "Screener":
                     label = "EDGAR fetch failed"
                 st.markdown(f"- **{n}** × {label}")
             st.caption(
-                "insufficient_history also catches foreign filers whose IFRS "
-                "statements don't parse — they report fewer usable years, not "
-                "worse businesses."
+                "Not measurable is mostly financials and real estate, where a "
+                "return on capital would not mean what it means elsewhere: the "
+                "balance sheet is the business. Too short a record also catches "
+                "foreign filers whose IFRS statements don't parse — fewer "
+                "usable years, not worse businesses."
             )
 
 

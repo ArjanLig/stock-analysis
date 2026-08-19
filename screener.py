@@ -110,7 +110,16 @@ def screen_quality(fund, min_roce=DEFAULT_MIN_ROCE,
     }
 
     if len(roces) < min_years:
-        result["reason"] = "insufficient_history"
+        # Nothing computed at all is a different fact from a short record, and
+        # it was the larger group by far: 297 of 410 were banks, insurers and
+        # REITs, filed away under "too short a history" as though a longer wait
+        # would fix them. It would not. A bank does not report operating income
+        # — that is not a line its statements have — and an unclassified
+        # balance sheet has no current liabilities to subtract, so ROCE has
+        # neither a numerator nor a denominator. Saying so keeps a whole
+        # category visible instead of hiding it behind a wrong reason.
+        result["reason"] = ("roce_not_measurable" if not roces
+                            else "insufficient_history")
         return result
     if nd is None:
         result["reason"] = "no_balance_sheet"
