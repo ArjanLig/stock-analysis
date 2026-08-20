@@ -1,0 +1,13 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.notes
+      - -t
+      - europe-west4-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/notes-mcp:latest
+      - .
+images:
+  - europe-west4-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/notes-mcp:latest
+options:
+  logging: CLOUD_LOGGING_ONLY
