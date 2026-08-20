@@ -23,6 +23,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from mcp_auth import (
+    SmartAuthMiddleware,
     oauth_authorize,
     oauth_authorize_magic,
     oauth_authorize_password,
@@ -30,77 +31,10 @@ from mcp_auth import (
     oauth_magic_finalize,
     oauth_register,
     oauth_token,
-    verify_jwt,
     well_known_authorization_server,
     well_known_protected_resource,
 )
 from mcp_handler import mcp_endpoint
-
-
-PUBLIC_PREFIXES = ("/oauth/", "/.well-known/", "/health")
-
-
-class SmartAuthMiddleware:
-    """Pure ASGI middleware. Public paths pass through; for everything else,
-    a Bearer JWT is required. user_id from the JWT is stashed in scope so
-    inner handlers can read it.
-    """
-
-    def __init__(self, app):
-        self.app = app
-
-    async def _passthrough(self, scope, receive, send):
-        try:
-            return await self.app(scope, receive, send)
-        except Exception:
-            import sys
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            try:
-                await send({
-                    "type": "http.response.start",
-                    "status": 500,
-                    "headers": [(b"content-type", b"application/json")],
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": b'{"error":"internal_server_error"}',
-                })
-            except Exception:
-                pass
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            return await self.app(scope, receive, send)
-
-        path = scope.get("path", "")
-        if any(path.startswith(p) for p in PUBLIC_PREFIXES):
-            return await self._passthrough(scope, receive, send)
-
-        headers = dict(scope.get("headers") or [])
-        auth = headers.get(b"authorization", b"").decode("latin-1")
-
-        if auth.startswith("Bearer "):
-            token = auth[7:]
-            payload = verify_jwt(token)
-            if payload and payload.get("type") == "access_token" and payload.get("user_id"):
-                scope.setdefault("state", {})["user_id"] = payload["user_id"]
-                return await self._passthrough(scope, receive, send)
-
-        host = headers.get(b"x-forwarded-host", headers.get(b"host", b"")).decode("latin-1")
-        proto = headers.get(b"x-forwarded-proto", b"https").decode("latin-1")
-        resource_metadata = f"{proto}://{host}/.well-known/oauth-protected-resource"
-        www_auth = f'Bearer resource_metadata="{resource_metadata}"'
-
-        await send({
-            "type": "http.response.start",
-            "status": 401,
-            "headers": [
-                (b"content-type", b"text/plain; charset=utf-8"),
-                (b"www-authenticate", www_auth.encode("latin-1")),
-            ],
-        })
-        await send({"type": "http.response.body", "body": b"Unauthorized"})
 
 
 async def health(request: Request) -> JSONResponse:

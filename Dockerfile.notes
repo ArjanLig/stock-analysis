@@ -1,0 +1,21 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+COPY notes-mcp-cloudrun/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY notes-mcp-cloudrun/main.py \
+     notes-mcp-cloudrun/mcp_handler.py \
+     notes-mcp-cloudrun/notes_tools.py \
+     notes-mcp-cloudrun/vault_paths.py \
+     notes-mcp-cloudrun/vault_storage.py \
+     /app/
+
+# Gedeeld met lazytheta-mcp; nooit kopieren, altijd deze ene
+COPY mcp_auth.py /app/
+
+EXPOSE 8080
+ENV PORT=8080
+
+CMD ["python", "main.py"]
