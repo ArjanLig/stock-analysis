@@ -130,6 +130,52 @@ def compute_roce_metric(fund, cfg=None):
     return metric, avg_value
 
 
+# Everything the watchlist row computes from EDGAR, and nothing else. The page
+# needs three numbers per ticker — FCF yield, the quality metric and its
+# average — and was downloading a ~5 MB companyfacts file per name to get
+# them: 380 MB and 13 seconds for a 77-name list, repeated every time Streamlit
+# Cloud restarted and emptied the in-memory cache.
+#
+# The slice stores the INPUTS, not the answers. FCF yield divides by the live
+# price and compute_roce_metric reads overrides out of the config, so a stored
+# answer would be stale the moment the price moved or an override changed.
+# Storing the series keeps every calculation exactly where it was.
+WATCHLIST_FUND_KEYS = (
+    "years",
+    # compute_roce_metric
+    "operating_income", "total_assets", "current_liabilities",
+    "net_income", "total_equity",
+    # capital_employed / excess_liquidity, via roce_for_year
+    "cash", "short_term_investments", "long_term_investments",
+    "total_debt", "operating_lease_liabilities", "finance_lease_liabilities",
+    # trailing FCF yield
+    "fcf", "shares",
+)
+
+
+def slim_fundamentals(fund: dict | None) -> dict | None:
+    """The watchlist-relevant slice of a fundamentals dict, or None.
+
+    Roughly a kilobyte per ticker instead of five megabytes. Absent keys stay
+    absent rather than becoming empty lists: the difference between "the filer
+    reports no debt" and "we never asked" is one this codebase has paid for
+    before, and an empty list here would read as the former.
+    """
+    if not fund:
+        return None
+    out = {k: fund[k] for k in WATCHLIST_FUND_KEYS if fund.get(k)}
+    return out or None
+
+
+def slice_is_usable(sl: dict | None) -> bool:
+    """Whether a stored slice can stand in for a live fetch.
+
+    A slice without years is not a shorter answer, it is no answer — treating
+    it as one would blank a ticker's metrics while looking like data.
+    """
+    return bool(sl) and bool(sl.get("years"))
+
+
 def parse_scorecard_json(raw: str | None) -> dict | None:
     """Extract a JSON dict from a markdown answer.
 

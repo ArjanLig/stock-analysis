@@ -73,6 +73,11 @@ _GUARDED_KEYS_RESTORE_EMPTY = (
     "valuation_inputs",
     "valuation_summary",
     "robustness",
+    # The cached EDGAR slice the watchlist renders from. Losing it is not
+    # data loss — it refetches — but the refetch costs a 5 MB companyfacts
+    # download per ticker, so a caller passing an empty one silently makes
+    # the page slow again.
+    "fund_slice",
 )
 
 # User-intent guarded keys: empty value is a legitimate user action

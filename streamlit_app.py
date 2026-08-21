@@ -63,7 +63,8 @@ from portfolio_metrics import (compute_deployment, display_basis, has_option_leg
                                average_buy_price, hindsight,
                                DEFAULT_TARGET_POS_PCT)
 from prescan_render import parse_verdict_section, gauge_fraction, band_tone
-from scorecard_utils import compute_roce_metric, capital_employed, roce_for_year
+from scorecard_utils import (compute_roce_metric, capital_employed, roce_for_year,
+                             slim_fundamentals, slice_is_usable)
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
 
@@ -777,6 +778,17 @@ def _refresh_stale_valuations(client, cfgs: dict, user_id: str | None = None,
         cfg.setdefault("ticker", ticker)
         summary = calculate_multi_lens_valuation_remote(cfg)
         cfg["valuation_summary"] = summary
+        # Refresh the watchlist's EDGAR slice while we are already writing
+        # this config. Without it the page falls back to a 5 MB companyfacts
+        # download per ticker on the next cold load. A failure here must not
+        # cost the valuation that just succeeded, so the old slice stays.
+        try:
+            _sl = slim_fundamentals(fetch_fundamentals(ticker, n_years=10))
+            if _sl:
+                cfg["fund_slice"] = _sl
+        except Exception as _e:
+            logger.warning("Slice refresh failed for %s (keeping previous): %s",
+                           ticker, _e)
         save_config(client, ticker, cfg, user_id=user_id)
         return ticker
 
@@ -4128,19 +4140,40 @@ def _watchlist_overview():
         # blank the ticker's FCF Yield for a full day.
         return fetch_fundamentals(t, n_years=10)
 
-    # Pre-fetch fundamentals in parallel (cached 24h, only slow on first load)
+    # Fundamentals: stored slice first, EDGAR only for what is missing.
+    #
+    # This page needs three numbers per ticker and used to download a ~5 MB
+    # companyfacts file per name to get them — 380 MB and 13 seconds for a
+    # 77-name list. st.cache_data lives in the container's memory, so every
+    # Streamlit Cloud restart threw that away and the next visitor paid it
+    # again. The slice is the same series, stored on the config, so the
+    # arithmetic below is unchanged and the network is not touched.
     from concurrent.futures import ThreadPoolExecutor
+
     _fund_map = {}
     _fund_unavailable = set()
-    with ThreadPoolExecutor(max_workers=6) as _fund_exec:
-        _fund_futures = {t: _fund_exec.submit(_cached_fundamentals, t) for t in wl_tickers}
-    for t, f in _fund_futures.items():
-        try:
-            _fund_map[t] = f.result()
-        except Exception as e:
-            logger.warning("Fundamentals fetch failed for %s: %s", t, e)
-            _fund_map[t] = {}
-            _fund_unavailable.add(t)
+    _needs_fetch = []
+    for t in wl_tickers:
+        _slice = (_wl_configs.get(t) or {}).get("fund_slice")
+        if slice_is_usable(_slice):
+            _fund_map[t] = _slice
+        else:
+            _needs_fetch.append(t)
+
+    if _needs_fetch:
+        # Only the stragglers: a newly added ticker, or one whose slice has
+        # not been written yet. Falling back to a live fetch keeps the page
+        # correct while the backfill catches up.
+        with ThreadPoolExecutor(max_workers=6) as _fund_exec:
+            _fund_futures = {t: _fund_exec.submit(_cached_fundamentals, t)
+                             for t in _needs_fetch}
+        for t, f in _fund_futures.items():
+            try:
+                _fund_map[t] = f.result()
+            except Exception as e:
+                logger.warning("Fundamentals fetch failed for %s: %s", t, e)
+                _fund_map[t] = {}
+                _fund_unavailable.add(t)
 
     rows = []
     for t, cfg_wl in _wl_configs.items():
