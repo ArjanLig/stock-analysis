@@ -149,7 +149,16 @@ class TestPortfolio(unittest.TestCase):
         self.assertEqual(cb["AAPL"]["cost_per_share"], -150.0)
         self.assertEqual(cb["AAPL"]["adjusted_cost"], -1500.0)
         self.assertEqual(cb["AAPL"]["purchase_price"], 150.0)
-        self.assertEqual(cb["AAPL"]["total_pl"], 200.0)   # (170-150)x10, in USD
+        # total_pl is the net cash the name has moved, not its profit — the
+        # same convention Tastytrade fills it with, because the portfolio page
+        # finishes the sum with `total_pl + market_value`. This asserted the
+        # finished profit until 2026-08-21, so the page added the market value
+        # to a figure that already contained it and every Trading 212 holding
+        # arrived among the top performers: META's -$20 loss was drawn as a
+        # +$1,643 gain, which is exactly what its position was worth.
+        self.assertEqual(cb["AAPL"]["total_pl"], -1500.0)
+        # And the sum the page actually performs gives the profit back.
+        self.assertEqual(cb["AAPL"]["total_pl"] + 10 * 170.0, 200.0)
         self.assertEqual(cb["AAPL"]["option_pl"], 0)
         self.assertEqual(cb["AAPL"]["trades"], [])
         # Per-share figures are in USD — converted where the instrument is
@@ -764,3 +773,63 @@ class TestHistoryIntegration(unittest.TestCase):
         cash = [c for c in calls if c.startswith("/equity/history/transactions")]
         self.assertEqual(len(orders), 1)
         self.assertEqual(len(cash), 1)
+
+
+class TestTotalPlMeansNetCash(unittest.TestCase):
+    """`total_pl` holds net cash moved, not profit.
+
+    Tastytrade sums signed transaction values into it and the portfolio page
+    finishes with `total_pl + market_value`. Trading 212 used to put the
+    finished unrealized P/L there, so the page added the market value to a
+    number that already contained it: every T212 holding showed its position's
+    worth as its gain and filled the Top Performers list, four of them while
+    losing money.
+    """
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
+
+    def _cost_basis(self, mock_get, quantity, paid, now):
+        def _router(path, creds, **kw):
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path == "/equity/positions":
+                return [{"instrument": {"ticker": "AAPL_US_EQ",
+                                        "isin": "US0378331005"},
+                         "quantity": quantity, "averagePricePaid": paid,
+                         "currentPrice": now,
+                         "walletImpact": {"currency": "EUR"}}]
+            if path == "/equity/account/info":
+                return {"id": 42, "currencyCode": "EUR"}
+            raise AssertionError(path)
+        mock_get.side_effect = _router
+        cb, _ = t212_api.fetch_portfolio_data(_CREDS)
+        return cb["AAPL"]
+
+    @patch("gather_data.fetch_fx_rate", return_value=1.0)
+    @patch("t212_api._get")
+    def test_a_losing_position_stays_losing(self, mock_get, _fx):
+        """The bug's signature: bought at 150, now 100, and the page must not
+        report a gain the size of the holding."""
+        d = self._cost_basis(mock_get, 10, 150.0, 100.0)
+        market_value = d["shares_held"] * d["broker_price"]
+        self.assertAlmostEqual(d["total_pl"] + market_value, -500.0)
+
+    @patch("gather_data.fetch_fx_rate", return_value=1.0)
+    @patch("t212_api._get")
+    def test_it_matches_the_equity_cost_convention(self, mock_get, _fx):
+        """Both fields describe cash that left, so for a plain holding they
+        agree. The closed-position branch already assumed as much."""
+        d = self._cost_basis(mock_get, 10, 150.0, 170.0)
+        self.assertAlmostEqual(d["total_pl"], d["equity_cost"])
+
+    @patch("gather_data.fetch_fx_rate", return_value=1.0)
+    @patch("t212_api._get")
+    def test_the_sign_stays_negative_however_well_it_did(self, mock_get, _fx):
+        """A held name has only ever cost money. A positive figure here is
+        what turned the page's addition into a double count."""
+        d = self._cost_basis(mock_get, 10, 150.0, 900.0)
+        self.assertLess(d["total_pl"], 0)
+        market_value = d["shares_held"] * d["broker_price"]
+        self.assertAlmostEqual(d["total_pl"] + market_value, 7500.0)

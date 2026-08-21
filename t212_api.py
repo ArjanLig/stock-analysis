@@ -147,7 +147,6 @@ def fetch_portfolio_data(creds: dict):
         converted = rate is not None and native_ccy not in ("", "USD")
         avg = native_avg * rate if converted else native_avg
         price = native_price * rate if converted else native_price
-        pl = (price - avg) * shares
 
         # equity_cost and cost_per_share are NEGATIVE by convention — cash that
         # left the account. Tastytrade builds them by summing signed trade
@@ -156,6 +155,22 @@ def fetch_portfolio_data(creds: dict):
         # that into an addition, which is how RDDT showed +212% on a losing
         # position.
         cost = -(shares * avg)
+
+        # total_pl follows that same convention: the net cash a name has moved,
+        # NOT its profit. Tastytrade sums signed transaction values into it and
+        # the portfolio page finishes the sum with `total_pl + market_value`.
+        #
+        # This used to hold the finished unrealized P/L, so the page added the
+        # market value to a number that already accounted for it: META's -$20
+        # loss was drawn as a +$1,643 gain, its position's value, and every
+        # Trading 212 holding turned up among the top performers. Two meanings
+        # for one field, the mistake this codebase keeps paying for.
+        #
+        # Summed from the trades rather than taken from `cost`, because a name
+        # that was partly sold has cash flowing both ways and `cost` only knows
+        # the shares still held. For a plain buy the two agree exactly, which
+        # is what the closed-position branch below already assumes.
+        pl = sum(t["net_value"] for t in trades_by_symbol.get(symbol, [])) or cost
 
         cost_basis[symbol] = {
             "total_credits": 0,
