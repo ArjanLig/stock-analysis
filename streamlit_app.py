@@ -4123,7 +4123,11 @@ def _watchlist_overview():
         # thread pool for 2.5 MB that a single select returns, and repeat that
         # every 30 seconds when the cache expired. tickers_tuple stays in the
         # signature so the cache key still invalidates when the list changes.
-        cfgs = load_all_configs(_sb_client, user_id=user_id)
+        #
+        # Without ai_notes: 79% of the payload, and the rows below read it
+        # zero times. These configs are for rendering only — the editor and
+        # the refresh handler load the complete config for themselves.
+        cfgs = load_all_configs(_sb_client, user_id=user_id, include_ai_notes=False)
         wanted = set(tickers_tuple)
         return {t: c for t, c in cfgs.items() if t in wanted} if wanted else cfgs
 

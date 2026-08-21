@@ -139,5 +139,51 @@ class TestSaveGuard:
         assert opgeslagen["config"]["fund_slice"] == {"years": [2024]}
 
 
+
+class TestSlimConfigLoad:
+    """The watchlist loads configs without ai_notes: 79% of the payload for a
+    key the rows never read. The risk is not the read but a write that
+    follows one — a partial config saved as if it were complete."""
+
+    def test_the_slim_load_reads_a_different_source(self, monkeypatch):
+        import config_store
+        gezien = {}
+
+        class _Q:
+            def select(self, *a):
+                return self
+
+            def eq(self, *a):
+                return self
+
+            def execute(self):
+                return type("R", (), {"data": []})()
+
+        class _C:
+            def table(self, naam):
+                gezien["bron"] = naam
+                return _Q()
+
+        config_store.load_all_configs(_C(), user_id="u1")
+        assert gezien["bron"] == "watchlist_configs"
+
+        config_store.load_all_configs(_C(), user_id="u1", include_ai_notes=False)
+        assert gezien["bron"] == "watchlist_configs_no_notes"
+
+    def test_the_watchlist_rows_never_write_a_config(self):
+        """A partial config handed to save_config is how the prescan sections
+        got wiped once before. save_config's merge would survive it, but the
+        rendering path has no business saving at all — this pins that."""
+        import re
+        src = open("streamlit_app.py").read().split("\n")
+        start = next(i for i, line in enumerate(src) if "_cached_watchlist" in line)
+        einde = start
+        for i in range(start, min(start + 900, len(src))):
+            if re.match(r"^def |^# ══", src[i]) and i > start + 50:
+                einde = i
+                break
+        blok = "\n".join(src[start:einde])
+        assert "save_config" not in blok
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

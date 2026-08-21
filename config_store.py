@@ -312,7 +312,7 @@ def load_config(client, ticker, user_id=None):
     raise last_exc  # unreachable: loop always returns or raises
 
 
-def load_all_configs(client, user_id=None):
+def load_all_configs(client, user_id=None, include_ai_notes=True):
     """Every config for a user in one round-trip: {TICKER: cfg}.
 
     The watchlist page used to call load_config once per ticker — 64 separate
@@ -322,8 +322,17 @@ def load_all_configs(client, user_id=None):
 
     Shapes each config exactly as load_config does (tuples restored), so the
     two are interchangeable.
+
+    ``include_ai_notes=False`` reads a view with that one key stripped: it is
+    79% of the payload (2.5 MB of 3.1 MB across a 77-name list) and the row
+    rendering reads it zero times. Only for display paths — a config loaded
+    this way must never be handed to save_config as if it were complete.
+    save_config restores keys the caller omits, so it would survive, but
+    relying on that to cover a knowingly partial read is how the prescan
+    sections got wiped once already.
     """
-    query = client.table("watchlist_configs").select("ticker, config")
+    source = "watchlist_configs" if include_ai_notes else "watchlist_configs_no_notes"
+    query = client.table(source).select("ticker, config")
     if user_id is not None:
         query = query.eq("user_id", user_id)
     resp = query.execute()

@@ -62,7 +62,11 @@ def main():
     from supabase import create_client
     client = create_client(url, key)
 
-    cfgs = config_store.load_all_configs(client, user_id=args.user_id)
+    # Without ai_notes: this only needs the ticker list and any existing
+    # slice, and the prose is 79% of the payload. Nothing here writes a
+    # loaded config back — save_config gets the one key that changed.
+    cfgs = config_store.load_all_configs(client, user_id=args.user_id,
+                                         include_ai_notes=False)
     todo = [t for t, c in cfgs.items()
             if not (args.only_missing and slice_is_usable((c or {}).get("fund_slice")))]
     print(f"{len(cfgs)} configs, {len(todo)} te verwerken", file=sys.stderr)
