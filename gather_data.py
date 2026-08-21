@@ -2890,6 +2890,54 @@ _IFRS_CAPEX_TAGS = [
 ]
 
 
+def latest_cover_page_shares(facts, last_year, ticker=""):
+    """Share count from the most recent filing cover page, or None.
+
+    The annual series cannot see a split that lands between 10-Ks. Booking
+    split roughly 25-for-1 in April 2026, so its FY2025 count of 33M sat
+    beside a post-split $210 price and the watchlist reported a 133% FCF
+    yield. The post-split figure arrived on a 10-Q and never entered the
+    series, so the split detector had nothing to detect.
+
+    Three things make dei:EntityCommonStockSharesOutstanding treacherous,
+    all found by measuring a real watchlist rather than trusting the fix:
+
+    • **It goes stale silently.** Mastercard's newest value is dated 2010 and
+      Comcast's 2009 — they stopped tagging it. Taking the newest entry
+      regardless of age put Mastercard on 122M shares instead of 906M. So the
+      date must reach the last fiscal year we hold; older than that and the
+      caller should keep the annual series.
+    • **Multi-class filers report one row per class**, so rows sharing the
+      newest date are summed rather than chosen between.
+    • **A foreign filer counts ordinary shares while the price is an ADR.**
+      Taiwan Semiconductor's 25.9bn needs the ratio the annual series gets.
+
+    Returns None whenever it cannot be trusted — never a guess. The caller
+    falls back to the fiscal-year count, which is what it used before.
+    """
+    if not facts or not last_year:
+        return None
+    try:
+        per_end = {}
+        units = (facts.get("facts", {}).get("dei", {})
+                 .get("EntityCommonStockSharesOutstanding", {}).get("units") or {})
+        for rows in units.values():
+            for e in rows:
+                if e.get("end") and e.get("val"):
+                    per_end.setdefault(e["end"], []).append(float(e["val"]))
+        if not per_end:
+            return None
+        newest = max(per_end)
+        if int(str(newest)[:4]) < int(last_year):
+            return None                    # stale: the filer stopped tagging
+        total = sum(per_end[newest])
+        adjusted = apply_adr_share_ratio([total], ticker)
+        return adjusted[0] if adjusted else total
+    except Exception as e:
+        print(f"[EDGAR] Latest share count unavailable: {e}")
+        return None
+
+
 def fetch_fundamentals(ticker, n_years=10):
     """Fetch historical financial fundamentals from EDGAR XBRL.
 
@@ -3268,6 +3316,33 @@ def fetch_fundamentals(ticker, n_years=10):
                 for j in range(i):
                     if shares[j] is not None:
                         shares[j] = round(shares[j] * ratio)
+
+    # The share count from the most recent cover page, whatever form it came
+    # on. The annual series above cannot see a split that happened after the
+    # last 10-K: Booking split roughly 25-for-1 in April 2026, so its FY2025
+    # count of 33M sat next to a post-split price of $210 and the watchlist
+    # reported a 133% FCF yield. The split detector never fired because the
+    # post-split figure was in a 10-Q and never entered the series.
+    #
+    # This is also simply the right denominator. An FCF yield is trailing cash
+    # flow over TODAY's market capitalisation, so the share count belongs on
+    # the same basis as the price — not a weighted average from a fiscal year
+    # that has closed.
+    # Three things make this tag treacherous, all of them found by measuring
+    # the change across a real watchlist rather than trusting the fix:
+    #
+    #  • It goes stale silently. Mastercard's most recent value is dated 2010
+    #    and Comcast's 2009 — they simply stopped tagging it. Taking the
+    #    newest entry regardless of age put Mastercard on 122M shares instead
+    #    of 906M and its FCF yield at 24%. So the date has to clear the last
+    #    fiscal year we have; older than that and the annual series wins.
+    #  • Multi-class filers report one row per class, so the rows sharing the
+    #    newest date are summed rather than picked between.
+    #  • A foreign filer counts ordinary shares while the price is an ADR.
+    #    Taiwan Semiconductor's 25.9bn needs the same ratio the annual series
+    #    already gets.
+    result["shares_latest"] = latest_cover_page_shares(
+        facts, all_years[-1] if all_years else None, ticker)
 
     # Compute FCF = CFO + CapEx (capex is already negative)
     result["fcf"] = []

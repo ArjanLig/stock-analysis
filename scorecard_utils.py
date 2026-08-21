@@ -148,8 +148,10 @@ WATCHLIST_FUND_KEYS = (
     # capital_employed / excess_liquidity, via roce_for_year
     "cash", "short_term_investments", "long_term_investments",
     "total_debt", "operating_lease_liabilities", "finance_lease_liabilities",
-    # trailing FCF yield
-    "fcf", "shares",
+    # trailing FCF yield. shares_latest is the cover-page count from the most
+    # recent filing — the one on the same basis as the price, and the only one
+    # that survives a split between annual reports.
+    "fcf", "shares", "shares_latest",
 )
 
 

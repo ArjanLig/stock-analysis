@@ -190,7 +190,14 @@ def _latest_fcf_yield(fund: dict, equity_market_value: float | None,
     if latest is None:
         return None
 
-    shares_same_year = shares[latest] if latest < len(shares) else None
+    # The most recent cover-page count first, because it is on the same basis
+    # as the price. A fiscal-year figure is not: Booking split ~25-for-1 in
+    # April 2026, so its FY2025 count of 33M divided a full year's cash flow
+    # into 25x too few shares and, against a post-split $210, reported a 133%
+    # yield. The split detector could not catch it — the post-split number
+    # arrived on a 10-Q and never entered the annual series.
+    shares_same_year = fund.get("shares_latest") or (
+        shares[latest] if latest < len(shares) else None)
     if live_price and live_price > 0 and shares_same_year:
         # fcf is in $M, shares is a RAW count — fetch_fundamentals says so in
         # its own docstring. parse_financials stores shares in millions and
