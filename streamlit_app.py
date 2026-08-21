@@ -11607,11 +11607,22 @@ elif page == "Results":
       time_back = period_map[selected_period]
       # YTD uses 1y data filtered client-side to Jan 1 of current year
       api_time_back = "1y" if time_back == "ytd" else time_back
-      cache_key = f"net_liq_{api_time_back}"
+      # Follow the tab, exactly like the figures above this chart do. This
+      # drew a single broker's curve under an Overview headline: after money
+      # moved from Tastytrade to Trading 212 the line fell off a cliff to
+      # $7k while Portfolio Value beside it read $29,873, because the drop
+      # was real for one account and the rise at the other was never plotted.
+      #
+      # The view belongs in the cache key too — without it, switching tabs
+      # kept showing whichever broker was loaded first.
+      cache_key = f"net_liq_{api_time_back}::{_res_view}"
       if cache_key not in st.session_state:
           try:
               with st.spinner("Loading net liq history..."):
-                  st.session_state[cache_key] = fetch_net_liq_history(api_time_back)
+                  st.session_state[cache_key] = (
+                      fetch_all_net_liq_history(api_time_back)
+                      if _res_view == "Overview"
+                      else fetch_net_liq_history(api_time_back))
           except Exception as e:
               logger.warning("Net liq history fetch failed (%s): %s", api_time_back, e)
               st.session_state[cache_key] = None
