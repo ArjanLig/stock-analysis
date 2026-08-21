@@ -187,3 +187,38 @@ class TestSlimConfigLoad:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestNewTickerGetsASlice:
+    """A ticker added today must arrive with a slice. Without one the
+    watchlist falls back to a 5 MB fetch for it on every cold load until the
+    next Refresh All — the old behaviour, for that one name."""
+
+    def _run_analysis_source(self):
+        src = open("streamlit_app.py").read().split("\n")
+        start = next(i for i, line in enumerate(src)
+                     if line.startswith("def run_analysis("))
+        einde = next(i for i in range(start + 1, len(src))
+                     if src[i].startswith("def ") or src[i].startswith("# ══"))
+        return "\n".join(src[start:einde])
+
+    def test_run_analysis_builds_the_slice(self):
+        blok = self._run_analysis_source()
+        assert "slim_fundamentals(fetch_fundamentals(" in blok
+        assert 'cfg["fund_slice"]' in blok
+
+    def test_it_uses_the_ten_year_raw_share_source(self):
+        """parse_financials returns six years and shares in millions;
+        fetch_fundamentals ten years and a raw count. Reading the wrong one
+        put every EDGAR-derived FCF yield at 0.0% once already, so the slice
+        must come from fetch_fundamentals with n_years=10."""
+        blok = self._run_analysis_source()
+        assert "fetch_fundamentals(ticker, n_years=10)" in blok
+
+    def test_a_slice_failure_does_not_lose_the_analysis(self):
+        """The DCF that just succeeded is worth more than the cache. A failed
+        slice must degrade to the fallback, not raise."""
+        blok = self._run_analysis_source()
+        i = blok.index("slim_fundamentals(fetch_fundamentals(")
+        omgeving = blok[max(0, i - 400):i + 800]
+        assert "try:" in omgeving and "except Exception" in omgeving

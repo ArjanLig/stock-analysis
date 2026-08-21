@@ -8555,6 +8555,35 @@ def run_analysis(ticker, peer_mode, manual_peers, margin_of_safety, terminal_gro
 
         status.write(f"\u2705 Configuration complete")
 
+        # ── Step: the watchlist's EDGAR slice ──
+        # A new ticker arrives here with no slice, so the watchlist would fall
+        # back to a live 5 MB fetch for it on every cold load until the next
+        # Refresh All. One deliberate fetch now costs a second inside an
+        # operation that already takes several.
+        #
+        # Deliberately NOT reusing `financials` from step 3: that comes from
+        # parse_financials, which returns six years and share counts in
+        # millions, while the watchlist's arithmetic expects ten years and a
+        # raw count. Mixing the two put every EDGAR-derived FCF yield at 0.0%
+        # once already.
+        status.write("\u23f3 Caching fundamentals for the watchlist...")
+        try:
+            with contextlib.redirect_stdout(buf):
+                _slice = slim_fundamentals(fetch_fundamentals(ticker, n_years=10))
+            if _slice:
+                cfg["fund_slice"] = _slice
+                status.write("\u2705 Fundamentals cached")
+            else:
+                status.write("\u26a0\ufe0f No EDGAR series to cache \u2014 the "
+                             "watchlist will fetch this one live")
+        except Exception as _e:
+            # Never let this cost the analysis that just succeeded; the
+            # watchlist simply falls back to fetching this ticker itself.
+            logger.warning("Slice build failed for %s: %s", ticker, _e)
+            status.write("\u26a0\ufe0f Could not cache fundamentals \u2014 the "
+                         "watchlist will fetch this one live")
+        _flush_clean(buf, pos, status)
+
         status.update(label=f"Analysis complete — {company_name} ({ticker})", state="complete", expanded=False)
 
     return cfg, _cr
