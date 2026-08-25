@@ -6100,6 +6100,8 @@ def _dcf_editor(ticker):
                     'Goodwill wordt <b>niet</b> afgetrokken — zo blijven acquisitie-zware namen vergelijkbaar.<br>'
                     'Netto-cash gaat er wél af, zodat een cash-berg de operationele returns niet verwatert; '
                     'namen met netto schuld verliezen niets.<br>'
+                    'In jaren vóór ASC 842 — leases stonden toen niet op de balans — wordt '
+                    'niets afgetrokken: de schuldkant mist daar zijn grootste post.<br>'
                     f'Gemiddelde over de laatste {ROCE_WINDOW_YEARS} jaar, per jaar gemaximeerd op {int(ROCE_CEILING)}%.<br>'
                     'De float/ROE-fallback toetst op de onaangepaste (TA−CL)/TA, zodat een cash-berg '
                     'geen float-bedrijf van je maakt.<br>'
@@ -6277,8 +6279,9 @@ def _dcf_editor(ticker):
                             "In $M. EBIT = Operating Income (proxy). Capital Employed = "
                             "Total Assets − Current Liabilities − max(0, cash + beleggingen "
                             "− schuld incl. leases). Goodwill wordt niet afgetrokken; "
-                            f"netto-cash wel. Laatste {ROCE_WINDOW_YEARS} jaar, per jaar "
-                            f"gemaximeerd op {int(ROCE_CEILING)}%."
+                            "netto-cash wel, behalve in jaren vóór ASC 842. Laatste "
+                            f"{ROCE_WINDOW_YEARS} jaar, per jaar gemaximeerd op "
+                            f"{int(ROCE_CEILING)}%."
                         )
             else:
                 st.info(f"Insufficient data for {_fund_metric} (need 3+ years)")

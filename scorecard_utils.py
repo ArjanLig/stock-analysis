@@ -43,13 +43,42 @@ def _at(fund, key, i):
     return v if v is not None else 0.0
 
 
+def first_lease_reporting_year(fund):
+    """Index of the first year this filer puts a lease liability on the balance
+    sheet, or 0 when it never reports one.
+
+    ASC 842 only moved operating leases onto the balance sheet for fiscal years
+    beginning after 15 Dec 2018. A year is "reported" as soon as either lease
+    series carries a value — including an explicit 0.0, which is a filer saying
+    it has no leases rather than the standard not existing yet.
+    """
+    op = fund.get("operating_lease_liabilities") or []
+    fn = fund.get("finance_lease_liabilities") or []
+    for i in range(max(len(op), len(fn))):
+        if ((i < len(op) and op[i] is not None)
+                or (i < len(fn) and fn[i] is not None)):
+            return i
+    return 0
+
+
 def excess_liquidity(fund, i):
     """Non-operating liquidity at year i: max(0, marketables − debt).
 
     marketables = cash + short_term_investments + long_term_investments
     debt        = total_debt + operating_lease_liabilities + finance_lease_liabilities
     Floored at 0 (net-debt names have no excess to strip).
+
+    Zero for years before this filer adopted ASC 842. The debt side is what
+    keeps a lessee's cash from reading as surplus — BKE's FY2026 marketables of
+    306.5 sit under a 384 lease liability, so nothing is stripped. Take that
+    liability away and the whole pile becomes "excess": the same company scored
+    61.1% in FY2019 and 18.8% in FY2020, a 42-point drop that is the accounting
+    standard arriving, not the business changing. Comparing marketables against
+    a debt figure that is knowingly missing its largest component is not a
+    conservative estimate, it is the wrong comparison, so it is not made.
     """
+    if i < first_lease_reporting_year(fund):
+        return 0.0
     liquid = (_at(fund, "cash", i)
               + _at(fund, "short_term_investments", i)
               + _at(fund, "long_term_investments", i))

@@ -120,3 +120,37 @@ Plus: check `robustness`/`mcp` tests for a consistent `roce` band and
 user's proposal verbatim: per-year ROCE cap = 100%, CE ≤ 0 → pass at the
 ceiling, year retained, cap flagged. The ceiling value (100%) is the one knob to
 confirm at review; everything else in §3 is settled.
+
+---
+
+## Amendment 2026-08-25 — pre-ASC-842 years
+
+§2 compares marketables against `total_debt + operating + finance leases`. §4
+was right that the lease side is what keeps a lessee's cash from reading as
+surplus, but it assumed that side is always populated. It is not: ASC 842 only
+moved operating leases onto the balance sheet for fiscal years beginning after
+15 Dec 2018, so for earlier years the debt figure is missing its largest
+component for any lessee.
+
+The effect is not a rounding difference. BKE, a cash-rich retailer, scored
+61.1% in FY2019 and 18.8% in FY2020 — a 42-point step that is the standard
+arriving, not the business changing. Its 10-year mean read 47.1% where the
+unadjusted basis said 36.1%, and the inflated years were precisely the ones the
+"sustained 20%+ over 5+ years" test leans on.
+
+**Amended rule.** `excess_liquidity[i] = 0` for every year before the filer
+first reports a lease liability (either series, an explicit `0.0` counting as
+reported — a filer saying it has no leases is not a filer from before the
+standard existed). Those years fall back to `CE = TA − CL`, §2's own net-debt
+outcome. Detection is per filer, not a hard-coded year, because fiscal-year
+labels are offset for non-calendar filers like BKE.
+
+Deliberately not adopted: estimating pre-2019 lease debt (8x rent), which needs
+rent data this pipeline does not carry, and shortening the window to
+post-adoption years only, which would leave roughly six years and weaken the
+persistence test the gate exists to run. The problem is self-limiting — the
+10-year window clears the last pre-842 year around 2030.
+
+Verified unchanged by the amendment: V (25.96% mean / 37.15% latest), HD
+(44.09% / 28.75%), AVGO (12.34% / 16.70%, still ROCE not ROE). Only net-cash
+pre-adoption lessees move; BKE goes 47.07% -> 36.27%.

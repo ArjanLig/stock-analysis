@@ -217,7 +217,8 @@ def test_compute_roce_keeps_ce_negative_year_at_ceiling():
 # landing by coincidence on the same number as the old formula's latest year.
 # ---------------------------------------------------------------------------
 
-from scorecard_utils import ROCE_WINDOW_YEARS, window_start
+from scorecard_utils import (ROCE_WINDOW_YEARS, window_start,
+                             first_lease_reporting_year)
 
 _BKE_YEARS = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
 _BKE = {
@@ -251,17 +252,41 @@ def test_bke_latest_year_is_the_canonical_ta_minus_cl_basis():
 
 
 def test_bke_average_ignores_history_beyond_the_window():
-    # 11 years of input, 10-year answer. Averaging all 11 pulls FY2016 in — a
-    # pre-ASC-842 year whose whole cash pile reads as excess liquidity (CE 234,
-    # ROCE 98.3%) — and lifts the mean to 51.73%, which is what the detail page
-    # used to show while the watchlist and the MCP showed 47.07%.
+    # 11 years of input, 10-year answer: FY2016 must not reach the mean.
     metric, val = compute_roce_metric(_BKE)
     assert metric == "ROCE"
-    assert round(val, 2) == 47.07
+    assert round(val, 2) == 36.27
 
     eleven = [roce_for_year(_BKE, i)[0] for i in range(len(_BKE_YEARS))]
-    assert round(sum(eleven) / len(eleven), 2) == 51.73  # the bug's number
-    assert round(eleven[0], 1) == 98.3  # FY2016, no lease liability on file
+    assert round(sum(eleven) / len(eleven), 2) == 37.47
+
+
+def test_bke_pre_asc842_years_keep_their_cash_in_capital():
+    # FY2016-FY2019 predate this filer's first reported lease liability, so the
+    # debt side of the strip is missing its largest component. Stripping anyway
+    # put FY2019 at 61.1% against FY2020's 18.8% — a 42-point step that is ASC
+    # 842 landing, not the business changing. Both years now sit on plain TA−CL.
+    assert first_lease_reporting_year(_BKE) == 4  # FY2020
+    for i in range(4):
+        assert excess_liquidity(_BKE, i) == 0.0
+    assert round(roce_for_year(_BKE, 3)[0], 1) == 27.7  # FY2019, was 61.1
+    assert round(roce_for_year(_BKE, 4)[0], 1) == 18.8  # FY2020, unchanged
+
+
+def test_explicit_zero_lease_liability_counts_as_reported():
+    # A filer stating it has no leases is not a filer from before the standard
+    # existed: 0.0 is data, None is absence. The strip must still run.
+    f = {
+        "years": [2023],
+        "operating_income": [30.0], "total_assets": [200.0],
+        "current_liabilities": [40.0], "cash": [100.0],
+        "short_term_investments": [0.0], "long_term_investments": [0.0],
+        "total_debt": [0.0],
+        "operating_lease_liabilities": [0.0], "finance_lease_liabilities": [0.0],
+    }
+    assert first_lease_reporting_year(f) == 0
+    assert excess_liquidity(f, 0) == 100.0
+    assert round(roce_for_year(f, 0)[0], 1) == 50.0  # 30 / (200−40−100)
 
 
 def test_bke_ten_year_input_gives_the_same_answer_as_eleven():
