@@ -14,6 +14,27 @@ FLOAT_CE_TA_THRESHOLD = 0.25
 
 ROCE_CEILING = 100.0  # per-year ROCE cap (%) for CE≤0 / capital-light names
 
+# Years of history the quality metric averages over. Owned by the helper, not
+# by the caller: the detail page fetches 11 years for its Key Ratios tables
+# (streamlit_app.py, since 2026-03-04) while the watchlist, the stored slice
+# and the MCP fetch 10. When compute_roce_metric was later pointed at whichever
+# `fund` happened to be in scope, the detail page silently averaged an extra
+# year and the same ticker read 51.7% on its own page and 47.1% everywhere
+# else. Pinning the window here makes the answer independent of how much
+# history the caller happened to download.
+ROCE_WINDOW_YEARS = 10
+
+
+def window_start(fund, window=ROCE_WINDOW_YEARS):
+    """First index of the trailing `window` years in `fund`'s series.
+
+    0 when there is less history than the window. Series in a fundamentals
+    dict are index-aligned and equal-length (gather_data pads with None), so
+    one start index is valid for every key.
+    """
+    n = len(fund.get("years") or fund.get("operating_income") or [])
+    return max(0, n - window)
+
 
 def _at(fund, key, i):
     """Series element at year i, or 0.0 when the series or element is absent/None."""
@@ -81,6 +102,10 @@ def compute_roce_metric(fund, cfg=None):
         ORIGINAL CE = TA − CL, unadjusted for excess liquidity.
       • ROE  = avg of Net Income / Total Equity.
 
+    Both averages are arithmetic means of the per-year values (not a pooled
+    sum(EBIT)/sum(CE)) over the trailing ROCE_WINDOW_YEARS years, regardless
+    of how many years the caller fetched.
+
     Metric selection:
       1. Manual override wins: ``cfg['roce_metric_override']`` in
          {'ROCE','ROE'} forces that metric (use 'ROE' to flag a genuine
@@ -95,9 +120,10 @@ def compute_roce_metric(fund, cfg=None):
     ni_w = fund.get("net_income") or []
     eq_w = fund.get("total_equity") or []
     n = len(fund.get("years") or oi_w)
+    start = window_start(fund)
 
     roce_pcts, ce_ta_ratios = [], []
-    for i in range(n):
+    for i in range(start, n):
         oi_v = oi_w[i] if i < len(oi_w) else None
         ta_v = ta_w[i] if i < len(ta_w) else None
         cl_v = cl_w[i] if i < len(cl_w) else None
@@ -112,7 +138,7 @@ def compute_roce_metric(fund, cfg=None):
             roce_pcts.append(pct)
 
     roe_pcts = []
-    for i in range(n):
+    for i in range(start, n):
         ni_v = ni_w[i] if i < len(ni_w) else None
         eq_v = eq_w[i] if i < len(eq_w) else None
         if ni_v is not None and eq_v and eq_v > 0:

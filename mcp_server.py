@@ -747,9 +747,29 @@ def _compute_fundamentals_headline(fund, cfg):
     if not n:
         return headline
 
-    # Avg ROCE (EBIT/(TA−CL)) with float-business ROE fallback + manual
-    # override — single source of truth shared with the Streamlit watchlist
-    # and detail page (scorecard_utils.compute_roce_metric).
+    # avg_roce_pct — exactly what it computes, because the robustness
+    # deal-breaker gate reads it and a quiet change moves verdicts across the
+    # whole watchlist:
+    #
+    #   • an ARITHMETIC MEAN of the per-year percentages, not a pooled
+    #     sum(EBIT)/sum(CE). The two differ whenever capital employed moves:
+    #     BKE FY2017-FY2026 is 47.07% as a mean of years and 35.96% pooled.
+    #   • over the trailing scorecard_utils.ROCE_WINDOW_YEARS years, NOT over
+    #     however many years this call fetched. Before the window was pinned,
+    #     get_fundamentals(n_years=11) answered 51.73% for BKE where n_years=10
+    #     answered 47.07% — the same ticker, two headlines.
+    #   • per year, EBIT / (TA − CL − max(0, marketables − debt)), capped at
+    #     ROCE_CEILING. Goodwill is not deducted; net cash is.
+    #   • ROE (Net Income / Total Equity) instead, on the same window, when the
+    #     name is a float business or cfg['roce_metric_override'] says so.
+    #
+    # Caveat worth knowing when a mean looks high: pre-ASC-842 years carry no
+    # lease liability on the balance sheet, so a cash-rich lessee's whole cash
+    # pile reads as excess liquidity and its ROCE for those years is inflated
+    # (BKE FY2016: 98.3%, against 34.6% for FY2026).
+    #
+    # Single source of truth shared with the Streamlit watchlist and detail
+    # page (scorecard_utils.compute_roce_metric).
     cash_w = fund.get("cash") or []  # used below for EV / net-debt
     _metric, _metric_val = compute_roce_metric(fund, cfg)
     headline["roce_metric"] = _metric
