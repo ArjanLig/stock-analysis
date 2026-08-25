@@ -1413,7 +1413,9 @@ def test_phase_gate_metrics_computes_rule_of_40_and_incr_roic():
     assert m["fcf_margin_pct"] == pytest.approx(10.0, abs=0.1)          # 28.6/286
     assert m["revenue_cagr_3y_pct"] == pytest.approx(30.06, abs=0.5)    # 130->286 / 3y
     assert m["rule_of_40_pct"] == pytest.approx(40.06, abs=0.6)
-    assert m["incremental_roic_pct"] == pytest.approx(41.67, abs=0.5)   # d25/d60
+    # ΔNOPAT 25 over ΔCE 120 (CE = TA−CL: 100 → 220). The old debt+equity−cash
+    # proxy divided by ΔEquity 60 instead and said 41.67%.
+    assert m["incremental_roic_pct"] == pytest.approx(20.83, abs=0.5)
     assert m["roce_latest_pct"] == pytest.approx(18.18, abs=0.2)        # 40/220
     assert m["roce_rising"] is True
 
@@ -1432,9 +1434,13 @@ def test_phase_gate_metrics_guards_on_thin_data():
     assert m["roce_latest_pct"] == pytest.approx(15.0, abs=0.2)  # 15/(120-20)
 
 
-def test_phase_gate_metrics_incr_roic_none_when_capital_shrinks():
+def test_phase_gate_metrics_buybacks_are_not_shrinking_capital():
+    # Equity falls 120 -> 80 on buybacks while the balance sheet stands still.
+    # The old debt+equity−cash proxy called that a 40-wide capital contraction;
+    # capital employed is flat at 150, because nothing left the business.
+    # Flat capital is not a base to divide by, so the answer is still None —
+    # but now for the true reason, not a bookkeeping artifact.
     import mcp_server
-    # invested capital shrinks across the window -> guard returns None
     m = mcp_server._phase_gate_metrics({
         "years": [2021, 2022, 2023, 2024, 2025],
         "revenue": [100, 110, 120, 130, 140], "fcf": [10, 11, 12, 13, 14],
@@ -1447,6 +1453,80 @@ def test_phase_gate_metrics_incr_roic_none_when_capital_shrinks():
         "current_liabilities": [50, 50, 50, 50, 50],
     })
     assert m["incremental_roic_pct"] is None
+
+
+def test_phase_gate_metrics_incr_roic_none_when_capital_shrinks():
+    import mcp_server
+    # Capital employed genuinely contracts (assets sold down) -> None.
+    m = mcp_server._phase_gate_metrics({
+        "years": [2021, 2022, 2023, 2024, 2025],
+        "revenue": [100, 110, 120, 130, 140], "fcf": [10, 11, 12, 13, 14],
+        "operating_income": [10, 11, 12, 13, 14],
+        "pretax_income": [10, 11, 12, 13, 14], "tax_provision": [0, 0, 0, 0, 0],
+        "total_debt": [0, 0, 0, 0, 0], "cash": [0, 0, 0, 0, 0],
+        "total_equity": [100, 100, 100, 100, 100],
+        "total_assets": [300, 280, 260, 240, 220],
+        "current_liabilities": [50, 50, 50, 50, 50],
+    })
+    assert m["incremental_roic_pct"] is None
+
+
+def test_phase_gate_metrics_incr_roic_none_on_immaterial_capital_change():
+    # CF's shape: EBIT collapses while capital employed barely moves. A 0.4%
+    # capital change is a rounding difference, and dividing by it produced
+    # -6,614% on the live watchlist. Below the 5% floor -> no answer.
+    import mcp_server
+    m = mcp_server._phase_gate_metrics({
+        "years": [2021, 2022, 2023, 2024, 2025],
+        "revenue": [100, 110, 120, 130, 140], "fcf": [10, 11, 12, 13, 14],
+        "operating_income": [100, 100, 40, 30, 35],
+        "pretax_income": [100, 100, 40, 30, 35], "tax_provision": [0, 0, 0, 0, 0],
+        "total_debt": [0, 0, 0, 0, 0], "cash": [0, 0, 0, 0, 0],
+        "total_equity": [100, 100, 100, 100, 100],
+        "total_assets": [300, 300, 300, 300, 301],   # +1 on a base of 250
+        "current_liabilities": [50, 50, 50, 50, 50],
+    })
+    assert m["incremental_roic_pct"] is None
+
+
+def test_phase_gate_metrics_incr_roic_is_clamped():
+    # Capital moves enough to clear the floor (250 -> 275, +10%) but NOPAT
+    # explodes past it. Report the ceiling rather than a four-digit percentage.
+    import mcp_server
+    m = mcp_server._phase_gate_metrics({
+        "years": [2021, 2022, 2023, 2024, 2025],
+        "revenue": [100, 110, 120, 130, 140], "fcf": [10, 11, 12, 13, 14],
+        "operating_income": [10, 10, 20, 40, 200],
+        "pretax_income": [10, 10, 20, 40, 200], "tax_provision": [0, 0, 0, 0, 0],
+        "total_debt": [0, 0, 0, 0, 0], "cash": [0, 0, 0, 0, 0],
+        "total_equity": [100, 100, 100, 100, 100],
+        "total_assets": [300, 300, 305, 310, 325],
+        "current_liabilities": [50, 50, 50, 50, 50],
+    })
+    assert m["incremental_roic_pct"] == pytest.approx(100.0)
+
+
+def test_phase_gate_metrics_incr_roic_uses_roce_capital_base():
+    # Net cash is stripped from the capital base here exactly as it is for
+    # ROCE, so the two can never disagree about what capital is.
+    import mcp_server
+    from scorecard_utils import capital_employed
+    fund = {
+        "years": [2021, 2022, 2023, 2024, 2025],
+        "revenue": [100, 110, 120, 130, 140], "fcf": [10, 11, 12, 13, 14],
+        "operating_income": [10, 12, 16, 22, 30],
+        "pretax_income": [10, 12, 16, 22, 30], "tax_provision": [0, 0, 0, 0, 0],
+        "total_debt": [0, 0, 0, 0, 0],
+        "total_equity": [100, 100, 100, 100, 100],
+        "cash": [50, 50, 50, 50, 50],
+        "operating_lease_liabilities": [0, 0, 0, 0, 0],
+        "total_assets": [200, 220, 250, 290, 340],
+        "current_liabilities": [50, 50, 50, 50, 50],
+    }
+    assert capital_employed(fund, 1) == 120.0   # 220−50−50 cash stripped
+    assert capital_employed(fund, 4) == 240.0   # 340−50−50
+    m = mcp_server._phase_gate_metrics(fund)
+    assert m["incremental_roic_pct"] == pytest.approx(15.0, abs=0.1)  # 18/120
 
 
 def test_premortem_dict_structured():

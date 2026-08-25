@@ -64,7 +64,8 @@ from portfolio_metrics import (compute_deployment, display_basis, has_option_leg
                                DEFAULT_TARGET_POS_PCT)
 from prescan_render import parse_verdict_section, gauge_fraction, band_tone
 from scorecard_utils import (compute_roce_metric, capital_employed, roce_for_year,
-                             slim_fundamentals, slice_is_usable)
+                             slim_fundamentals, slice_is_usable, window_start,
+                             ROCE_WINDOW_YEARS, ROCE_CEILING)
 from scorecard_utils import parse_scorecard_json as _parse_scorecard_json
 from scorecard_utils import prettify_company_name as _prettify_company
 
@@ -6094,8 +6095,16 @@ def _dcf_editor(ticker):
                     '<b>&gt;Discount rate</b> creates value<br>'
                     '<b>&gt;20%</b> Prasad/PE-screen quality bar — sustained 5+ jaar duidt op moat<br>'
                     '<b>&lt;Discount rate</b> destroys value<br><br>'
-                    'Capital Employed = Total Assets − Current Liabilities.<br>'
-                    'Goodwill en cash worden niet afgetrokken — zo blijven acquisitie-zware en cash-rijke namen vergelijkbaar en triggert de float/ROE-fallback alleen bij echte float-bedrijven.<br>'
+                    'Capital Employed = Total Assets − Current Liabilities − overtollige liquiditeit,<br>'
+                    'waarbij overtollige liquiditeit = max(0, cash + beleggingen − schuld incl. leases).<br>'
+                    'Goodwill wordt <b>niet</b> afgetrokken — zo blijven acquisitie-zware namen vergelijkbaar.<br>'
+                    'Netto-cash gaat er wél af, zodat een cash-berg de operationele returns niet verwatert; '
+                    'namen met netto schuld verliezen niets.<br>'
+                    'In jaren vóór ASC 842 — leases stonden toen niet op de balans — wordt '
+                    'niets afgetrokken: de schuldkant mist daar zijn grootste post.<br>'
+                    f'Gemiddelde over de laatste {ROCE_WINDOW_YEARS} jaar, per jaar gemaximeerd op {int(ROCE_CEILING)}%.<br>'
+                    'De float/ROE-fallback toetst op de onaangepaste (TA−CL)/TA, zodat een cash-berg '
+                    'geen float-bedrijf van je maakt.<br>'
                     'PE-conventie zoals Nalanda Capital, gebruikt EBIT (pre-tax) ipv NOPAT.'
                 )
             st.markdown(
@@ -6149,10 +6158,16 @@ def _dcf_editor(ticker):
                     _num_tbl = fund.get('operating_income') or []
                     _den_src = None
                     _num_label, _den_label = 'EBIT', 'Capital Employed'
+                # Same trailing window the pill and the watchlist average over.
+                # This tab fetches 11 years for its Key Ratios tables; showing
+                # all of them here would put a different average on the chart
+                # than on the hero pill for the same ticker.
+                _roce_start = window_start(fund)
+                _roce_yrs = _yrs[_roce_start:]
                 roce_vals = []
                 _ebit_tbl = []
                 _ce_tbl = []
-                for i in range(_n):
+                for i in range(_roce_start, _n):
                     _num = _num_tbl[i] if i < len(_num_tbl) else None
                     if _fund_metric == 'ROE':
                         _den = _den_src[i] if i < len(_den_src) else None
@@ -6168,7 +6183,7 @@ def _dcf_editor(ticker):
 
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
-                    x=_yrs, y=roce_vals, name=_fund_metric,
+                    x=_roce_yrs, y=roce_vals, name=_fund_metric,
                     line=dict(color=_COLORS['primary'], width=2.5),
                     hovertemplate='%{y:.1f}%<extra>' + _fund_metric + '</extra>',
                 ))
@@ -6214,7 +6229,7 @@ def _dcf_editor(ticker):
                         '<thead><tr>'
                         f'<th style="{_rce_hdr};text-align:left"></th>'
                     )
-                    for yr in _yrs:
+                    for yr in _roce_yrs:
                         _rce_html += f'<th style="{_rce_hdr}">{yr}</th>'
                     _rce_html += f'<th style="{_rce_hdr};border-left:2px solid {T["border_medium"]}">Avg</th>'
                     _rce_html += '</tr></thead><tbody>'
@@ -6260,7 +6275,14 @@ def _dcf_editor(ticker):
                     if _fund_metric == 'ROE':
                         st.caption("In $M. ROE = Net Income / Total Equity (float-business weergave).")
                     else:
-                        st.caption("In $M. EBIT = Operating Income (proxy). Capital Employed = Total Assets − Current Liabilities (goodwill en cash niet afgetrokken).")
+                        st.caption(
+                            "In $M. EBIT = Operating Income (proxy). Capital Employed = "
+                            "Total Assets − Current Liabilities − max(0, cash + beleggingen "
+                            "− schuld incl. leases). Goodwill wordt niet afgetrokken; "
+                            "netto-cash wel, behalve in jaren vóór ASC 842. Laatste "
+                            f"{ROCE_WINDOW_YEARS} jaar, per jaar gemaximeerd op "
+                            f"{int(ROCE_CEILING)}%."
+                        )
             else:
                 st.info(f"Insufficient data for {_fund_metric} (need 3+ years)")
 

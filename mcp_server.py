@@ -65,7 +65,7 @@ import gather_data
 import dcf_calculator
 import config_store
 import valuation_lenses
-from scorecard_utils import compute_roce_metric
+from scorecard_utils import compute_roce_metric, capital_employed
 import notifications
 
 
@@ -640,10 +640,19 @@ def _set_sotp_corporate_overhead_impl(ticker: str, value: float,
 # ---------------------------------------------------------------------------
 
 
+# Guards on incremental ROIC (ΔNOPAT / ΔCapitalEmployed). Both exist because
+# the metric is a ratio of two differences, which behaves badly when the
+# denominator is small or negative.
+INCR_ROIC_MIN_CAPITAL_CHANGE = 0.05  # ΔCE must be ≥5% of the base year's CE
+INCR_ROIC_CEILING = 100.0            # clamp, both directions
+
+
 def _phase_gate_metrics(fund):
     """Extra metrics for the phase-aware ROCE gate (robustness engine, see
     specs/2026-06-16-phase-aware-roce-gate-design): Rule of 40 (3y revenue CAGR
-    + FCF margin), incremental ROIC (3-delta, best-effort), and latest-year
+    + FCF margin), incremental ROIC (3-delta, on the same capital-employed
+    basis as the headline ROCE, so the two cannot disagree about what capital
+    is; None when capital shrank or barely moved), and latest-year
     ROCE + rising trend on the same excess-liquidity-adjusted basis as the
     headline ROCE (scorecard_utils.roce_for_year — shared with
     compute_roce_metric so mean and latest/trend cannot diverge).
@@ -657,9 +666,8 @@ def _phase_gate_metrics(fund):
     oi = fund.get("operating_income") or []
     tax = fund.get("tax_provision") or []
     pretax = fund.get("pretax_income") or []
-    debt = fund.get("total_debt") or []
-    eq = fund.get("total_equity") or []
-    cash = fund.get("cash") or []
+    ta = fund.get("total_assets") or []
+    cl = fund.get("current_liabilities") or []
     n = len(fund.get("years") or [])
 
     # Revenue 3y CAGR over the last 4 usable revenue points (steadier than YoY)
@@ -682,7 +690,14 @@ def _phase_gate_metrics(fund):
     if out["revenue_cagr_3y_pct"] is not None and out["fcf_margin_pct"] is not None:
         out["rule_of_40_pct"] = out["revenue_cagr_3y_pct"] + out["fcf_margin_pct"]
 
-    # Incremental ROIC = ΔNOPAT / ΔInvestedCapital over the last 3 deltas
+    # Incremental ROIC = ΔNOPAT / ΔCapitalEmployed over the last 3 deltas.
+    #
+    # Capital employed is the shared definition (scorecard_utils), not the
+    # debt + equity − cash proxy this used to carry. Book equity falls with
+    # every buyback, so the proxy read BKNG's capital as 3,046 → −4,045 across
+    # FY2022-FY2025 while EBIT grew 73%, then reported "capital shrank" for a
+    # business whose capital had not shrunk. Same disease as the ROCE basis:
+    # one concept, several calculations, drifting apart. There is now one.
     nopat, invcap = {}, {}
     for i in range(n):
         oi_v = oi[i] if i < len(oi) else None
@@ -696,18 +711,26 @@ def _phase_gate_metrics(fund):
             if 0 <= _tr <= 0.35:
                 tr = _tr
         nopat[i] = oi_v * (1 - tr)
-        d = debt[i] if i < len(debt) else None
-        e = eq[i] if i < len(eq) else None
-        c = (cash[i] if i < len(cash) else 0) or 0
-        if d is not None and e is not None:
-            invcap[i] = d + e - c
+        ta_v = ta[i] if i < len(ta) else None
+        cl_v = cl[i] if i < len(cl) else None
+        if ta_v is not None and cl_v is not None:
+            invcap[i] = capital_employed(fund, i)
     common = sorted(set(nopat) & set(invcap))
     if len(common) >= 4:
         pts = common[-4:]
         d_nopat = nopat[pts[-1]] - nopat[pts[0]]
         d_inv = invcap[pts[-1]] - invcap[pts[0]]
-        if d_inv > 0:  # guard: shrinking capital → sign-flipped artifact
-            out["incremental_roic_pct"] = d_nopat / d_inv * 100
+        base = abs(invcap[pts[0]])
+        # Two guards on a ratio of differences. Shrinking capital stays None:
+        # the ratio is not wrong there, it is meaningless — a company earning
+        # more on less capital is the best case, and a negative percentage
+        # reads as the worst. And a capital base that barely moved divides by
+        # almost nothing: CF moved 37 on a base of 8,016 and the metric read
+        # −6,614%, a number about rounding, not about returns.
+        if (d_inv > 0 and base > 0
+                and d_inv >= INCR_ROIC_MIN_CAPITAL_CHANGE * base):
+            out["incremental_roic_pct"] = max(
+                -INCR_ROIC_CEILING, min(INCR_ROIC_CEILING, d_nopat / d_inv * 100))
 
     # Latest-year ROCE + rising trend, excess-liquidity-adjusted (shared helper
     # with compute_roce_metric so mean and latest/trend cannot diverge).
@@ -747,9 +770,27 @@ def _compute_fundamentals_headline(fund, cfg):
     if not n:
         return headline
 
-    # Avg ROCE (EBIT/(TA−CL)) with float-business ROE fallback + manual
-    # override — single source of truth shared with the Streamlit watchlist
-    # and detail page (scorecard_utils.compute_roce_metric).
+    # avg_roce_pct — exactly what it computes, because the robustness
+    # deal-breaker gate reads it and a quiet change moves verdicts across the
+    # whole watchlist:
+    #
+    #   • an ARITHMETIC MEAN of the per-year percentages, giving every year the
+    #     same weight, NOT a pooled sum(EBIT)/sum(CE) — which would weight the
+    #     years by the size of their capital base.
+    #   • over the trailing scorecard_utils.ROCE_WINDOW_YEARS years, NOT over
+    #     however many years this call fetched. Before the window was pinned,
+    #     get_fundamentals(n_years=11) answered 37.47% for BKE where n_years=10
+    #     answered 36.27% — the same ticker, two headlines.
+    #   • per year, EBIT / (TA − CL − max(0, marketables − debt)), capped at
+    #     ROCE_CEILING. Goodwill is not deducted; net cash is. Nothing is
+    #     deducted in years before the filer first reported a lease liability,
+    #     where the debt side of that max() cannot be trusted (see
+    #     scorecard_utils.excess_liquidity).
+    #   • ROE (Net Income / Total Equity) instead, on the same window, when the
+    #     name is a float business or cfg['roce_metric_override'] says so.
+    #
+    # Single source of truth shared with the Streamlit watchlist and detail
+    # page (scorecard_utils.compute_roce_metric).
     cash_w = fund.get("cash") or []  # used below for EV / net-debt
     _metric, _metric_val = compute_roce_metric(fund, cfg)
     headline["roce_metric"] = _metric

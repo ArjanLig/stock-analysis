@@ -67,10 +67,14 @@ def phased_roce_axis(headline, phase):
         # Rule of 40 is primary; incremental ROIC is a noisy secondary that
         # only fails it when *measurably* ≤ 0. Pass → robust FOR ITS PHASE.
         passed = r40 >= 40 and (iroic is None or iroic > 0)
+        # An unmeasurable incremental ROIC still counts as a pass, but say so.
+        # Silence read as "this leg was tested and cleared" when it was never
+        # run at all — the difference between passing a check and skipping it.
         return {"band": "robust" if passed else "fragile",
                 "metric": "Rule of 40", "value": r40,
                 "basis": f"phase 2 — Rule of 40 {'≥' if passed else '<'} 40"
-                         + ("" if iroic is None else f", incr. ROIC {iroic:.0f}%")}
+                         + (", incr. ROIC not measurable" if iroic is None
+                            else f", incr. ROIC {iroic:.0f}%")}
     if phase == 3:
         latest = headline.get("roce_latest_pct")
         iroic = headline.get("incremental_roic_pct")
