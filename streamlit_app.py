@@ -55,6 +55,8 @@ from broker_adapter import (
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
     fetch_all_net_liq_history, fetch_all_yearly_transfers,
 )
+import broker_adapter
+import t212_api
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
@@ -8840,7 +8842,16 @@ def _load_portfolio_data():
                 # from Tastytrade to Trading 212 lives at both for a while, and
                 # a portfolio that shows one of them is wrong in the only way
                 # that matters.
+                t212_api.reset_call_stats()
+                _t_brokers = time.perf_counter()
                 cost_basis, acct, _failures = fetch_all_portfolio_data()
+                _t_brokers = time.perf_counter() - _t_brokers
+                st.session_state["_load_timings"] = {
+                    "brokers_total_s": _t_brokers,
+                    "per_broker_s": dict(broker_adapter.LAST_FETCH_SECONDS),
+                    "t212": dict(t212_api.LAST_CALL_STATS),
+                    "prices_s": None,
+                }
                 st.session_state.portfolio_data = cost_basis
                 st.session_state.portfolio_account = acct
                 st.session_state.portfolio_broker_failures = [
@@ -8892,7 +8903,12 @@ def _load_portfolio_data():
         })
         if active_tickers:
             with st.spinner("Fetching current prices..."):
+                _t_prices = time.perf_counter()
                 st.session_state.portfolio_prices = fetch_current_prices(active_tickers)
+                _t_prices = time.perf_counter() - _t_prices
+            if isinstance(st.session_state.get("_load_timings"), dict):
+                st.session_state["_load_timings"]["prices_s"] = _t_prices
+                st.session_state["_load_timings"]["price_tickers"] = len(active_tickers)
         else:
             st.session_state.portfolio_prices = {}
 
@@ -11044,6 +11060,40 @@ elif page == "Portfolio":
 
     with st.container(key="allocation_block"):
         _portfolio_exposure()
+
+    # ── Load timings (temporary diagnostic) ──
+    # Measures the cold load only, which is the one that waits on the brokers:
+    # the numbers stay from the fetch that filled session_state, so a rerun
+    # does not overwrite them with zeros. Remove once the slow load is fixed.
+    _lt = st.session_state.get("_load_timings")
+    if isinstance(_lt, dict):
+        with st.expander("⏱ Laadtijden (tijdelijk)", expanded=False):
+            _per = _lt.get("per_broker_s") or {}
+            _rows = [f"| {n} | {s:.1f}s |" for n, s in _per.items()]
+            _brokers_total = _lt.get("brokers_total_s") or 0.0
+            _prices = _lt.get("prices_s")
+            _t212 = _lt.get("t212") or {}
+            st.markdown(
+                "| stap | tijd |\n|---|---|\n"
+                + "\n".join(_rows)
+                + f"\n| **brokers samen** | **{_brokers_total:.1f}s** |"
+                + (f"\n| prijzen ({_lt.get('price_tickers', 0)} tickers) | {_prices:.1f}s |"
+                   if _prices is not None else "")
+                + f"\n| **totaal** | **{_brokers_total + (_prices or 0.0):.1f}s** |"
+            )
+            if _t212.get("requests"):
+                st.caption(
+                    f"Trading 212: {_t212.get('requests', 0)} requests, "
+                    f"orderhistorie {_t212.get('history_pages', 0)} pagina's in "
+                    f"{_t212.get('history_s', 0.0):.1f}s · "
+                    f"{_t212.get('rate_limited', 0)}× rate-limited "
+                    f"({_t212.get('retry_after_s', 0.0):.0f}s opgelegd wachten, "
+                    f"{_t212.get('throttle_sleep_s', 0.0):.0f}s eigen rem)"
+                )
+            st.caption(
+                "Alleen de koude load. De sessiecache vervalt na 5 minuten; "
+                "daarna kost het opnieuw deze tijd."
+            )
 
 
 # ══════════════════════════════════════════════════════
