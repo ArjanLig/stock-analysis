@@ -7,6 +7,7 @@ or credentials; the adapter handles that internally.
 """
 
 import logging
+import time
 
 import streamlit as st
 
@@ -260,6 +261,13 @@ def connected_brokers():
     return out
 
 
+# Wall-clock of the last fetch_all_portfolio_data, per broker name. Diagnostics
+# only — the Portfolio page reads it to show where a slow cold load spent its
+# time. Brokers are fetched one after another, so these add up rather than
+# overlap, which is the first thing worth seeing.
+LAST_FETCH_SECONDS: dict = {}
+
+
 def _fetch_one(broker):
     if broker == "t212":
         return t212_api.fetch_portfolio_data(_get_t212_creds())
@@ -286,13 +294,19 @@ def fetch_all_portfolio_data():
     number as the truth.
     """
     per_broker, failures = {}, []
+    LAST_FETCH_SECONDS.clear()
     for broker in connected_brokers():
+        _t0 = time.perf_counter()
         try:
             cb, acct = _fetch_one(broker)
         except Exception as e:
+            LAST_FETCH_SECONDS[BROKER_NAMES[broker]] = time.perf_counter() - _t0
             failures.append((BROKER_NAMES[broker], e))
             continue
+        LAST_FETCH_SECONDS[BROKER_NAMES[broker]] = time.perf_counter() - _t0
         per_broker[broker] = (cb or {}, acct)
+    logger.info("Portfolio fetch per broker: %s",
+                ", ".join(f"{n} {s:.1f}s" for n, s in LAST_FETCH_SECONDS.items()))
 
     counts = {}
     for cb, _ in per_broker.values():
