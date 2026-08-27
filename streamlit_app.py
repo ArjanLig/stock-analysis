@@ -9094,6 +9094,14 @@ def _logo_resolves(url):
         return True
 
 
+# How much wall clock the logo lookups cost, and how often they run.
+# _logo_resolves is cached for a day per URL, so this is near-free once warm —
+# but a cold page pays one HEAD request per symbol without an ISIN, serially,
+# each with a 3-second timeout. Counting it separately is the only way to tell
+# that apart from the rendering it sits inside.
+_LOGO_STATS = {"calls": 0, "seconds": 0.0}
+
+
 def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
     """An <img> for a ticker's logo, or a monogram disc when none exists.
 
@@ -9104,11 +9112,14 @@ def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
     gets its initial in a disc — deliberate-looking, unlike the broken-image
     icon a stripped onerror leaves behind.
     """
+    _t0 = time.perf_counter()
     if isin:
         src = f"https://assets.parqet.com/logos/isin/{isin}"
     else:
         symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
         src = symbol_url if _logo_resolves(symbol_url) else None
+    _LOGO_STATS["calls"] += 1
+    _LOGO_STATS["seconds"] += time.perf_counter() - _t0
     _cls = f'class="{css_class}" ' if css_class else ""
     _sty = f'style="{style}" ' if style else ""
     if src:
@@ -10423,9 +10434,17 @@ elif page == "Portfolio":
 
     @st.fragment(run_every=timedelta(seconds=30))
     def _portfolio_cards():
+        # Sub-step timings for the diagnostic panel. A dict written whole at
+        # the end rather than appended to _page_steps: this fragment re-runs on
+        # its own 30-second timer, and appending would grow the list forever.
+        _cs, _mark = {}, time.perf_counter()
+        _logo_before = dict(_LOGO_STATS)
+
         # Fetch fresh prices + account balances (every connected broker, since
         # the hero card's headline is their sum)
         prices = fetch_current_prices(held_tickers)
+        _cs["prijzen"] = time.perf_counter() - _mark
+        _mark = time.perf_counter()
 
         for ticker, data in held.items():
             price_data = prices.get(data.get("symbol", ticker))
@@ -10503,6 +10522,9 @@ elif page == "Portfolio":
                 + " — the value above excludes it."
             )
 
+        _cs["hero-kaart"] = time.perf_counter() - _mark
+        _mark = time.perf_counter()
+
         # ── Column picker & Sort ──
         # Wheel-specific columns only mean something once a position has option
         # legs. A Trading 212 account is plain buy-and-hold, so Wheel Basis,
@@ -10572,6 +10594,9 @@ elif page == "Portfolio":
                         default="Ticker",
                         label_visibility="collapsed",
                     )
+
+        _cs["kolommen + toolbar"] = time.perf_counter() - _mark
+        _mark = time.perf_counter()
 
         # ── Build rows ──
         rows = []
@@ -10668,6 +10693,9 @@ elif page == "Portfolio":
                 ),
             })
 
+        _cs["rijen bouwen (incl. logo's)"] = time.perf_counter() - _mark
+        _mark = time.perf_counter()
+
         # ── Per-position margin requirements ──
         try:
             _margin_reqs = _cached_margin_requirements(get_active_broker())
@@ -10750,6 +10778,9 @@ elif page == "Portfolio":
             if open_opts:
                 opts_by_ticker[ticker] = open_opts
 
+        _cs["margin + sorteren + opmaak"] = time.perf_counter() - _mark
+        _mark = time.perf_counter()
+
         # ── Render cards ──
         cards_html = '<div class="portfolio-cards">'
         for row in rows:
@@ -10812,7 +10843,12 @@ elif page == "Portfolio":
 
         cards_html += '</div>'
         st.markdown(cards_html, unsafe_allow_html=True)
-
+        _cs["kaarten renderen"] = time.perf_counter() - _mark
+        _cs["_logos"] = (
+            _LOGO_STATS["calls"] - _logo_before["calls"],
+            _LOGO_STATS["seconds"] - _logo_before["seconds"],
+        )
+        st.session_state["_card_steps"] = _cs
 
     with _timed("posities + hero-kaarten"):
         _portfolio_cards()
@@ -11125,6 +11161,17 @@ elif page == "Portfolio":
                     "Meet alleen wat de server doet. Zit hier weinig tijd in "
                     "terwijl het toch traag voelt, dan gaat het om het opstarten "
                     "van de app (slapende container) of om de browser, niet om deze code."
+                )
+
+            _cst = st.session_state.get("_card_steps") or {}
+            if _cst:
+                _logo_calls, _logo_s = _cst.get("_logos", (0, 0.0))
+                _sub = [(k, v) for k, v in _cst.items() if k != "_logos"]
+                st.markdown("**Binnen 'posities + hero-kaarten'**")
+                st.markdown(
+                    "| onderdeel | tijd |\n|---|---|\n"
+                    + "\n".join(f"| {k} | {v:.2f}s |" for k, v in _sub)
+                    + f"\n| *waarvan logo-checks ({_logo_calls}×)* | *{_logo_s:.2f}s* |"
                 )
             if _t212.get("requests"):
                 st.caption(
