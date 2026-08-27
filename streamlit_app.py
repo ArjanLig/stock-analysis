@@ -55,6 +55,7 @@ from broker_adapter import (
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
     fetch_all_net_liq_history, fetch_all_yearly_transfers,
 )
+import load_profiler
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
@@ -10076,6 +10077,7 @@ document.getElementById('dl-btn').addEventListener('click', function() {{
 
 
 if page == "Watchlist":
+    load_profiler.start("Watchlist")
 
     st.markdown(
         "<style>.block-container { max-width: 1400px; margin: auto; }</style>",
@@ -10089,12 +10091,15 @@ if page == "Watchlist":
     else:
         _watchlist_overview()
 
+    load_profiler.panel()
+
 
 # ══════════════════════════════════════════════════════
 #  PORTFOLIO PAGE — Active positions overview
 # ══════════════════════════════════════════════════════
 
 elif page == "Portfolio":
+    load_profiler.start("Portfolio")
 
     if not has_active_broker():
         _render_welcome_page()
@@ -10105,7 +10110,8 @@ elif page == "Portfolio":
         unsafe_allow_html=True,
     )
     st.markdown("")
-    cost_basis = _load_portfolio_data()
+    with load_profiler.timed("brokerdata + prijzen"):
+        cost_basis = _load_portfolio_data()
 
     held = {
         t: d for t, d in cost_basis.items()
@@ -10793,11 +10799,13 @@ elif page == "Portfolio":
         cards_html += '</div>'
         st.markdown(cards_html, unsafe_allow_html=True)
 
-    _portfolio_cards()
+    with load_profiler.timed("posities + hero-kaarten"):
+        _portfolio_cards()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.container(key="deployment_block"):
-        _deployment_overview()
+    with load_profiler.timed("deployment"):
+        with st.container(key="deployment_block"):
+            _deployment_overview()
 
     # ── Contribution & Relative performance ──
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -11055,8 +11063,11 @@ elif page == "Portfolio":
         except Exception as e:
             st.warning(f"Could not load portfolio exposure: {e}")
 
-    with st.container(key="allocation_block"):
-        _portfolio_exposure()
+    with load_profiler.timed("sector- en landenverdeling"):
+        with st.container(key="allocation_block"):
+            _portfolio_exposure()
+
+    load_profiler.panel()
 
 
 
@@ -11065,13 +11076,15 @@ elif page == "Portfolio":
 # ══════════════════════════════════════════════════════
 
 elif page == "Cost Basis":
+    load_profiler.start("Cost Basis")
 
     if not has_active_broker():
         _render_connect_prompt()
 
 
     st.markdown("")
-    cost_basis = _load_portfolio_data()
+    with load_profiler.timed("brokerdata + prijzen"):
+        cost_basis = _load_portfolio_data()
 
     # Same picker as the Portfolio page, and the same reason: a card here is
     # meant to be laid next to the broker's own screen, which only works if you
@@ -11457,11 +11470,14 @@ elif page == "Cost Basis":
         height=0,
     )
 
+    load_profiler.panel()
+
 # ══════════════════════════════════════════════════════
 #  RESULTS PAGE — P/L performance overview
 # ══════════════════════════════════════════════════════
 
 elif page == "Results":
+    load_profiler.start("Results")
 
     st.markdown(
         "<style>.block-container { max-width: 1200px; margin: auto; }</style>",
@@ -11517,9 +11533,10 @@ elif page == "Results":
     if _nl_key not in st.session_state:
         try:
             with st.spinner("Loading full net liq history..."):
-                st.session_state[_nl_key] = (
-                    fetch_all_net_liq_history("all") if _res_view == "Overview"
-                    else fetch_net_liq_history("all"))
+                with load_profiler.timed("net liq history (all)"):
+                    st.session_state[_nl_key] = (
+                        fetch_all_net_liq_history("all") if _res_view == "Overview"
+                        else fetch_net_liq_history("all"))
         except Exception as e:
             if not _is_auth_error(e):
                 logger.warning("Net liq history fetch failed: %s", e)
@@ -11528,9 +11545,10 @@ elif page == "Results":
     if _tr_key not in st.session_state:
         try:
             with st.spinner("Loading cash transfer history..."):
-                st.session_state[_tr_key] = (
-                    fetch_all_yearly_transfers() if _res_view == "Overview"
-                    else fetch_yearly_transfers())
+                with load_profiler.timed("yearly transfers"):
+                    st.session_state[_tr_key] = (
+                        fetch_all_yearly_transfers() if _res_view == "Overview"
+                        else fetch_yearly_transfers())
         except Exception as e:
             if not _is_auth_error(e):
                 logger.warning("Yearly transfers fetch failed: %s", e)
@@ -11662,10 +11680,11 @@ elif page == "Results":
       if cache_key not in st.session_state:
           try:
               with st.spinner("Loading net liq history..."):
-                  st.session_state[cache_key] = (
-                      fetch_all_net_liq_history(api_time_back)
-                      if _res_view == "Overview"
-                      else fetch_net_liq_history(api_time_back))
+                  with load_profiler.timed(f"net liq history ({api_time_back}) — 2e opbouw"):
+                      st.session_state[cache_key] = (
+                          fetch_all_net_liq_history(api_time_back)
+                          if _res_view == "Overview"
+                          else fetch_net_liq_history(api_time_back))
           except Exception as e:
               logger.warning("Net liq history fetch failed (%s): %s", api_time_back, e)
               st.session_state[cache_key] = None
@@ -12204,12 +12223,15 @@ elif page == "Results":
 
         st.markdown(cards_html, unsafe_allow_html=True)
 
+    load_profiler.panel()
+
 
 # ══════════════════════════════════════════════════════
 #  CASHFLOW CHAMPIONS — Liontrust two-ratio screen
 # ══════════════════════════════════════════════════════
 
 elif page == "Screener":
+    load_profiler.start("Screener")
 
     st.markdown(
         "<style>.block-container { max-width: 1000px; margin: auto; }</style>",
@@ -12391,6 +12413,8 @@ elif page == "Screener":
                 "foreign filers whose IFRS statements don't parse — fewer "
                 "usable years, not worse businesses."
             )
+
+    load_profiler.panel()
 
 
 # ══════════════════════════════════════════════════════

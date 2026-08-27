@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import ssl
+import time
 import urllib.request
 from collections import defaultdict
 from decimal import Decimal
@@ -37,6 +38,19 @@ def _get_secret(key):
         raise KeyError(key) from e
 
 
+# Per-page-load tally, read by load_profiler. A Session is an OAuth exchange,
+# so the count answers "how many handshakes did this page pay for" — and every
+# call in this module builds its own, which is the shape worth watching.
+CALL_STATS: dict = {"sessions": 0, "session_s": 0.0,
+                    "quote_calls": 0, "quote_symbols": 0, "quote_s": 0.0}
+
+
+def reset_call_stats():
+    """Zero the tally. Called once at the top of a page render."""
+    CALL_STATS.update({"sessions": 0, "session_s": 0.0,
+                       "quote_calls": 0, "quote_symbols": 0, "quote_s": 0.0})
+
+
 def _get_session(refresh_token=None):
     """Create a Tastytrade Session.
 
@@ -48,10 +62,14 @@ def _get_session(refresh_token=None):
     """
     if refresh_token is None:
         refresh_token = _get_secret("TASTYTRADE_REFRESH_TOKEN")
-    return Session(
+    _t0 = time.perf_counter()
+    session = Session(
         provider_secret=_get_secret("TASTYTRADE_CLIENT_SECRET"),
         refresh_token=refresh_token,
     )
+    CALL_STATS["sessions"] += 1
+    CALL_STATS["session_s"] += time.perf_counter() - _t0
+    return session
 
 
 def fetch_portfolio_data(refresh_token=None):
@@ -668,6 +686,7 @@ def fetch_current_prices(tickers):
         return await asyncio.gather(*tasks)
 
     prices = {}
+    _t0 = time.perf_counter()
     try:
         results = asyncio.run(_fetch_all())
         for ticker, result in results:
@@ -677,6 +696,9 @@ def fetch_current_prices(tickers):
         for ticker in tickers:
             _, result = _fetch_one(ticker)
             prices[ticker] = result
+    CALL_STATS["quote_calls"] += 1
+    CALL_STATS["quote_symbols"] += len(tickers)
+    CALL_STATS["quote_s"] += time.perf_counter() - _t0
     return prices
 
 

@@ -35,6 +35,27 @@ _HISTORY_TTL = 120.0
 _HISTORY_CACHE: dict = {}
 
 
+# Per-page-load call tally, read by load_profiler. Keyed without the query
+# string, so a paginated history collapses into one row and a second visit to
+# an account endpoint reads as a second visit rather than hiding behind its
+# cursor. That distinction is what surfaced the 32-second account/info stall.
+LAST_CALL_STATS: dict = {"by_path": {}}
+
+
+def reset_call_stats():
+    """Zero the tally. Called once at the top of a page render."""
+    LAST_CALL_STATS["by_path"] = {}
+
+
+def _note_path(path, *, rate_limited=False, slept=0.0):
+    row = LAST_CALL_STATS["by_path"].setdefault(
+        path.split("?", 1)[0], {"n": 0, "rate_limited": 0, "slept_s": 0.0})
+    row["n"] += 1
+    if rate_limited:
+        row["rate_limited"] += 1
+    row["slept_s"] += slept
+
+
 # Account id and base currency, cached for an hour because neither changes and
 # this is the strictest-limited endpoint T212 exposes. Two calls per cold load
 # — fetch_portfolio_data wants the id, fetch_account_balances wants the
@@ -74,9 +95,11 @@ def _get(path: str, creds: dict, *, min_interval: float = 1.0, max_retries: int 
     url = f"{LIVE_BASE_URL}{path}"
     headers = _auth_header(creds)
     for attempt in range(max_retries):
+        slept = 0.0
         wait = min_interval - (time.time() - _LAST_CALL.get(path, 0.0))
         if wait > 0:
             time.sleep(wait)
+            slept = wait
         resp = requests.get(url, headers=headers, timeout=30)
         _LAST_CALL[path] = time.time()
         if resp.status_code == 429:
@@ -84,8 +107,10 @@ def _get(path: str, creds: dict, *, min_interval: float = 1.0, max_retries: int 
             # Warning, not debug: this is dead time the user waits through,
             # and it is how the 32-second account/info stall was found.
             logger.warning("T212 429 on %s; retry in %ss", path, retry_after)
+            _note_path(path, rate_limited=True, slept=slept + retry_after)
             time.sleep(retry_after)
             continue
+        _note_path(path, slept=slept)
         resp.raise_for_status()
         return resp.json()
     resp.raise_for_status()
