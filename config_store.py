@@ -343,7 +343,7 @@ def load_all_configs(client, user_id=None, include_ai_notes=True):
     }
 
 
-def list_watchlist(client, user_id=None):
+def list_watchlist(client, user_id=None, tickers=None):
     """Return list of dicts with ticker metadata + valuation summary.
 
     Each entry has these keys (always present; values may be None):
@@ -369,6 +369,15 @@ def list_watchlist(client, user_id=None):
     )
     if user_id is not None:
         query = query.eq("user_id", user_id)
+    # `tickers` narrows the query to the names the caller will actually render.
+    # The Portfolio page needs a fair value for ten holdings and was pulling
+    # all eighty-one rows to find them. An empty list is not "no filter": it
+    # means the caller has nothing to look up, so answer that without a query.
+    if tickers is not None:
+        tickers = [t.upper() for t in tickers]
+        if not tickers:
+            return []
+        query = query.in_("ticker", tickers)
     resp = query.execute()
     if not (resp and resp.data):
         return []

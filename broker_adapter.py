@@ -8,6 +8,7 @@ or credentials; the adapter handles that internally.
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import streamlit as st
 
@@ -268,6 +269,53 @@ def connected_brokers():
 LAST_FETCH_SECONDS: dict = {}
 
 
+def _prime_credentials(brokers):
+    """Resolve every broker's credentials on the calling thread.
+
+    st.session_state is unreadable from a worker thread — it silently returns
+    None rather than raising — and the getters below fall back to a module
+    cache that only a main-thread call can fill. Touching them here means the
+    workers find the token instead of falling through to a stale one in
+    st.secrets, which Tastytrade answers by revoking the whole grant chain.
+    """
+    if "tastytrade" in brokers:
+        _get_refresh_token()
+    if "t212" in brokers:
+        _get_t212_creds()
+    if "ibkr" in brokers:
+        _get_ibkr()
+
+
+def _in_parallel(brokers, fn, timings):
+    """Run `fn(broker)` for every broker at once.
+
+    Returns [(broker, ok, value_or_exception)] in the order given, so a caller
+    can keep its display order. They used to run one after another, which made
+    a cold portfolio load the sum of both brokers rather than the slower of
+    them — 3.5s where 2.1s would do.
+
+    Failures are returned, not raised: one unreachable broker must leave the
+    other's positions on screen, with the caller saying the totals are short.
+    """
+    if not brokers:
+        return []
+    out = {}
+    with ThreadPoolExecutor(max_workers=len(brokers)) as pool:
+        futures = {}
+        starts = {}
+        for b in brokers:
+            starts[b] = time.perf_counter()
+            futures[pool.submit(fn, b)] = b
+        for future in as_completed(futures):
+            b = futures[future]
+            timings[BROKER_NAMES[b]] = time.perf_counter() - starts[b]
+            try:
+                out[b] = (True, future.result())
+            except Exception as e:
+                out[b] = (False, e)
+    return [(b, out[b][0], out[b][1]) for b in brokers if b in out]
+
+
 def _fetch_one(broker):
     if broker == "t212":
         return t212_api.fetch_portfolio_data(_get_t212_creds())
@@ -295,16 +343,15 @@ def fetch_all_portfolio_data():
     """
     per_broker, failures = {}, []
     LAST_FETCH_SECONDS.clear()
-    for broker in connected_brokers():
-        _t0 = time.perf_counter()
-        try:
-            cb, acct = _fetch_one(broker)
-        except Exception as e:
-            LAST_FETCH_SECONDS[BROKER_NAMES[broker]] = time.perf_counter() - _t0
-            failures.append((BROKER_NAMES[broker], e))
-            continue
-        LAST_FETCH_SECONDS[BROKER_NAMES[broker]] = time.perf_counter() - _t0
-        per_broker[broker] = (cb or {}, acct)
+    brokers = connected_brokers()
+    _prime_credentials(brokers)
+    results = _in_parallel(brokers, _fetch_one, LAST_FETCH_SECONDS)
+    for broker, ok, value in results:
+        if ok:
+            cb, acct = value
+            per_broker[broker] = (cb or {}, acct)
+        else:
+            failures.append((BROKER_NAMES[broker], value))
     logger.info("Portfolio fetch per broker: %s",
                 ", ".join(f"{n} {s:.1f}s" for n, s in LAST_FETCH_SECONDS.items()))
 
@@ -447,21 +494,23 @@ def fetch_all_balances():
     Same caveat as fetch_all_portfolio_data: a broker in `failures` contributes
     nothing, so any total struck from this is a floor, not the answer.
     """
+    def _one(broker):
+        if broker == "t212":
+            return t212_api.fetch_account_balances(_get_t212_creds())
+        if broker == "ibkr":
+            return _get_ibkr().fetch_account_balances()
+        return tastytrade_api.fetch_account_balances(
+            refresh_token=_get_refresh_token()
+        )
+
     per_broker, failures = {}, []
-    for broker in connected_brokers():
-        try:
-            if broker == "t212":
-                bal = t212_api.fetch_account_balances(_get_t212_creds())
-            elif broker == "ibkr":
-                bal = _get_ibkr().fetch_account_balances()
-            else:
-                bal = tastytrade_api.fetch_account_balances(
-                    refresh_token=_get_refresh_token()
-                )
-        except Exception as e:
-            failures.append((BROKER_NAMES[broker], e))
-            continue
-        per_broker[BROKER_NAMES[broker]] = bal or {}
+    brokers = connected_brokers()
+    _prime_credentials(brokers)
+    for broker, ok, value in _in_parallel(brokers, _one, {}):
+        if ok:
+            per_broker[BROKER_NAMES[broker]] = value or {}
+        else:
+            failures.append((BROKER_NAMES[broker], value))
     return per_broker, failures
 
 
