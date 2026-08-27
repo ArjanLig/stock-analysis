@@ -55,8 +55,6 @@ from broker_adapter import (
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
     fetch_all_net_liq_history, fetch_all_yearly_transfers,
 )
-import broker_adapter
-import t212_api
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
                                held_share_cost, fifo_realized, open_lots,
@@ -8821,23 +8819,6 @@ def _broker_view_control(page_key):
     return view
 
 
-@contextlib.contextmanager
-def _timed(label):
-    """Record how long a page block took, into st.session_state['_page_steps'].
-
-    Diagnostic only. Steps accumulate per script run and the list is reset at
-    the top of the page, so what is shown is always the run that just happened
-    — including the cold one, because the first run after a reboot is the run
-    that fills every cache.
-    """
-    _t0 = time.perf_counter()
-    try:
-        yield
-    finally:
-        st.session_state.setdefault("_page_steps", []).append(
-            (label, time.perf_counter() - _t0))
-
-
 def _load_portfolio_data():
     """Fetch and enrich portfolio data (cached in session_state, auto-refreshes every 5 min)."""
     # Auto-refresh after 5 minutes
@@ -8859,14 +8840,7 @@ def _load_portfolio_data():
                 # from Tastytrade to Trading 212 lives at both for a while, and
                 # a portfolio that shows one of them is wrong in the only way
                 # that matters.
-                _t_brokers = time.perf_counter()
                 cost_basis, acct, _failures = fetch_all_portfolio_data()
-                _t_brokers = time.perf_counter() - _t_brokers
-                st.session_state["_load_timings"] = {
-                    "brokers_total_s": _t_brokers,
-                    "per_broker_s": dict(broker_adapter.LAST_FETCH_SECONDS),
-                    "prices_s": None,
-                }
                 st.session_state.portfolio_data = cost_basis
                 st.session_state.portfolio_account = acct
                 st.session_state.portfolio_broker_failures = [
@@ -8918,13 +8892,8 @@ def _load_portfolio_data():
         })
         if active_tickers:
             with st.spinner("Fetching current prices..."):
-                _t_prices = time.perf_counter()
                 st.session_state.portfolio_prices = fetch_current_prices(active_tickers)
                 st.session_state["portfolio_prices_at"] = time.time()
-                _t_prices = time.perf_counter() - _t_prices
-            if isinstance(st.session_state.get("_load_timings"), dict):
-                st.session_state["_load_timings"]["prices_s"] = _t_prices
-                st.session_state["_load_timings"]["price_tickers"] = len(active_tickers)
         else:
             st.session_state.portfolio_prices = {}
 
@@ -9093,14 +9062,6 @@ def _logo_resolves(url):
         return True
 
 
-# How much wall clock the logo lookups cost, and how often they run.
-# _logo_resolves is cached for a day per URL, so this is near-free once warm —
-# but a cold page pays one HEAD request per symbol without an ISIN, serially,
-# each with a 3-second timeout. Counting it separately is the only way to tell
-# that apart from the rendering it sits inside.
-_LOGO_STATS = {"calls": 0, "seconds": 0.0}
-
-
 def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
     """An <img> for a ticker's logo, or a monogram disc when none exists.
 
@@ -9111,14 +9072,11 @@ def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
     gets its initial in a disc — deliberate-looking, unlike the broken-image
     icon a stripped onerror leaves behind.
     """
-    _t0 = time.perf_counter()
     if isin:
         src = f"https://assets.parqet.com/logos/isin/{isin}"
     else:
         symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
         src = symbol_url if _logo_resolves(symbol_url) else None
-    _LOGO_STATS["calls"] += 1
-    _LOGO_STATS["seconds"] += time.perf_counter() - _t0
     _cls = f'class="{css_class}" ' if css_class else ""
     _sty = f'style="{style}" ' if style else ""
     if src:
@@ -10147,12 +10105,7 @@ elif page == "Portfolio":
         unsafe_allow_html=True,
     )
     st.markdown("")
-    _t_page_start = time.perf_counter()
-    st.session_state["_page_steps"] = []
-    _LOGO_STATS.update({"calls": 0, "seconds": 0.0})
-    t212_api.reset_call_stats()
-    with _timed("brokerdata + prijzen ophalen"):
-        cost_basis = _load_portfolio_data()
+    cost_basis = _load_portfolio_data()
 
     held = {
         t: d for t, d in cost_basis.items()
@@ -10437,12 +10390,6 @@ elif page == "Portfolio":
 
     @st.fragment(run_every=timedelta(seconds=30))
     def _portfolio_cards():
-        # Sub-step timings for the diagnostic panel. A dict written whole at
-        # the end rather than appended to _page_steps: this fragment re-runs on
-        # its own 30-second timer, and appending would grow the list forever.
-        _cs, _mark = {}, time.perf_counter()
-        _logo_before = dict(_LOGO_STATS)
-
         # Fetch fresh prices + account balances (every connected broker, since
         # the hero card's headline is their sum).
         #
@@ -10458,8 +10405,6 @@ elif page == "Portfolio":
             prices = fetch_current_prices(held_tickers)
             st.session_state["portfolio_prices"] = prices
             st.session_state["portfolio_prices_at"] = time.time()
-        _cs["prijzen"] = time.perf_counter() - _mark
-        _mark = time.perf_counter()
 
         for ticker, data in held.items():
             price_data = prices.get(data.get("symbol", ticker))
@@ -10477,13 +10422,11 @@ elif page == "Portfolio":
         # The header says "Net Liquidating Value" with no broker qualifier, so
         # it has to be every broker's — one account's balance under that label
         # is simply the wrong number while money sits at two brokers.
-        _t_bal = time.perf_counter()
         try:
             _bal_by_broker, _bal_failures = _cached_all_balances()
         except Exception as e:
             logger.warning("Account balances fetch failed: %s", e)
             _bal_by_broker, _bal_failures = {}, []
-        _cs["└ balansen ophalen"] = time.perf_counter() - _t_bal
         # Read from session_state, not the closure: this fragment re-runs on its
         # own timer and must follow whichever broker view is on screen now.
         _view = st.session_state.get("_portfolio_view", "Overview")
@@ -10538,9 +10481,6 @@ elif page == "Portfolio":
                 + ", ".join(n for n, _ in _bal_failures)
                 + " — the value above excludes it."
             )
-
-        _cs["hero-kaart"] = time.perf_counter() - _mark
-        _mark = time.perf_counter()
 
         # ── Column picker & Sort ──
         # Wheel-specific columns only mean something once a position has option
@@ -10612,9 +10552,6 @@ elif page == "Portfolio":
                         default="Ticker",
                         label_visibility="collapsed",
                     )
-
-        _cs["kolommen + toolbar"] = time.perf_counter() - _mark
-        _mark = time.perf_counter()
 
         # ── Build rows ──
         rows = []
@@ -10711,9 +10648,6 @@ elif page == "Portfolio":
                 ),
             })
 
-        _cs["rijen bouwen (incl. logo's)"] = time.perf_counter() - _mark
-        _mark = time.perf_counter()
-
         # ── Per-position margin requirements ──
         try:
             _margin_reqs = _cached_margin_requirements(get_active_broker())
@@ -10796,9 +10730,6 @@ elif page == "Portfolio":
             if open_opts:
                 opts_by_ticker[ticker] = open_opts
 
-        _cs["margin + sorteren + opmaak"] = time.perf_counter() - _mark
-        _mark = time.perf_counter()
-
         # ── Render cards ──
         cards_html = '<div class="portfolio-cards">'
         for row in rows:
@@ -10861,20 +10792,12 @@ elif page == "Portfolio":
 
         cards_html += '</div>'
         st.markdown(cards_html, unsafe_allow_html=True)
-        _cs["kaarten renderen"] = time.perf_counter() - _mark
-        _cs["_logos"] = (
-            _LOGO_STATS["calls"] - _logo_before["calls"],
-            _LOGO_STATS["seconds"] - _logo_before["seconds"],
-        )
-        st.session_state["_card_steps"] = _cs
 
-    with _timed("posities + hero-kaarten"):
-        _portfolio_cards()
+    _portfolio_cards()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    with _timed("deployment (balansen + margin + waarderingen)"):
-        with st.container(key="deployment_block"):
-            _deployment_overview()
+    with st.container(key="deployment_block"):
+        _deployment_overview()
 
     # ── Contribution & Relative performance ──
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -10883,15 +10806,10 @@ elif page == "Portfolio":
 
     _perf_rows = []
     _index_closes = {}
-    _t_index = time.perf_counter()
     try:
         _index_closes = _cached_index_closes()
     except Exception as e:
         logger.warning("Index history unavailable: %s", e)
-    st.session_state.setdefault("_page_steps", []).append(
-        ("SPY-koersen 5j (index)", time.perf_counter() - _t_index))
-
-    _t_contrib = time.perf_counter()
     _today = date.today()
     for _tk, _d in held.items():
         _sym = _d.get("symbol", _tk)
@@ -11057,9 +10975,6 @@ elif page == "Portfolio":
             f'<div class="greeks-grid">{"".join(_card_htmls)}</div>',
             unsafe_allow_html=True,
         )
-    st.session_state.setdefault("_page_steps", []).append(
-        ("contributie + vs S&P 500", time.perf_counter() - _t_contrib))
-
     # ── Portfolio Exposure (loads independently via fragment) ──
     @st.cache_data(ttl=86400, show_spinner=False)
     def _cached_ticker_profiles(tickers_tuple, _v=2):
@@ -11140,84 +11055,9 @@ elif page == "Portfolio":
         except Exception as e:
             st.warning(f"Could not load portfolio exposure: {e}")
 
-    with _timed("sector- en landenverdeling"):
-        with st.container(key="allocation_block"):
-            _portfolio_exposure()
+    with st.container(key="allocation_block"):
+        _portfolio_exposure()
 
-    # ── Load timings (temporary diagnostic) ──
-    # Measures the cold load only, which is the one that waits on the brokers:
-    # the numbers stay from the fetch that filled session_state, so a rerun
-    # does not overwrite them with zeros. Remove once the slow load is fixed.
-    _lt = st.session_state.get("_load_timings")
-    if isinstance(_lt, dict):
-        with st.expander("⏱ Laadtijden (tijdelijk)", expanded=False):
-            _per = _lt.get("per_broker_s") or {}
-            _rows = [f"| {n} | {s:.1f}s |" for n, s in _per.items()]
-            _brokers_total = _lt.get("brokers_total_s") or 0.0
-            _prices = _lt.get("prices_s")
-            # Read live, not from the snapshot taken during the fetch: the
-            # account endpoints are visited again later for the hero card's
-            # balances, and that repeat is exactly what needs to be visible.
-            _t212 = dict(t212_api.LAST_CALL_STATS)
-            st.markdown(
-                "| stap | tijd |\n|---|---|\n"
-                + "\n".join(_rows)
-                + f"\n| **brokers samen** | **{_brokers_total:.1f}s** |"
-                + (f"\n| prijzen ({_lt.get('price_tickers', 0)} tickers) | {_prices:.1f}s |"
-                   if _prices is not None else "")
-                + f"\n| **totaal** | **{_brokers_total + (_prices or 0.0):.1f}s** |"
-            )
-            _steps = st.session_state.get("_page_steps") or []
-            if _steps:
-                _page_total = time.perf_counter() - _t_page_start
-                _measured = sum(s for _, s in _steps)
-                st.markdown("**Deze paginaweergave, per blok**")
-                st.markdown(
-                    "| blok | tijd |\n|---|---|\n"
-                    + "\n".join(f"| {n} | {s:.2f}s |" for n, s in _steps)
-                    + f"\n| overig (opmaak, widgets) | {max(0.0, _page_total - _measured):.2f}s |"
-                    + f"\n| **hele pagina** | **{_page_total:.2f}s** |"
-                )
-                st.caption(
-                    "Meet alleen wat de server doet. Zit hier weinig tijd in "
-                    "terwijl het toch traag voelt, dan gaat het om het opstarten "
-                    "van de app (slapende container) of om de browser, niet om deze code."
-                )
-
-            _cst = st.session_state.get("_card_steps") or {}
-            if _cst:
-                _logo_calls, _logo_s = _cst.get("_logos", (0, 0.0))
-                _sub = [(k, v) for k, v in _cst.items() if k != "_logos"]
-                st.markdown("**Binnen 'posities + hero-kaarten'**")
-                st.markdown(
-                    "| onderdeel | tijd |\n|---|---|\n"
-                    + "\n".join(f"| {k} | {v:.2f}s |" for k, v in _sub)
-                    + f"\n| *waarvan logo-checks ({_logo_calls}×)* | *{_logo_s:.2f}s* |"
-                )
-            if _t212.get("requests"):
-                st.caption(
-                    f"Trading 212: {_t212.get('requests', 0)} requests, "
-                    f"orderhistorie {_t212.get('history_pages', 0)} pagina's in "
-                    f"{_t212.get('history_s', 0.0):.1f}s · "
-                    f"{_t212.get('rate_limited', 0)}× rate-limited "
-                    f"({_t212.get('retry_after_s', 0.0):.0f}s opgelegd wachten, "
-                    f"{_t212.get('throttle_sleep_s', 0.0):.0f}s eigen rem)"
-                )
-                _bp = _t212.get("by_path") or {}
-                if _bp:
-                    st.markdown("**Trading 212 per endpoint**")
-                    st.markdown(
-                        "| endpoint | calls | 429 | gewacht |\n|---|---|---|---|\n"
-                        + "\n".join(
-                            f"| `{p}` | {r['n']} | {r['rate_limited']} | {r['slept_s']:.1f}s |"
-                            for p, r in sorted(_bp.items(),
-                                               key=lambda kv: -kv[1]["slept_s"])
-                        )
-                    )
-            st.caption(
-                "Alleen de koude load. De sessiecache vervalt na 5 minuten; "
-                "daarna kost het opnieuw deze tijd."
-            )
 
 
 # ══════════════════════════════════════════════════════

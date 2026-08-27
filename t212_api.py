@@ -35,43 +35,6 @@ _HISTORY_TTL = 120.0
 _HISTORY_CACHE: dict = {}
 
 
-# Diagnostics for one page load. `throttle_sleep_s` is time this module chose
-# to wait; `retry_after_s` is time T212 told it to wait after a 429. The two
-# together say whether a slow load is our own pacing or the broker pushing
-# back — and note that _LAST_CALL is keyed by the full path, so a paginated
-# history never throttles itself between pages: every nextPagePath is a new key.
-LAST_CALL_STATS: dict = {
-    "requests": 0, "rate_limited": 0, "throttle_sleep_s": 0.0,
-    "retry_after_s": 0.0, "history_pages": 0, "history_s": 0.0,
-    "by_path": {},
-}
-
-
-def reset_call_stats():
-    """Zero the per-load diagnostics. Called once at the top of the page, so
-    the counts cover everything the page does rather than just the first
-    fetch — the account endpoints get hit again later, when the hero card
-    asks for balances, and that second visit is the interesting one."""
-    LAST_CALL_STATS.update({
-        "requests": 0, "rate_limited": 0, "throttle_sleep_s": 0.0,
-        "retry_after_s": 0.0, "history_pages": 0, "history_s": 0.0,
-        "by_path": {},
-    })
-
-
-def _note_path(path, *, rate_limited=False, slept=0.0):
-    """Per-endpoint tally, keyed without the query string so a paginated
-    history collapses into one row — and so a repeat visit to the same
-    endpoint is visible as a repeat rather than hidden behind its cursor."""
-    key = path.split("?", 1)[0]
-    row = LAST_CALL_STATS["by_path"].setdefault(
-        key, {"n": 0, "rate_limited": 0, "slept_s": 0.0})
-    row["n"] += 1
-    if rate_limited:
-        row["rate_limited"] += 1
-    row["slept_s"] += slept
-
-
 # Account id and base currency, cached for an hour because neither changes and
 # this is the strictest-limited endpoint T212 exposes. Two calls per cold load
 # — fetch_portfolio_data wants the id, fetch_account_balances wants the
@@ -111,24 +74,18 @@ def _get(path: str, creds: dict, *, min_interval: float = 1.0, max_retries: int 
     url = f"{LIVE_BASE_URL}{path}"
     headers = _auth_header(creds)
     for attempt in range(max_retries):
-        slept = 0.0
         wait = min_interval - (time.time() - _LAST_CALL.get(path, 0.0))
         if wait > 0:
             time.sleep(wait)
-            LAST_CALL_STATS["throttle_sleep_s"] += wait
-            slept = wait
-        LAST_CALL_STATS["requests"] += 1
         resp = requests.get(url, headers=headers, timeout=30)
         _LAST_CALL[path] = time.time()
         if resp.status_code == 429:
             retry_after = float(resp.headers.get("Retry-After", min_interval))
+            # Warning, not debug: this is dead time the user waits through,
+            # and it is how the 32-second account/info stall was found.
             logger.warning("T212 429 on %s; retry in %ss", path, retry_after)
-            LAST_CALL_STATS["rate_limited"] += 1
-            LAST_CALL_STATS["retry_after_s"] += retry_after
-            _note_path(path, rate_limited=True, slept=slept + retry_after)
             time.sleep(retry_after)
             continue
-        _note_path(path, slept=slept)
         resp.raise_for_status()
         return resp.json()
     resp.raise_for_status()
@@ -348,7 +305,6 @@ def _fetch_trades_uncached(creds: dict) -> dict:
     out: dict = {}
     path = "/equity/history/orders?limit=50"
     pages = 0
-    _t0 = time.perf_counter()
     try:
         while path and pages < 40:      # backstop against a cursor that loops
             body = _get(path, creds, min_interval=6.0) or {}
@@ -362,13 +318,7 @@ def _fetch_trades_uncached(creds: dict) -> dict:
             pages += 1
     except Exception as e:
         logger.warning("T212 order history unavailable: %s", e)
-        LAST_CALL_STATS["history_pages"] = pages
-        LAST_CALL_STATS["history_s"] = time.perf_counter() - _t0
         return {}
-    LAST_CALL_STATS["history_pages"] = pages
-    LAST_CALL_STATS["history_s"] = time.perf_counter() - _t0
-    logger.info("T212 order history: %d pages in %.1fs", pages,
-                LAST_CALL_STATS["history_s"])
 
     # Oldest first: FIFO retires the oldest lot, and the broker's ordering is
     # not something to take on trust.
