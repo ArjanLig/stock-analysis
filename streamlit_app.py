@@ -3562,6 +3562,9 @@ st.markdown(f"""
         display: grid;
         grid-template-columns: var(--pf-grid);
         align-items: center;
+        /* Tracks are absolute, so the leftover width collects at both ends
+           rather than between the columns. */
+        justify-content: center;
         /* Wider insets do double duty: they give the row air at both edges and
            they narrow the content box, and since the tracks are equal
            fractions of it, the figures move closer together at the same time.
@@ -10790,11 +10793,34 @@ elif page == "Portfolio":
                 opts_by_ticker[ticker] = open_opts
 
         # ── Render cards ──
-        # Two fixed tracks for the logo and the ticker, then one equal track
-        # per selected column, so every row lines up with the one above it.
+        # Two fixed tracks for the logo and the ticker, then one track per
+        # selected column — sized in proportion to what that column actually
+        # holds, not equally. Equal tracks gave "32" the same room as
+        # "$1,796" and left the short ones swimming, which reads as a wide gap
+        # between every pair of figures.
+        #
+        # Character counts of the rendered values, floored so a column never
+        # collapses under its own heading. Digits are near enough to a fixed
+        # width for this to hold; being a character or two out only shifts a
+        # boundary, and every row shifts with it because they share the list.
+        def _track_weight(col):
+            widest = max((len(_fmt_cell(col, r[col], r)[0]) for r in rows),
+                         default=0)
+            # The label is set two-thirds the size of the value, so it costs
+            # roughly 0.6 of a value character apiece. Floored on that so a
+            # heading like "Unrealized P/L" keeps its own line — a wrapped
+            # label makes its row taller than the ones around it.
+            return max(widest, len(col) * 0.6, 4)
+
+        # ch, not fr. Fractions share out whatever the row does not use, so a
+        # full-width row spreads its slack between the figures however little
+        # they need — which is the gap that kept looking too wide. Absolute
+        # tracks take only what the content asks for and leave the remainder at
+        # the ends, where it reads as margin instead of as distance.
+        _tracks = " ".join(f"{_track_weight(c) + 1.5:.1f}ch" for c in selected)
         cards_html = (
             f'<div class="portfolio-cards pf-aligned" style="--pf-grid:'
-            f'30px 52px repeat({len(selected)}, minmax(0, 1fr))">')
+            f'30px 52px {_tracks}">')
         for row in rows:
             cells = ""
             for col in selected:
