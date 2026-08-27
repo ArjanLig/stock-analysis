@@ -10538,10 +10538,15 @@ elif page == "Portfolio":
         )
         _wheel_only = ["Break-even", "Ann. %", "Premie", "Days"]
 
-        all_cols = ["Shares", "Cost Basis", "Break-even", "Current Price",
+        # "Avg Cost", not "Cost Basis": the figure is a price per share sitting
+        # directly beside Current Price, and cost basis normally means the whole
+        # position's acquisition value. The old label also read as though it had
+        # something to do with the wheel — that one is "Break-even", and it only
+        # appears where there are wheels.
+        all_cols = ["Shares", "Avg Cost", "Break-even", "Current Price",
                     "Day %", "Mkt Value", "Unrealized P/L", "Return %", "Ann. %",
                     "Premie", "Days", "Weight", "Margin", "Margin %"]
-        default_cols = ["Shares", "Cost Basis", "Current Price", "Day %",
+        default_cols = ["Shares", "Avg Cost", "Current Price", "Day %",
                         "Mkt Value", "Unrealized P/L", "Return %", "Weight"]
         # No valuation columns here. Selling is not a call this table makes —
         # a fair value belongs to the decision to buy, and reading "37% above
@@ -10655,7 +10660,7 @@ elif page == "Portfolio":
                 "Ticker": symbol,
                 "Broker": data.get("broker", ""),
                 "Shares": shares,
-                "Cost Basis": purchase_price,
+                "Avg Cost": purchase_price,
                 "Break-even": break_even,
                 "Current Price": cur,
                 "Day %": day_change_pct,
@@ -10711,7 +10716,7 @@ elif page == "Portfolio":
                 return "—", ""
             if col in color_cols_set:
                 cls = " pf-green" if val > 0 else " pf-red" if val < 0 else ""
-            if col in ("Cost Basis", "Break-even", "Current Price"):
+            if col in ("Avg Cost", "Break-even", "Current Price"):
                 return f"${val:,.2f}", cls
             if col == "Mkt Value":
                 return f"${val:,.0f}", cls
