@@ -417,16 +417,50 @@ class TestFloatDetectorStaysOnTheCashInclusiveBasis:
         assert compute_roce_metric(rich)[1] > compute_roce_metric(base)[1]
 
 
-def test_roce_for_year_clamps_below_the_floor():
-    # A loss-maker whose cash leaves a sliver of capital employed: 
-    # CE = 100 − 20 − 79 = 1, EBIT −50 → −5000%, held at −100.
+def test_a_single_year_keeps_whatever_it_actually_was():
+    # No floor per year. CE = 100 − 20 − 79 = 1, EBIT −50 → −5000%, and that is
+    # what the series says. This is what the chart draws and the record of what
+    # happened; the clamp belongs on the headline.
     f = _fund_liq(cash=79, ta=100, cl=20, oi=-50)
     pct, capped = roce_for_year(f, 0)
-    assert pct == -100.0 and capped is True
+    assert round(pct) == -5000 and capped is False
 
 
-def test_a_believable_loss_is_not_clamped():
-    # The floor must not swallow ordinary bad years. CE = 80, EBIT −20 → −25%.
+def test_an_ordinary_bad_year_is_untouched():
+    # CE = 80, EBIT −20 → −25%, a real number that stays one.
     f = _fund_liq(cash=0, ta=100, cl=20, oi=-20)
     pct, capped = roce_for_year(f, 0)
     assert round(pct, 1) == -25.0 and capped is False
+
+
+def test_the_average_is_floored_but_the_years_are_not():
+    # Two years: one ordinary (−25%), one where the cash strip leaves a sliver
+    # of capital (−5000%). The mean of those is −2512.5, which is the figure a
+    # person reads, so it is held at −100 — while the series keeps both.
+    f = {
+        "years": [2025, 2026],
+        "operating_income": [-20.0, -50.0],
+        "total_assets": [100.0, 100.0],
+        "current_liabilities": [20.0, 20.0],
+        "cash": [0.0, 79.0], "short_term_investments": [0.0, 0.0],
+    }
+    per_year = [roce_for_year(f, i)[0] for i in range(2)]
+    assert round(per_year[0], 1) == -25.0
+    assert round(per_year[1]) == -5000
+    metric, val = compute_roce_metric(f)
+    assert metric == "ROCE"
+    assert val == -100.0
+
+
+def test_a_deeply_negative_roe_is_not_floored():
+    # A loss against real equity has no shrinking denominator behind it to
+    # distrust, so it is reported as it is.
+    f = {
+        "years": [2026], "operating_income": [1.0],
+        "total_assets": [100.0], "current_liabilities": [85.0],
+        "cash": [0.0], "short_term_investments": [0.0],
+        "net_income": [-500.0], "total_equity": [100.0],
+    }
+    metric, val = compute_roce_metric(f)
+    assert metric == "ROE"
+    assert round(val, 1) == -500.0
