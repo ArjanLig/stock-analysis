@@ -72,9 +72,29 @@ def _note_path(path, *, rate_limited=False, slept=0.0):
     row["slept_s"] += slept
 
 
+# Account id and base currency, cached for an hour because neither changes and
+# this is the strictest-limited endpoint T212 exposes. Two calls per cold load
+# — fetch_portfolio_data wants the id, fetch_account_balances wants the
+# currency — cost 32 seconds of 429 back-off on a measured load, which was 76%
+# of the whole page. One call, reused.
+_ACCOUNT_INFO_TTL = 3600.0
+_ACCOUNT_INFO_CACHE: dict = {}
+
+
+def fetch_account_info(creds: dict) -> dict:
+    """The account's id and base currency. Cached — see _ACCOUNT_INFO_CACHE."""
+    hit = _ACCOUNT_INFO_CACHE.get("info")
+    if hit and (time.time() - hit[0]) < _ACCOUNT_INFO_TTL:
+        return hit[1]
+    info = _get("/equity/account/info", creds, min_interval=5.0) or {}
+    _ACCOUNT_INFO_CACHE["info"] = (time.time(), info)
+    return info
+
+
 def _clear_history_cache():
     """Drop the cached order/cash history. For tests and after a reconnect."""
     _HISTORY_CACHE.clear()
+    _ACCOUNT_INFO_CACHE.clear()
 
 
 def _cached_history(key, build):
@@ -294,7 +314,7 @@ def fetch_portfolio_data(creds: dict):
             "account_pl": None,
         }
 
-    info = _get("/equity/account/info", creds, min_interval=5.0)
+    info = fetch_account_info(creds)
     account_id = str(info.get("id") or "")
     return cost_basis, account_id
 
@@ -456,7 +476,7 @@ def fetch_account_balances(creds: dict) -> dict:
     an unavailable rate leaves the numbers native rather than mislabelled.
     """
     cash = _get("/equity/account/cash", creds, min_interval=5.0) or {}
-    info = _get("/equity/account/info", creds, min_interval=5.0) or {}
+    info = fetch_account_info(creds)
     native = (info.get("currencyCode") or "USD").upper()
 
     rate = gather_data.fetch_fx_rate(native)

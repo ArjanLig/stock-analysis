@@ -244,3 +244,63 @@ class TestMergeTransfers(unittest.TestCase):
         self.assertAlmostEqual(out[2026]["total"], 250.0)
         self.assertAlmostEqual(out[2026]["months"][3], 220.0)
         self.assertAlmostEqual(out[2026]["months"][4], 30.0)
+
+
+class TestParallelBrokerFetch(unittest.TestCase):
+    """Brokers are fetched at once, not one after another.
+
+    Serially a cold load cost the sum of every broker: 1.4s of Tastytrade plus
+    2.1s of Trading 212 where 2.1s would do (measured 2026-08-27). Wall clock
+    is not asserted here — that would be a flaky test on a shared runner — but
+    the behaviour that has to survive parallelism is: order preserved, one
+    broker's failure not taking the other's positions down with it.
+    """
+
+    def setUp(self):
+        self.st = types.SimpleNamespace(session_state={
+            "tt_refresh_token": "rt", "t212_credentials": {"k": "v"},
+        })
+
+    def _run(self, fetch_one):
+        with patch.object(broker_adapter, "st", self.st), \
+             patch.object(broker_adapter, "_fetch_one", fetch_one), \
+             patch.object(broker_adapter, "_get_refresh_token", lambda: "rt"), \
+             patch.object(broker_adapter, "_get_t212_creds", lambda: {"k": "v"}):
+            return broker_adapter.fetch_all_portfolio_data()
+
+    def test_both_brokers_land_and_keep_display_order(self):
+        def _one(broker):
+            if broker == "tastytrade":
+                return {"AAPL": _pos(10, 100.0, 110.0)}, "TT-1"
+            return {"ASML": _pos(5, 600.0, 590.0)}, "T212-1"
+
+        merged, account_id, failures = self._run(_one)
+        self.assertEqual(failures, [])
+        self.assertEqual(set(merged), {"AAPL", "ASML"})
+        self.assertEqual(merged["AAPL"]["broker"], broker_adapter.BROKER_NAMES["tastytrade"])
+        self.assertEqual(merged["ASML"]["broker"], broker_adapter.BROKER_NAMES["t212"])
+        self.assertTrue(account_id)
+
+    def test_one_broker_failing_leaves_the_other_intact(self):
+        def _one(broker):
+            if broker == "t212":
+                raise RuntimeError("T212 unreachable")
+            return {"AAPL": _pos(10, 100.0, 110.0)}, "TT-1"
+
+        merged, _account_id, failures = self._run(_one)
+        self.assertEqual(set(merged), {"AAPL"})
+        self.assertEqual([n for n, _ in failures],
+                         [broker_adapter.BROKER_NAMES["t212"]])
+
+    def test_a_ticker_at_both_brokers_still_gets_suffixed_rows(self):
+        def _one(broker):
+            if broker == "tastytrade":
+                return {"DECK": _pos(3, 90.0, 95.0)}, "TT-1"
+            return {"DECK": _pos(2, 80.0, 95.0)}, "T212-1"
+
+        merged, _a, _f = self._run(_one)
+        self.assertEqual(
+            set(merged),
+            {f"DECK ({broker_adapter.BROKER_NAMES['tastytrade']})",
+             f"DECK ({broker_adapter.BROKER_NAMES['t212']})"},
+        )

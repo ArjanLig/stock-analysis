@@ -8920,6 +8920,7 @@ def _load_portfolio_data():
             with st.spinner("Fetching current prices..."):
                 _t_prices = time.perf_counter()
                 st.session_state.portfolio_prices = fetch_current_prices(active_tickers)
+                st.session_state["portfolio_prices_at"] = time.time()
                 _t_prices = time.perf_counter() - _t_prices
             if isinstance(st.session_state.get("_load_timings"), dict):
                 st.session_state["_load_timings"]["prices_s"] = _t_prices
@@ -10203,7 +10204,7 @@ elif page == "Portfolio":
         return fetch_margin_requirements()
 
     @st.cache_data(ttl=300, show_spinner=False)
-    def _cached_valuations(user_id):
+    def _cached_valuations(user_id, tickers_tuple):
         """The watchlist keyed by ticker: fair-value band, buy price, updated.
 
         One query serves both the deployment card and the hold-or-sell column;
@@ -10212,7 +10213,8 @@ elif page == "Portfolio":
         """
         try:
             return {item["ticker"].upper(): item
-                    for item in list_watchlist(_sb_client, user_id=user_id)}
+                    for item in list_watchlist(_sb_client, user_id=user_id,
+                                               tickers=list(tickers_tuple))}
         except Exception as e:
             logger.debug("Watchlist valuations unavailable: %s", e)
             return {}
@@ -10273,7 +10275,8 @@ elif page == "Portfolio":
             held, net_liq, cash, target_pct,
             prices={t: (p or {}).get("price") for t, p in _prices.items()},
             buy_prices={t: v["buy_price"] for t, v in _cached_valuations(
-                (st.session_state.get("user") or {}).get("id")
+                (st.session_state.get("user") or {}).get("id"),
+                tuple(held_tickers),
             ).items() if v.get("buy_price")},
         )
 
@@ -10441,8 +10444,20 @@ elif page == "Portfolio":
         _logo_before = dict(_LOGO_STATS)
 
         # Fetch fresh prices + account balances (every connected broker, since
-        # the hero card's headline is their sum)
-        prices = fetch_current_prices(held_tickers)
+        # the hero card's headline is their sum).
+        #
+        # On the run that just loaded the page, _load_portfolio_data has
+        # already quoted these same tickers seconds ago; quoting them again
+        # bought nothing and cost a second round trip on the slowest load
+        # there is. Later runs are this fragment's own 30-second timer, which
+        # is the whole point of it, so those still fetch.
+        _fresh = time.time() - (st.session_state.get("portfolio_prices_at") or 0)
+        if _fresh < 20 and st.session_state.get("portfolio_prices"):
+            prices = st.session_state["portfolio_prices"]
+        else:
+            prices = fetch_current_prices(held_tickers)
+            st.session_state["portfolio_prices"] = prices
+            st.session_state["portfolio_prices_at"] = time.time()
         _cs["prijzen"] = time.perf_counter() - _mark
         _mark = time.perf_counter()
 
@@ -10551,7 +10566,8 @@ elif page == "Portfolio":
         # The hold-or-sell pair. Only offered when at least one holding has a
         # usable valuation, so an account with no DCF work behind it does not
         # get two columns of dashes.
-        _valuations = _cached_valuations((st.session_state.get("user") or {}).get("id"))
+        _valuations = _cached_valuations(
+            (st.session_state.get("user") or {}).get("id"), tuple(held_tickers))
         _stances = {}
         for _t, _d in held.items():
             _wl = _valuations.get((_d.get("symbol") or _t).upper()) or {}

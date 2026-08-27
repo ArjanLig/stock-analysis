@@ -833,3 +833,60 @@ class TestTotalPlMeansNetCash(unittest.TestCase):
         self.assertLess(d["total_pl"], 0)
         market_value = d["shares_held"] * d["broker_price"]
         self.assertAlmostEqual(d["total_pl"] + market_value, 7500.0)
+
+
+class TestAccountInfoCache(unittest.TestCase):
+    """/equity/account/info is the strictest-limited endpoint T212 exposes.
+
+    A cold portfolio load asked for it twice — once for the account id, once
+    for the base currency — and paid 32 seconds of 429 back-off for the pair,
+    which was 76% of the page's total load time (measured 2026-08-27). Neither
+    field changes, so one call has to serve both.
+    """
+
+    def setUp(self):
+        t212_api._INSTRUMENTS_CACHE = None
+        t212_api._clear_history_cache()
+
+    @patch("t212_api._get")
+    def test_repeat_calls_hit_the_cache(self, mock_get):
+        mock_get.return_value = {"id": 42, "currencyCode": "EUR"}
+        first = t212_api.fetch_account_info(_CREDS)
+        second = t212_api.fetch_account_info(_CREDS)
+        self.assertEqual(first, second)
+        self.assertEqual(mock_get.call_count, 1)
+
+    @patch("gather_data.fetch_fx_rate", return_value=1.1)
+    @patch("t212_api._get")
+    def test_balances_reuse_the_portfolio_load_s_account_info(self, mock_get, _fx):
+        calls = []
+
+        def _router(path, creds, **kw):
+            calls.append(path)
+            if path == "/equity/metadata/instruments":
+                return _META
+            if path == "/equity/positions":
+                return []
+            if path == "/equity/history/orders?limit=50":
+                return {"items": [], "nextPagePath": None}
+            if path == "/equity/account/info":
+                return {"id": 7, "currencyCode": "EUR"}
+            if path == "/equity/account/cash":
+                return {"total": 100.0, "free": 25.0}
+            return {}
+
+        mock_get.side_effect = _router
+        _cb, account_id = t212_api.fetch_portfolio_data(_CREDS)
+        balances = t212_api.fetch_account_balances(_CREDS)
+
+        self.assertEqual(account_id, "7")
+        self.assertAlmostEqual(balances["net_liquidating_value"], 110.0)
+        self.assertEqual(calls.count("/equity/account/info"), 1)
+
+    @patch("t212_api._get")
+    def test_clear_history_cache_also_drops_account_info(self, mock_get):
+        mock_get.return_value = {"id": 1, "currencyCode": "USD"}
+        t212_api.fetch_account_info(_CREDS)
+        t212_api._clear_history_cache()
+        t212_api.fetch_account_info(_CREDS)
+        self.assertEqual(mock_get.call_count, 2)
