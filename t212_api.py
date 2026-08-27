@@ -43,15 +43,33 @@ _HISTORY_CACHE: dict = {}
 LAST_CALL_STATS: dict = {
     "requests": 0, "rate_limited": 0, "throttle_sleep_s": 0.0,
     "retry_after_s": 0.0, "history_pages": 0, "history_s": 0.0,
+    "by_path": {},
 }
 
 
 def reset_call_stats():
-    """Zero the per-load diagnostics. Called at the start of a portfolio fetch."""
+    """Zero the per-load diagnostics. Called once at the top of the page, so
+    the counts cover everything the page does rather than just the first
+    fetch — the account endpoints get hit again later, when the hero card
+    asks for balances, and that second visit is the interesting one."""
     LAST_CALL_STATS.update({
         "requests": 0, "rate_limited": 0, "throttle_sleep_s": 0.0,
         "retry_after_s": 0.0, "history_pages": 0, "history_s": 0.0,
+        "by_path": {},
     })
+
+
+def _note_path(path, *, rate_limited=False, slept=0.0):
+    """Per-endpoint tally, keyed without the query string so a paginated
+    history collapses into one row — and so a repeat visit to the same
+    endpoint is visible as a repeat rather than hidden behind its cursor."""
+    key = path.split("?", 1)[0]
+    row = LAST_CALL_STATS["by_path"].setdefault(
+        key, {"n": 0, "rate_limited": 0, "slept_s": 0.0})
+    row["n"] += 1
+    if rate_limited:
+        row["rate_limited"] += 1
+    row["slept_s"] += slept
 
 
 def _clear_history_cache():
@@ -73,20 +91,24 @@ def _get(path: str, creds: dict, *, min_interval: float = 1.0, max_retries: int 
     url = f"{LIVE_BASE_URL}{path}"
     headers = _auth_header(creds)
     for attempt in range(max_retries):
+        slept = 0.0
         wait = min_interval - (time.time() - _LAST_CALL.get(path, 0.0))
         if wait > 0:
             time.sleep(wait)
             LAST_CALL_STATS["throttle_sleep_s"] += wait
+            slept = wait
         LAST_CALL_STATS["requests"] += 1
         resp = requests.get(url, headers=headers, timeout=30)
         _LAST_CALL[path] = time.time()
         if resp.status_code == 429:
             retry_after = float(resp.headers.get("Retry-After", min_interval))
-            logger.debug("T212 429 on %s; retry in %ss", path, retry_after)
+            logger.warning("T212 429 on %s; retry in %ss", path, retry_after)
             LAST_CALL_STATS["rate_limited"] += 1
             LAST_CALL_STATS["retry_after_s"] += retry_after
+            _note_path(path, rate_limited=True, slept=slept + retry_after)
             time.sleep(retry_after)
             continue
+        _note_path(path, slept=slept)
         resp.raise_for_status()
         return resp.json()
     resp.raise_for_status()

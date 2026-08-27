@@ -8859,14 +8859,12 @@ def _load_portfolio_data():
                 # from Tastytrade to Trading 212 lives at both for a while, and
                 # a portfolio that shows one of them is wrong in the only way
                 # that matters.
-                t212_api.reset_call_stats()
                 _t_brokers = time.perf_counter()
                 cost_basis, acct, _failures = fetch_all_portfolio_data()
                 _t_brokers = time.perf_counter() - _t_brokers
                 st.session_state["_load_timings"] = {
                     "brokers_total_s": _t_brokers,
                     "per_broker_s": dict(broker_adapter.LAST_FETCH_SECONDS),
-                    "t212": dict(t212_api.LAST_CALL_STATS),
                     "prices_s": None,
                 }
                 st.session_state.portfolio_data = cost_basis
@@ -10150,6 +10148,8 @@ elif page == "Portfolio":
     st.markdown("")
     _t_page_start = time.perf_counter()
     st.session_state["_page_steps"] = []
+    _LOGO_STATS.update({"calls": 0, "seconds": 0.0})
+    t212_api.reset_call_stats()
     with _timed("brokerdata + prijzen ophalen"):
         cost_basis = _load_portfolio_data()
 
@@ -10462,11 +10462,13 @@ elif page == "Portfolio":
         # The header says "Net Liquidating Value" with no broker qualifier, so
         # it has to be every broker's — one account's balance under that label
         # is simply the wrong number while money sits at two brokers.
+        _t_bal = time.perf_counter()
         try:
             _bal_by_broker, _bal_failures = _cached_all_balances()
         except Exception as e:
             logger.warning("Account balances fetch failed: %s", e)
             _bal_by_broker, _bal_failures = {}, []
+        _cs["└ balansen ophalen"] = time.perf_counter() - _t_bal
         # Read from session_state, not the closure: this fragment re-runs on its
         # own timer and must follow whichever broker view is on screen now.
         _view = st.session_state.get("_portfolio_view", "Overview")
@@ -11137,7 +11139,10 @@ elif page == "Portfolio":
             _rows = [f"| {n} | {s:.1f}s |" for n, s in _per.items()]
             _brokers_total = _lt.get("brokers_total_s") or 0.0
             _prices = _lt.get("prices_s")
-            _t212 = _lt.get("t212") or {}
+            # Read live, not from the snapshot taken during the fetch: the
+            # account endpoints are visited again later for the hero card's
+            # balances, and that repeat is exactly what needs to be visible.
+            _t212 = dict(t212_api.LAST_CALL_STATS)
             st.markdown(
                 "| stap | tijd |\n|---|---|\n"
                 + "\n".join(_rows)
@@ -11182,6 +11187,17 @@ elif page == "Portfolio":
                     f"({_t212.get('retry_after_s', 0.0):.0f}s opgelegd wachten, "
                     f"{_t212.get('throttle_sleep_s', 0.0):.0f}s eigen rem)"
                 )
+                _bp = _t212.get("by_path") or {}
+                if _bp:
+                    st.markdown("**Trading 212 per endpoint**")
+                    st.markdown(
+                        "| endpoint | calls | 429 | gewacht |\n|---|---|---|---|\n"
+                        + "\n".join(
+                            f"| `{p}` | {r['n']} | {r['rate_limited']} | {r['slept_s']:.1f}s |"
+                            for p, r in sorted(_bp.items(),
+                                               key=lambda kv: -kv[1]["slept_s"])
+                        )
+                    )
             st.caption(
                 "Alleen de koude load. De sessiecache vervalt na 5 minuten; "
                 "daarna kost het opnieuw deze tijd."
