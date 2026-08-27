@@ -43,64 +43,59 @@ def _at(fund, key, i):
     return v if v is not None else 0.0
 
 
-def first_lease_reporting_year(fund):
-    """Index of the first year this filer puts a lease liability on the balance
-    sheet, or 0 when it never reports one.
+def non_operating_cash(fund, i):
+    """The idle money at year i: cash + short-term investments.
 
-    ASC 842 only moved operating leases onto the balance sheet for fiscal years
-    beginning after 15 Dec 2018. A year is "reported" as soon as either lease
-    series carries a value — including an explicit 0.0, which is a filer saying
-    it has no leases rather than the standard not existing yet.
+    Short-term investments belong here, not just cash. A company parks its war
+    chest wherever it earns most — MSFT holds $55.9bn in short-term investments
+    against $20.9bn of cash, so stripping only "cash" would leave three
+    quarters of the pile sitting in capital employed.
+
+    Long-term investments are left in. They are a deliberate allocation of
+    capital rather than a place to keep money that is between uses, and the
+    question this metric asks is what the business earns on the capital it has
+    chosen to commit.
     """
-    op = fund.get("operating_lease_liabilities") or []
-    fn = fund.get("finance_lease_liabilities") or []
-    for i in range(max(len(op), len(fn))):
-        if ((i < len(op) and op[i] is not None)
-                or (i < len(fn) and fn[i] is not None)):
-            return i
-    return 0
-
-
-def excess_liquidity(fund, i):
-    """Non-operating liquidity at year i: max(0, marketables − debt).
-
-    marketables = cash + short_term_investments + long_term_investments
-    debt        = total_debt + operating_lease_liabilities + finance_lease_liabilities
-    Floored at 0 (net-debt names have no excess to strip).
-
-    Zero for years before this filer adopted ASC 842. The debt side is what
-    keeps a lessee's cash from reading as surplus — BKE's FY2026 marketables of
-    306.5 sit under a 384 lease liability, so nothing is stripped. Take that
-    liability away and the whole pile becomes "excess": the same company scored
-    61.1% in FY2019 and 18.8% in FY2020, a 42-point drop that is the accounting
-    standard arriving, not the business changing. Comparing marketables against
-    a debt figure that is knowingly missing its largest component is not a
-    conservative estimate, it is the wrong comparison, so it is not made.
-    """
-    if i < first_lease_reporting_year(fund):
-        return 0.0
-    liquid = (_at(fund, "cash", i)
-              + _at(fund, "short_term_investments", i)
-              + _at(fund, "long_term_investments", i))
-    debt = (_at(fund, "total_debt", i)
-            + _at(fund, "operating_lease_liabilities", i)
-            + _at(fund, "finance_lease_liabilities", i))
-    return max(0.0, liquid - debt)
+    return _at(fund, "cash", i) + _at(fund, "short_term_investments", i)
 
 
 def capital_employed(fund, i):
-    """TA − CL − excess_liquidity at year i. May be ≤ 0 for capital-light names
-    (handled by roce_for_year's ceiling)."""
+    """(TA − CL) − cash − short-term investments at year i.
+
+    Goodwill stays in. Stripping it was what blew this metric up in June 2026:
+    an acquisitive name like AVGO carries ~60% goodwill, the denominator
+    collapsed towards nothing and ROCE read 213%. Goodwill is also the part of
+    the question worth asking — whether the acquisitions earn back what was
+    paid for them.
+
+    Cash comes out because EBIT sits above the financial result: the interest
+    the cash earns is not in the numerator, so charging the denominator for it
+    penalises the balance sheet without crediting the income. It also stops a
+    quality gate from punishing prudence — every idle euro used to drag ROCE
+    down, pushing cash-rich compounders like Hermès and Nintendo towards the
+    20% bar for holding a buffer, which is strength rather than grounds for
+    rejection.
+
+    No netting against debt and no lease adjustment. An earlier basis subtracted
+    max(0, marketables − debt), which made the answer depend on the shape of the
+    liability side: MSFT's finance leases exceeded its marketables so nothing
+    came off at all, while Hermès, with almost no debt, had its whole cash pile
+    stripped. One formula, two behaviours, and the difference read as a bug.
+
+    May be ≤ 0 when the cash exceeds TA − CL, which roce_for_year caps.
+    """
     return (_at(fund, "total_assets", i)
             - _at(fund, "current_liabilities", i)
-            - excess_liquidity(fund, i))
+            - non_operating_cash(fund, i))
 
 
 def roce_for_year(fund, i):
-    """Per-year ROCE = EBIT / (excess-liquidity-adjusted CE), with a ceiling cap.
+    """Per-year ROCE = EBIT / capital_employed, with a ceiling cap.
 
     Returns (pct, capped). (None, False) when EBIT/TA/CL are unavailable.
-    CE ≤ 0 → maximally capital-efficient → ceiling (a pass), year retained.
+    CE ≤ 0 → the cash exceeds what the operation ties up → ceiling (a pass),
+    year retained rather than dropped, because dropping it would take the most
+    capital-light year out of the mean and penalise the best names.
     """
     oi_seq = fund.get("operating_income") or []
     ta_seq = fund.get("total_assets") or []
@@ -116,6 +111,14 @@ def roce_for_year(fund, i):
     pct = oi_v / ce * 100
     if pct > ROCE_CEILING:
         return (ROCE_CEILING, True)
+    # Clamped below as well as above. Stripping cash can leave a loss-making
+    # company with a sliver of capital employed and a percentage with no
+    # meaning left in it: SE's worst year came out at −32,967% and its ten-year
+    # mean at −3,314%. The band it lands in is the same either way — fragile is
+    # fragile — but the figure is read by people, and one that absurd reads as
+    # a broken metric rather than a bad business.
+    if pct < -ROCE_CEILING:
+        return (-ROCE_CEILING, True)
     return (pct, False)
 
 
@@ -123,13 +126,23 @@ def compute_roce_metric(fund, cfg=None):
     """Single source of truth for the watchlist/detail/MCP quality metric.
 
     Returns ``(metric, avg_value)`` where ``metric`` is ``'ROCE'`` or ``'ROE'``:
-      • ROCE = avg of EBIT / (Total Assets − Current Liabilities − excess
-        liquidity), per roce_for_year. Goodwill is NOT subtracted (vault
-        methodology 2026-06-12); excess liquidity (net cash/investments) IS
-        stripped from the ROCE value, capped at ROCE_CEILING. The float-test
-        denominator (ce_ta_ratios, used for auto ROE fallback) still uses the
-        ORIGINAL CE = TA − CL, unadjusted for excess liquidity.
+      • ROCE = avg of EBIT / ((TA − CL) − cash − short-term investments),
+        per roce_for_year, capped at ROCE_CEILING. Goodwill stays in the
+        denominator (vault methodology, revised 2026-08-27).
       • ROE  = avg of Net Income / Total Equity.
+
+    Two denominators, deliberately, and they must not be conflated:
+
+      value    (TA − CL) − cash − short-term investments
+      float test   (TA − CL) / TA, cash INCLUDED
+
+    The float test decides whether ROCE means anything for this filer at all —
+    whether current liabilities fund so much of the asset base that there is
+    barely any capital employed to speak of. Cash is part of that asset base,
+    so it belongs in that ratio. Run the test on the cash-stripped denominator
+    instead and every cash-rich name drops under the 25% threshold and gets
+    reclassified as a float business, which is precisely the misclassification
+    the 2026-06-16 fix existed to end.
 
     Both averages are arithmetic means of the per-year values (not a pooled
     sum(EBIT)/sum(CE)) over the trailing ROCE_WINDOW_YEARS years, regardless
@@ -156,8 +169,8 @@ def compute_roce_metric(fund, cfg=None):
         oi_v = oi_w[i] if i < len(oi_w) else None
         ta_v = ta_w[i] if i < len(ta_w) else None
         cl_v = cl_w[i] if i < len(cl_w) else None
-        # Float test uses the ORIGINAL CE = TA − CL (unchanged, incl. the
-        # original oi-present gate).
+        # Float test on TA − CL with the cash still in it. See the docstring:
+        # stripping cash here would flip every cash-rich name to ROE.
         if oi_v is not None and ta_v and ta_v > 0 and cl_v is not None:
             ce_orig = ta_v - cl_v
             ce_ta_ratios.append(max(ce_orig, 0) / ta_v)
@@ -200,9 +213,10 @@ WATCHLIST_FUND_KEYS = (
     # compute_roce_metric
     "operating_income", "total_assets", "current_liabilities",
     "net_income", "total_equity",
-    # capital_employed / excess_liquidity, via roce_for_year
-    "cash", "short_term_investments", "long_term_investments",
-    "total_debt", "operating_lease_liabilities", "finance_lease_liabilities",
+    # capital_employed, via roce_for_year. Debt, leases and long-term
+    # investments no longer enter the denominator; slices stored before
+    # 2026-08-27 still carry them, harmlessly, because nothing reads them.
+    "cash", "short_term_investments",
     # trailing FCF yield. shares_latest is the cover-page count from the most
     # recent filing — the one on the same basis as the price, and the only one
     # that survives a split between annual reports.

@@ -781,11 +781,9 @@ def _compute_fundamentals_headline(fund, cfg):
     #     however many years this call fetched. Before the window was pinned,
     #     get_fundamentals(n_years=11) answered 37.47% for BKE where n_years=10
     #     answered 36.27% — the same ticker, two headlines.
-    #   • per year, EBIT / (TA − CL − max(0, marketables − debt)), capped at
-    #     ROCE_CEILING. Goodwill is not deducted; net cash is. Nothing is
-    #     deducted in years before the filer first reported a lease liability,
-    #     where the debt side of that max() cannot be trusted (see
-    #     scorecard_utils.excess_liquidity).
+    #   • per year, EBIT / ((TA − CL) − cash − short-term investments),
+    #     capped at ROCE_CEILING. Goodwill stays in the denominator; idle cash
+    #     does not, because EBIT sits above the interest that cash earns.
     #   • ROE (Net Income / Total Equity) instead, on the same window, when the
     #     name is a float business or cfg['roce_metric_override'] says so.
     #

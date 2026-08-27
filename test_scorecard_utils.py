@@ -84,7 +84,8 @@ def test_manual_override_forces_roce_on_float():
     assert round(val, 1) == 50.0  # 10 / (100−80)
 
 
-from scorecard_utils import excess_liquidity, capital_employed, roce_for_year
+from scorecard_utils import (non_operating_cash, capital_employed,
+                             roce_for_year)
 
 
 def _fund_liq(cash=0, sti=0, lti=0, debt=0, opl=0, fnl=0, ta=0, cl=0, oi=0):
@@ -98,38 +99,52 @@ def _fund_liq(cash=0, sti=0, lti=0, debt=0, opl=0, fnl=0, ta=0, cl=0, oi=0):
     }
 
 
-def test_excess_liquidity_net_cash_counts_all_marketables():
-    # liquid = 100+50+30 = 180; debt = 20+10+5 = 35; excess = 145
-    f = _fund_liq(cash=100, sti=50, lti=30, debt=20, opl=10, fnl=5)
-    assert excess_liquidity(f, 0) == 145
+def test_non_operating_cash_counts_short_term_investments():
+    # MSFT's shape: the war chest is mostly in short-term investments, so
+    # stripping only "cash" would leave three quarters of it in the denominator.
+    f = _fund_liq(cash=100, sti=50)
+    assert non_operating_cash(f, 0) == 150
 
 
-def test_excess_liquidity_floors_at_zero_when_net_debt():
-    # liquid = 30; debt = 100 → negative → floored to 0
-    f = _fund_liq(cash=30, debt=100)
-    assert excess_liquidity(f, 0) == 0
+def test_non_operating_cash_leaves_long_term_investments_in():
+    # A long-term investment is capital deliberately committed, not money
+    # between uses, and this metric asks what the committed capital earns.
+    f = _fund_liq(cash=10, lti=200)
+    assert non_operating_cash(f, 0) == 10
 
 
-def test_excess_liquidity_lt_investments_included():
-    # regression: LT investments are the bulk of the surplus (VEEV/PANW-like)
-    f = _fund_liq(cash=10, sti=0, lti=200, debt=0)
-    assert excess_liquidity(f, 0) == 210
+def test_non_operating_cash_ignores_debt_and_leases():
+    # No netting: an earlier basis subtracted max(0, marketables − debt), which
+    # made the answer depend on the liability side. MSFT's finance leases
+    # exceeded its marketables so nothing came off; Hermès, with almost no debt,
+    # had its whole cash pile stripped. Same formula, two behaviours.
+    f = _fund_liq(cash=100, sti=50, debt=9999, opl=9999, fnl=9999)
+    assert non_operating_cash(f, 0) == 150
 
 
-def test_excess_liquidity_missing_series_default_zero():
+def test_non_operating_cash_missing_series_default_zero():
     f = {"years": [2023], "cash": [40], "total_assets": [100],
-         "current_liabilities": [20], "operating_income": [10]}  # no investments/debt keys
-    assert excess_liquidity(f, 0) == 40
+         "current_liabilities": [20], "operating_income": [10]}  # no STI key
+    assert non_operating_cash(f, 0) == 40
 
 
-def test_capital_employed_strips_excess_liquidity():
-    # TA−CL = 80; excess = 145 (from net cash) → CE = 80−145 = −65
+def test_capital_employed_strips_cash_and_short_term_investments():
+    # TA−CL = 80; cash+STI = 150 → CE = 80−150 = −70
     f = _fund_liq(cash=100, sti=50, lti=30, debt=20, opl=10, fnl=5, ta=100, cl=20)
-    assert capital_employed(f, 0) == -65
+    assert capital_employed(f, 0) == -70
+
+
+def test_capital_employed_keeps_goodwill_in():
+    # Stripping goodwill is what blew this up in June 2026: an acquisitive name
+    # carries most of its assets there and the denominator collapsed.
+    f = _fund_liq(ta=100, cl=20, oi=12)
+    f["goodwill"] = [60]
+    assert capital_employed(f, 0) == 80
+    assert round(roce_for_year(f, 0)[0], 1) == 15.0
 
 
 def test_roce_for_year_normal():
-    # excess 0 (net debt), CE = 100−20 = 80, oi 20 → 25%
+    # no cash, CE = 100−20 = 80, oi 20 → 25%
     f = _fund_liq(cash=0, debt=100, ta=100, cl=20, oi=20)
     pct, capped = roce_for_year(f, 0)
     assert round(pct, 1) == 25.0 and capped is False
@@ -137,7 +152,7 @@ def test_roce_for_year_normal():
 
 def test_roce_for_year_ce_negative_caps_and_passes():
     # capital-light: CE ≤ 0 → ceiling, capped True, year kept
-    f = _fund_liq(cash=100, lti=100, ta=50, cl=10, oi=30)  # excess 200 > TA−CL 40
+    f = _fund_liq(cash=100, sti=100, ta=50, cl=10, oi=30)  # cash 200 > TA−CL 40
     pct, capped = roce_for_year(f, 0)
     assert pct == 100.0 and capped is True
 
@@ -154,10 +169,9 @@ def test_roce_for_year_missing_inputs_returns_none():
     assert roce_for_year(f, 0) == (None, False)
 
 
-def test_compute_roce_strips_excess_liquidity_raises_roce():
-    # Two-year cash-rich name. Old: EBIT/(TA−CL). New: EBIT/(TA−CL−excess).
-    # y: TA 200, CL 40 → TA−CL 160. excess = cash 100 (net cash, no debt).
-    # New CE = 60. EBIT 30 → 50% (old was 30/160 = 18.75%).
+def test_compute_roce_strips_cash_raises_roce():
+    # Two-year cash-rich name. TA−CL 160, cash 100 → CE 60.
+    # EBIT 30 → 50%, against 18.75% with the cash left in.
     f = {
         "years": [2022, 2023],
         "operating_income": [30.0, 30.0],
@@ -217,8 +231,7 @@ def test_compute_roce_keeps_ce_negative_year_at_ceiling():
 # landing by coincidence on the same number as the old formula's latest year.
 # ---------------------------------------------------------------------------
 
-from scorecard_utils import (ROCE_WINDOW_YEARS, window_start,
-                             first_lease_reporting_year)
+from scorecard_utils import ROCE_WINDOW_YEARS, window_start
 
 _BKE_YEARS = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
 _BKE = {
@@ -233,60 +246,43 @@ _BKE = {
     "long_term_investments": [34.0, 18.0, 21.0, 19.0, 16.0, 18.0, 19.0, 21.0, 25.0, 28.0, 32.0],
     "total_debt": [0.0] * 11,
     "goodwill": [None] * 11,
-    # ASC 842 only puts leases on the balance sheet from FY2020 for this filer.
+    # Kept on the fixture although nothing reads them any more: the denominator
+    # no longer touches debt or leases, and a test that still passes with them
+    # present is the proof of it.
     "operating_lease_liabilities": [None, None, None, None, 378.0, 306.0, 288.0,
                                     304.0, 315.0, 326.0, 384.0],
     "finance_lease_liabilities": [None] * 11,
 }
 
 
-def test_bke_latest_year_is_the_canonical_ta_minus_cl_basis():
-    # FY2026 marketables 249.5+25+32 = 306.5 sit under the 384 lease liability,
-    # so nothing is stripped and CE is plain TA−CL: 261/(991−237) = 34.6%.
-    # The abandoned ex-cash basis would say 261/(991−237−249.5) = 51.7%.
-    pct, capped = roce_for_year(_BKE, len(_BKE_YEARS) - 1)
-    assert round(pct, 1) == 34.6
+def test_bke_latest_year_strips_cash_regardless_of_its_leases():
+    # FY2026: CE = 991 − 237 − 249.5 − 25 = 479.5, so 261/479.5 = 54.4%.
+    # The 384 of lease liabilities used to cancel the cash out entirely and
+    # leave CE at 754 for 34.6%; the liability side no longer enters into it.
+    i = len(_BKE_YEARS) - 1
+    pct, capped = roce_for_year(_BKE, i)
+    assert round(capital_employed(_BKE, i), 1) == 479.5
+    assert round(pct, 1) == 54.4
     assert not capped
-    assert round(capital_employed(_BKE, len(_BKE_YEARS) - 1), 1) == 754.0
-    assert excess_liquidity(_BKE, len(_BKE_YEARS) - 1) == 0.0
 
 
 def test_bke_average_ignores_history_beyond_the_window():
     # 11 years of input, 10-year answer: FY2016 must not reach the mean.
     metric, val = compute_roce_metric(_BKE)
     assert metric == "ROCE"
-    assert round(val, 2) == 36.27
+    assert round(val, 2) == 64.40
 
     eleven = [roce_for_year(_BKE, i)[0] for i in range(len(_BKE_YEARS))]
-    assert round(sum(eleven) / len(eleven), 2) == 37.47
+    assert round(sum(eleven) / len(eleven), 2) == 66.35
 
 
-def test_bke_pre_asc842_years_keep_their_cash_in_capital():
-    # FY2016-FY2019 predate this filer's first reported lease liability, so the
-    # debt side of the strip is missing its largest component. Stripping anyway
-    # put FY2019 at 61.1% against FY2020's 18.8% — a 42-point step that is ASC
-    # 842 landing, not the business changing. Both years now sit on plain TA−CL.
-    assert first_lease_reporting_year(_BKE) == 4  # FY2020
-    for i in range(4):
-        assert excess_liquidity(_BKE, i) == 0.0
-    assert round(roce_for_year(_BKE, 3)[0], 1) == 27.7  # FY2019, was 61.1
-    assert round(roce_for_year(_BKE, 4)[0], 1) == 18.8  # FY2020, unchanged
-
-
-def test_explicit_zero_lease_liability_counts_as_reported():
-    # A filer stating it has no leases is not a filer from before the standard
-    # existed: 0.0 is data, None is absence. The strip must still run.
-    f = {
-        "years": [2023],
-        "operating_income": [30.0], "total_assets": [200.0],
-        "current_liabilities": [40.0], "cash": [100.0],
-        "short_term_investments": [0.0], "long_term_investments": [0.0],
-        "total_debt": [0.0],
-        "operating_lease_liabilities": [0.0], "finance_lease_liabilities": [0.0],
-    }
-    assert first_lease_reporting_year(f) == 0
-    assert excess_liquidity(f, 0) == 100.0
-    assert round(roce_for_year(f, 0)[0], 1) == 50.0  # 30 / (200−40−100)
+def test_bke_leases_do_not_enter_the_denominator():
+    # This filer reports no lease liability before FY2020 and a large one after,
+    # which used to move its ROCE by 42 points across that boundary — the
+    # accounting standard arriving, not the business changing. Now FY2019 and
+    # FY2020 differ only by their own balance sheets.
+    assert round(roce_for_year(_BKE, 3)[0], 1) == 55.8   # FY2019, no leases on file
+    assert round(roce_for_year(_BKE, 4)[0], 1) == 28.4   # FY2020, 378 of leases
 
 
 def test_bke_ten_year_input_gives_the_same_answer_as_eleven():
@@ -305,3 +301,132 @@ def test_bke_cash_rich_and_goodwill_free_stays_on_roce():
     metric, _ = compute_roce_metric(_BKE)
     assert metric == "ROCE"
     assert compute_roce_metric(_BKE, {"roce_metric_override": "ROE"})[0] == "ROE"
+
+
+# ---------------------------------------------------------------------------
+# The 2026-08-27 basis, anchored on real filings.
+#
+#   capital employed = (Total Assets − Current Liabilities) − cash
+#                      − short-term investments
+#
+# Goodwill stays in. Debt and leases play no part. Decision and rationale:
+# portfolio-vault/Concepts/LazyTheta-Lens-Mechanica.md, "HERZIENING 2026-08-27".
+# ---------------------------------------------------------------------------
+
+def _year(oi, ta, cl, cash, sti=0.0, **extra):
+    f = {"years": [2026], "operating_income": [oi], "total_assets": [ta],
+         "current_liabilities": [cl], "cash": [cash],
+         "short_term_investments": [sti]}
+    for k, v in extra.items():
+        f[k] = [v]
+    return f
+
+
+def test_msft_fy2026_anchor():
+    # The war chest is mostly short-term investments: stripping cash alone
+    # would leave $55.9bn of it in the denominator and read 28.9%.
+    f = _year(oi=155237, ta=758376, cl=168825, cash=20935, sti=55908)
+    assert capital_employed(f, 0) == 512708
+    assert round(roce_for_year(f, 0)[0], 1) == 30.3
+
+
+def test_msft_leases_no_longer_cancel_its_cash():
+    # MSFT's finance leases exceeded its marketables, so the old
+    # max(0, marketables − debt) came to nothing and the whole cash pile stayed
+    # in capital employed at 26.3%. The liability side is now irrelevant.
+    f = _year(oi=155237, ta=758376, cl=168825, cash=20935, sti=55908,
+              total_debt=40294, operating_lease_liabilities=16532,
+              finance_lease_liabilities=66594, long_term_investments=36348)
+    assert capital_employed(f, 0) == 512708
+    assert round(roce_for_year(f, 0)[0], 1) == 30.3
+
+
+def test_rms_pa_fy2025_anchor():
+    # Hermès, the other side of the same old formula: almost no debt, so its
+    # entire cash pile came off and then debt was added back, giving 59.6%.
+    f = _year(oi=6696, ta=24322, cl=3186, cash=12239, sti=0.0,
+              total_debt=34, operating_lease_liabilities=2312, goodwill=180)
+    assert capital_employed(f, 0) == 8897
+    assert round(roce_for_year(f, 0)[0], 1) == 75.3
+
+
+def test_the_two_paths_that_used_to_disagree_now_share_one_rule():
+    # Same function, same inputs, one behaviour. What made MSFT and Hermès look
+    # like separate code paths was max(0, marketables − debt) clamping for one
+    # and not the other — not a second implementation.
+    msft = _year(oi=155237, ta=758376, cl=168825, cash=20935, sti=55908,
+                 total_debt=40294, finance_lease_liabilities=66594)
+    rms = _year(oi=6696, ta=24322, cl=3186, cash=12239,
+                total_debt=34, operating_lease_liabilities=2312)
+    for f in (msft, rms):
+        ta, cl = f["total_assets"][0], f["current_liabilities"][0]
+        cash, sti = f["cash"][0], f["short_term_investments"][0]
+        assert capital_employed(f, 0) == ta - cl - cash - sti
+
+
+class TestFloatDetectorStaysOnTheCashInclusiveBasis:
+    """The value strips cash; the float test must not.
+
+    The float test asks whether current liabilities fund so much of the balance
+    sheet that there is barely any capital employed to speak of — a bank, an
+    insurer, a settlement network. Cash is part of that balance sheet, so it
+    belongs in that ratio. Run the test on the cash-stripped denominator and
+    every cash-rich name falls under the 25% threshold and is relabelled a float
+    business, which is the misclassification the 2026-06-16 fix ended.
+    """
+
+    def test_a_cash_rich_name_does_not_flip_to_roe(self):
+        # (TA−CL)/TA = 160/200 = 0.80, far above the threshold. But the
+        # cash-stripped CE is 10, and 10/200 = 0.05 would trip it.
+        f = {
+            "years": [2026], "operating_income": [30.0],
+            "total_assets": [200.0], "current_liabilities": [40.0],
+            "cash": [140.0], "short_term_investments": [10.0],
+            "net_income": [25.0], "total_equity": [50.0],
+        }
+        metric, val = compute_roce_metric(f)
+        assert metric == "ROCE"
+        # CE falls to 10 and 30/10 would be 300%, which the ceiling holds at
+        # 100. Still ROCE, and still a pass — which is the point: a cash pile
+        # must not turn a quality name into a float business.
+        assert val == 100.0
+
+    def test_a_genuine_float_business_still_falls_back(self):
+        # Current liabilities fund 80% of the assets: (TA−CL)/TA = 0.20.
+        f = {
+            "years": [2026], "operating_income": [10.0],
+            "total_assets": [100.0], "current_liabilities": [80.0],
+            "cash": [0.0], "short_term_investments": [0.0],
+            "net_income": [15.0], "total_equity": [50.0],
+        }
+        metric, val = compute_roce_metric(f)
+        assert metric == "ROE"
+        assert round(val, 1) == 30.0
+
+    def test_cash_alone_never_decides_the_metric(self):
+        # Same business twice, once with a pile of cash. The metric chosen must
+        # not change; only the ROCE value moves.
+        base = {
+            "years": [2026], "operating_income": [30.0],
+            "total_assets": [200.0], "current_liabilities": [40.0],
+            "net_income": [25.0], "total_equity": [50.0],
+            "cash": [0.0], "short_term_investments": [0.0],
+        }
+        rich = dict(base, cash=[120.0])
+        assert compute_roce_metric(base)[0] == compute_roce_metric(rich)[0] == "ROCE"
+        assert compute_roce_metric(rich)[1] > compute_roce_metric(base)[1]
+
+
+def test_roce_for_year_clamps_below_the_floor():
+    # A loss-maker whose cash leaves a sliver of capital employed: 
+    # CE = 100 − 20 − 79 = 1, EBIT −50 → −5000%, held at −100.
+    f = _fund_liq(cash=79, ta=100, cl=20, oi=-50)
+    pct, capped = roce_for_year(f, 0)
+    assert pct == -100.0 and capped is True
+
+
+def test_a_believable_loss_is_not_clamped():
+    # The floor must not swallow ordinary bad years. CE = 80, EBIT −20 → −25%.
+    f = _fund_liq(cash=0, ta=100, cl=20, oi=-20)
+    pct, capped = roce_for_year(f, 0)
+    assert round(pct, 1) == -25.0 and capped is False

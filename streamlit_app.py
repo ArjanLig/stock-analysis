@@ -6148,13 +6148,11 @@ def _dcf_editor(ticker):
                     '<b>&gt;Discount rate</b> creates value<br>'
                     '<b>&gt;20%</b> Prasad/PE-screen quality bar — sustained 5+ jaar duidt op moat<br>'
                     '<b>&lt;Discount rate</b> destroys value<br><br>'
-                    'Capital Employed = Total Assets − Current Liabilities − overtollige liquiditeit,<br>'
-                    'waarbij overtollige liquiditeit = max(0, cash + beleggingen − schuld incl. leases).<br>'
-                    'Goodwill wordt <b>niet</b> afgetrokken — zo blijven acquisitie-zware namen vergelijkbaar.<br>'
-                    'Netto-cash gaat er wél af, zodat een cash-berg de operationele returns niet verwatert; '
-                    'namen met netto schuld verliezen niets.<br>'
-                    'In jaren vóór ASC 842 — leases stonden toen niet op de balans — wordt '
-                    'niets afgetrokken: de schuldkant mist daar zijn grootste post.<br>'
+                    'Capital Employed = Total Assets − Current Liabilities − cash − kortlopende beleggingen.<br>'
+                    'Goodwill blijft er <b>in</b> — zo meet je of overnames hun kapitaal terugverdienen.<br>'
+                    'Cash gaat eruit omdat EBIT vóór het financieel resultaat staat: de rente op die '
+                    'kaspositie zit niet in de teller, dus hoort de kas niet in de noemer. '
+                    'Kortlopende beleggingen tellen als cash — daar staat de oorlogskas meestal.<br>'
                     f'Gemiddelde over de laatste {ROCE_WINDOW_YEARS} jaar, per jaar gemaximeerd op {int(ROCE_CEILING)}%.<br>'
                     'De float/ROE-fallback toetst op de onaangepaste (TA−CL)/TA, zodat een cash-berg '
                     'geen float-bedrijf van je maakt.<br>'
@@ -6330,9 +6328,8 @@ def _dcf_editor(ticker):
                     else:
                         st.caption(
                             "In $M. EBIT = Operating Income (proxy). Capital Employed = "
-                            "Total Assets − Current Liabilities − max(0, cash + beleggingen "
-                            "− schuld incl. leases). Goodwill wordt niet afgetrokken; "
-                            "netto-cash wel, behalve in jaren vóór ASC 842. Laatste "
+                            "Total Assets − Current Liabilities − cash − kortlopende "
+                            "beleggingen. Goodwill blijft erin, cash niet. Laatste "
                             f"{ROCE_WINDOW_YEARS} jaar, per jaar gemaximeerd op "
                             f"{int(ROCE_CEILING)}%."
                         )
