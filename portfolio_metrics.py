@@ -436,6 +436,18 @@ _SUMMED_FIELDS = (
 )
 
 
+# Short forms, used only when two brokers share a row. A single-broker row
+# keeps its full name: the abbreviation exists so one merged label cannot set
+# the width of a column every other row has to live in — "Tastytrade + Trading
+# 212" pushed the weight figure onto a second line. An unknown broker keeps its
+# name rather than being guessed at.
+_BROKER_SHORT = {
+    "Tastytrade": "TT",
+    "Trading 212": "T212",
+    "Interactive Brokers": "IBKR",
+}
+
+
 def _trade_day(trade):
     """A sortable day for a trade, whatever shape its date arrived in.
 
@@ -508,7 +520,8 @@ def _merge_rows(symbol, rows):
         float(merged["adjusted_cost"] / shares) if shares else 0.0)
 
     merged["broker"] = " + ".join(
-        dict.fromkeys(r["broker"] for r in rows if r.get("broker")))
+        _BROKER_SHORT.get(n, n)
+        for n in dict.fromkeys(r["broker"] for r in rows if r.get("broker")))
 
     # The rows describe one instrument, so a quote either agrees across them or
     # one side simply has none.

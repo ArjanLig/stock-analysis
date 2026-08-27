@@ -611,7 +611,9 @@ class TestMergeBySymbol(unittest.TestCase):
         self.assertEqual(list(out), ["NVDA"])
         self.assertEqual(out["NVDA"]["shares_held"], 15)
         self.assertAlmostEqual(out["NVDA"]["equity_cost"], -1600.0)
-        self.assertEqual(out["NVDA"]["broker"], "Tastytrade + Trading 212")
+        # Short forms only here: the full names would set the column width
+        # for every single-broker row under this one.
+        self.assertEqual(out["NVDA"]["broker"], "TT + T212")
 
     def test_the_suffix_goes_with_the_split_that_caused_it(self):
         out = merge_by_symbol({
@@ -704,7 +706,7 @@ class TestMergeBySymbol(unittest.TestCase):
             "NVDA (C)": _broker_row("C", 3, -300.0),
         })
         self.assertEqual(out["NVDA"]["shares_held"], 6)
-        self.assertEqual(out["NVDA"]["broker"], "A + B + C")
+        self.assertEqual(out["NVDA"]["broker"], "A + B + C")  # unknown names kept
 
 
 class TestMergeSortsMixedDateShapes(unittest.TestCase):
@@ -731,3 +733,18 @@ class TestMergeSortsMixedDateShapes(unittest.TestCase):
         }
         out = merge_by_symbol(rows)
         self.assertEqual(len(out["NVDA"]["trades"]), 2)
+
+
+class TestMergedBrokerLabel(unittest.TestCase):
+    def test_a_single_broker_row_keeps_its_full_name(self):
+        row = _broker_row("Trading 212", 10, -1000.0)
+        row["symbol"] = "CPRT"
+        out = merge_by_symbol({"CPRT": row})
+        self.assertEqual(out["CPRT"]["broker"], "Trading 212")
+
+    def test_an_unfamiliar_broker_is_not_guessed_at(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 1, -100.0),
+            "NVDA (Bux)": _broker_row("Bux", 1, -100.0),
+        })
+        self.assertEqual(out["NVDA"]["broker"], "TT + Bux")
