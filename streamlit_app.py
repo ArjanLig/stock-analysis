@@ -4111,8 +4111,7 @@ def _watchlist_overview():
     def _cached_watchlist(user_id):
         return list_watchlist(_sb_client, user_id=user_id)
 
-    with load_profiler.timed("watchlist-configs uit Supabase"):
-        watchlist = _cached_watchlist(st.session_state["user"]["id"])
+    watchlist = _cached_watchlist(st.session_state["user"]["id"])
     if not watchlist:
         st.info("Your watchlist is empty. Add a ticker above or use 'Add to Watchlist' on the DCF page.")
         return
@@ -4143,8 +4142,7 @@ def _watchlist_overview():
 
     _wl_configs = _load_all_configs(st.session_state["user"]["id"], tuple(item['ticker'] for item in watchlist))
     wl_tickers = list(_wl_configs.keys())
-    with load_profiler.timed("koersen"):
-        batch_prices = _fetch_prices_batch(tuple(wl_tickers)) if wl_tickers else {}
+    batch_prices = _fetch_prices_batch(tuple(wl_tickers)) if wl_tickers else {}
 
     @st.cache_data(ttl=86400, show_spinner=False)
     def _cached_fundamentals(t):
@@ -4263,13 +4261,11 @@ def _watchlist_overview():
     def _cached_earnings(tickers_tuple):
         return fetch_earnings_dates(list(tickers_tuple))
 
-    with load_profiler.timed("earnings-datums"):
-        _earnings_map = _cached_earnings(tuple(wl_tickers)) if wl_tickers else {}
+    _earnings_map = _cached_earnings(tuple(wl_tickers)) if wl_tickers else {}
 
     # Resolve every logo before the table starts drawing. One per row, in row
     # order, was 5.4s of this page.
-    with load_profiler.timed("logo's opwarmen"):
-        prewarm_logos(wl_tickers)
+    prewarm_logos(wl_tickers)
 
     # ── Category definitions ──
     _categories = ["Yes", "Maybe", "Watch Later", "No", "Uncategorized"]
@@ -10130,8 +10126,6 @@ document.getElementById('dl-btn').addEventListener('click', function() {{
 
 
 if page == "Watchlist":
-    load_profiler.start("Watchlist")
-
     st.markdown(
         "<style>.block-container { max-width: 1400px; margin: auto; }</style>",
         unsafe_allow_html=True,
@@ -10144,16 +10138,12 @@ if page == "Watchlist":
     else:
         _watchlist_overview()
 
-    load_profiler.panel()
-
 
 # ══════════════════════════════════════════════════════
 #  PORTFOLIO PAGE — Active positions overview
 # ══════════════════════════════════════════════════════
 
 elif page == "Portfolio":
-    load_profiler.start("Portfolio")
-
     if not has_active_broker():
         _render_welcome_page()
         st.stop()
@@ -10163,8 +10153,7 @@ elif page == "Portfolio":
         unsafe_allow_html=True,
     )
     st.markdown("")
-    with load_profiler.timed("brokerdata + prijzen"):
-        cost_basis = _load_portfolio_data()
+    cost_basis = _load_portfolio_data()
 
     held = {
         t: d for t, d in cost_basis.items()
@@ -10854,13 +10843,11 @@ elif page == "Portfolio":
 
     prewarm_logos([(d.get("symbol") or t) for t, d in held.items()
                    if not d.get("isin")])
-    with load_profiler.timed("posities + hero-kaarten"):
-        _portfolio_cards()
+    _portfolio_cards()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    with load_profiler.timed("deployment"):
-        with st.container(key="deployment_block"):
-            _deployment_overview()
+    with st.container(key="deployment_block"):
+        _deployment_overview()
 
     # ── Contribution & Relative performance ──
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -11118,11 +11105,8 @@ elif page == "Portfolio":
         except Exception as e:
             st.warning(f"Could not load portfolio exposure: {e}")
 
-    with load_profiler.timed("sector- en landenverdeling"):
-        with st.container(key="allocation_block"):
-            _portfolio_exposure()
-
-    load_profiler.panel()
+    with st.container(key="allocation_block"):
+        _portfolio_exposure()
 
 
 
@@ -11131,15 +11115,12 @@ elif page == "Portfolio":
 # ══════════════════════════════════════════════════════
 
 elif page == "Cost Basis":
-    load_profiler.start("Cost Basis")
-
     if not has_active_broker():
         _render_connect_prompt()
 
 
     st.markdown("")
-    with load_profiler.timed("brokerdata + prijzen"):
-        cost_basis = _load_portfolio_data()
+    cost_basis = _load_portfolio_data()
 
     # Same picker as the Portfolio page, and the same reason: a card here is
     # meant to be laid next to the broker's own screen, which only works if you
@@ -11464,10 +11445,9 @@ elif page == "Cost Basis":
             logger.debug("Prices for closed positions unavailable: %s", e)
             return {}
 
-    with load_profiler.timed("koersen gesloten posities"):
-        _closed_prices = _cached_closed_prices(tuple(sorted(
-            {(d.get("symbol") or t) for t, d in closed_tickers.items()}
-        )))
+    _closed_prices = _cached_closed_prices(tuple(sorted(
+        {(d.get("symbol") or t) for t, d in closed_tickers.items()}
+    )))
 
     def _render_grid(tickers):
         items = list(tickers.items())
@@ -11478,23 +11458,20 @@ elif page == "Cost Basis":
                     with col:
                         _render_ticker_card(items[i + j][0], items[i + j][1])
 
-    with load_profiler.timed("logo's opwarmen"):
-        prewarm_logos([(d.get("symbol") or t) for t, d in cost_basis.items()
-                       if not d.get("isin")])
+    prewarm_logos([(d.get("symbol") or t) for t, d in cost_basis.items()
+                   if not d.get("isin")])
 
     st.markdown(f"### Active ({len(active_tickers)})")
-    with load_profiler.timed(f"kaarten actief ({len(active_tickers)})"):
-        if active_tickers:
-            _render_grid(active_tickers)
-        else:
-            st.caption("No active positions.")
+    if active_tickers:
+        _render_grid(active_tickers)
+    else:
+        st.caption("No active positions.")
 
     st.markdown(f"### Closed ({len(closed_tickers)})")
-    with load_profiler.timed(f"kaarten gesloten ({len(closed_tickers)})"):
-        if closed_tickers:
-            _render_grid(closed_tickers)
-        else:
-            st.caption("No closed positions.")
+    if closed_tickers:
+        _render_grid(closed_tickers)
+    else:
+        st.caption("No closed positions.")
 
     # ── JS: instant client-side card filtering ──
     components.html(
@@ -11531,8 +11508,6 @@ elif page == "Cost Basis":
         """,
         height=0,
     )
-
-    load_profiler.panel()
 
 # ══════════════════════════════════════════════════════
 #  RESULTS PAGE — P/L performance overview
@@ -12305,8 +12280,6 @@ elif page == "Results":
 # ══════════════════════════════════════════════════════
 
 elif page == "Screener":
-    load_profiler.start("Screener")
-
     st.markdown(
         "<style>.block-container { max-width: 1000px; margin: auto; }</style>",
         unsafe_allow_html=True,
@@ -12380,13 +12353,12 @@ elif page == "Screener":
         # Names already on the watchlist get marked rather than filtered: seeing a
         # familiar name pass is confirmation, and its absence would read as a miss.
         _wl = set()
-        with load_profiler.timed("watchlist-vinkjes"):
-            try:
-                _wl = {e["ticker"].upper() for e in
-                       list_watchlist(_sb_client,
-                                      user_id=(st.session_state.get("user") or {}).get("id"))}
-            except Exception as _e:
-                logger.debug("Watchlist unavailable for screener marks: %s", _e)
+        try:
+            _wl = {e["ticker"].upper() for e in
+                   list_watchlist(_sb_client,
+                                  user_id=(st.session_state.get("user") or {}).get("id"))}
+        except Exception as _e:
+            logger.debug("Watchlist unavailable for screener marks: %s", _e)
 
         if not passes:
             st.info("No names pass in this index.")
@@ -12417,8 +12389,7 @@ elif page == "Screener":
                                          metadata={"ticker": t})
                     st.error(f"Could not add {t}: {type(e).__name__}")
 
-            with load_profiler.timed("logo's opwarmen"):
-                prewarm_logos([r["ticker"] for r in passes])
+            prewarm_logos([r["ticker"] for r in passes])
             _t_screener_rows = time.perf_counter()
             _w = [0.42, 1.1, 2.1, 1.5, 0.85, 0.6, 1.0]
             hdr = st.columns(_w, vertical_alignment="center")
@@ -12460,8 +12431,6 @@ elif page == "Screener":
                                  f'font-size:0.85rem">{r.get("years_used", 0)}y</span>',
                                  unsafe_allow_html=True)
                 cols[6].markdown(f'${-r.get("net_debt", 0):,.0f}M')
-            load_profiler.mark(f"rijen renderen ({len(passes)} namen)",
-                               time.perf_counter() - _t_screener_rows)
             st.caption(f"{len(passes)} name(s) · a grey check = already on your watchlist · "
                        "+ adds the EDGAR facts; assumptions stay yours to author")
 
@@ -12493,8 +12462,6 @@ elif page == "Screener":
                 "foreign filers whose IFRS statements don't parse — fewer "
                 "usable years, not worse businesses."
             )
-
-    load_profiler.panel()
 
 
 # ══════════════════════════════════════════════════════
