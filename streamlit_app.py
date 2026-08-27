@@ -4266,6 +4266,11 @@ def _watchlist_overview():
     with load_profiler.timed("earnings-datums"):
         _earnings_map = _cached_earnings(tuple(wl_tickers)) if wl_tickers else {}
 
+    # Resolve every logo before the table starts drawing. One per row, in row
+    # order, was 5.4s of this page.
+    with load_profiler.timed("logo's opwarmen"):
+        prewarm_logos(wl_tickers)
+
     # ── Category definitions ──
     _categories = ["Yes", "Maybe", "Watch Later", "No", "Uncategorized"]
     _cat_icons = {"Yes": "✅", "Maybe": "🤔", "Watch Later": "⏳", "No": "❌", "Uncategorized": ""}
@@ -9043,9 +9048,16 @@ def _md_bold(text):
     return _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def _logo_resolves(url):
-    """Does parqet actually serve this logo? Cached a day per URL.
+# Which parqet logo URLs actually serve, cached a day. A module-level dict
+# rather than @st.cache_data because the answers get filled in from worker
+# threads, and because "does this public logo exist" is not user data — one
+# container's answer is every session's answer.
+_LOGO_OK_TTL = 86400.0
+_LOGO_OK: dict = {}
+
+
+def _logo_head(url):
+    """Does parqet serve this logo?
 
     The earlier server-side check failed and was abandoned for the wrong
     reason: parqet answers 404 to anything without a browser User-Agent, so
@@ -9064,6 +9076,42 @@ def _logo_resolves(url):
                              ).status_code == 200
     except Exception:
         return True
+
+
+def _logo_resolves(url):
+    """Cached single lookup. Falls back to a live check on a cache miss."""
+    hit = _LOGO_OK.get(url)
+    if hit and (time.time() - hit[0]) < _LOGO_OK_TTL:
+        return hit[1]
+    ok = _logo_head(url)
+    _LOGO_OK[url] = (time.time(), ok)
+    return ok
+
+
+def prewarm_logos(symbols):
+    """Resolve many logo URLs at once, before anything renders.
+
+    One at a time these cost about 60ms each and nothing else is happening
+    while they run: 117 of them was 7.1 of the Screener's 8.6 seconds, 81 was
+    5.4 of the Watchlist's 13.7. The work is entirely waiting on someone
+    else's server, so it belongs in threads.
+
+    Symbols already answered stay answered — this only fills the gaps, so a
+    second page load costs nothing.
+    """
+    todo = []
+    now = time.time()
+    for s in {s for s in symbols if s}:
+        url = f"https://assets.parqet.com/logos/symbol/{s}"
+        hit = _LOGO_OK.get(url)
+        if not hit or (now - hit[0]) >= _LOGO_OK_TTL:
+            todo.append(url)
+    if not todo:
+        return
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(12, len(todo))) as pool:
+        for url, ok in zip(todo, pool.map(_logo_head, todo)):
+            _LOGO_OK[url] = (time.time(), ok)
 
 
 def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
@@ -10804,6 +10852,8 @@ elif page == "Portfolio":
         cards_html += '</div>'
         st.markdown(cards_html, unsafe_allow_html=True)
 
+    prewarm_logos([(d.get("symbol") or t) for t, d in held.items()
+                   if not d.get("isin")])
     with load_profiler.timed("posities + hero-kaarten"):
         _portfolio_cards()
 
@@ -11427,6 +11477,10 @@ elif page == "Cost Basis":
                 if i + j < len(items):
                     with col:
                         _render_ticker_card(items[i + j][0], items[i + j][1])
+
+    with load_profiler.timed("logo's opwarmen"):
+        prewarm_logos([(d.get("symbol") or t) for t, d in cost_basis.items()
+                       if not d.get("isin")])
 
     st.markdown(f"### Active ({len(active_tickers)})")
     with load_profiler.timed(f"kaarten actief ({len(active_tickers)})"):
@@ -12363,6 +12417,8 @@ elif page == "Screener":
                                          metadata={"ticker": t})
                     st.error(f"Could not add {t}: {type(e).__name__}")
 
+            with load_profiler.timed("logo's opwarmen"):
+                prewarm_logos([r["ticker"] for r in passes])
             _t_screener_rows = time.perf_counter()
             _w = [0.42, 1.1, 2.1, 1.5, 0.85, 0.6, 1.0]
             hdr = st.columns(_w, vertical_alignment="center")
