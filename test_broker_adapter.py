@@ -304,3 +304,50 @@ class TestParallelBrokerFetch(unittest.TestCase):
             {f"DECK ({broker_adapter.BROKER_NAMES['tastytrade']})",
              f"DECK ({broker_adapter.BROKER_NAMES['t212']})"},
         )
+
+
+class TestSliceNetLiq(unittest.TestCase):
+    """The Results page held the full curve and fetched the selected period
+    anyway, rebuilding from the same fills — 3.65s of a 10.35s load."""
+
+    def setUp(self):
+        from datetime import date, timedelta
+        today = date.today()
+        self.series = [
+            {"time": (today - timedelta(days=d)).strftime("%Y-%m-%d"),
+             "close": 1000.0 + d}
+            for d in (400, 200, 100, 20, 5, 0)
+        ]
+
+    def test_a_window_keeps_only_its_own_days(self):
+        out = broker_adapter.slice_net_liq(self.series, "1m")
+        self.assertEqual(len(out), 3)  # 20, 5 and 0 days back
+        self.assertEqual(out[-1]["close"], 1000.0)
+
+    def test_all_returns_everything(self):
+        self.assertEqual(broker_adapter.slice_net_liq(self.series, "all"),
+                         self.series)
+
+    def test_a_year_drops_the_point_beyond_it(self):
+        out = broker_adapter.slice_net_liq(self.series, "1y")
+        self.assertEqual(len(out), 5)  # the 400-day-old point falls away
+
+    def test_an_unknown_period_shows_more_rather_than_nothing(self):
+        # Too much history is cosmetic; an empty chart is a bug.
+        self.assertEqual(broker_adapter.slice_net_liq(self.series, "decade"),
+                         self.series)
+
+    def test_no_series_is_no_window(self):
+        self.assertEqual(broker_adapter.slice_net_liq([], "1m"), [])
+        self.assertEqual(broker_adapter.slice_net_liq(None, "1m"), [])
+
+    def test_iso_timestamps_slice_the_same_as_bare_dates(self):
+        # Tastytrade stamps ISO, Trading 212 a bare date, and a merged series
+        # carries both. _day_key is what makes them comparable.
+        from datetime import date, timedelta
+        recent = (date.today() - timedelta(days=3)).strftime("%Y-%m-%d")
+        old = (date.today() - timedelta(days=300)).strftime("%Y-%m-%d")
+        mixed = [{"time": f"{old}T12:00:00Z", "close": 1.0},
+                 {"time": recent, "close": 2.0}]
+        out = broker_adapter.slice_net_liq(mixed, "1m")
+        self.assertEqual([p["close"] for p in out], [2.0])

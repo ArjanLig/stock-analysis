@@ -8,6 +8,7 @@ or credentials; the adapter handles that internally.
 
 import logging
 import time
+from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import streamlit as st
@@ -439,38 +440,68 @@ def merge_yearly_transfers(transfer_dicts):
     return out
 
 
+TIME_BACK_DAYS = {"1m": 31, "3m": 92, "6m": 183, "1y": 366, "all": None}
+
+
+def slice_net_liq(series, time_back):
+    """The trailing `time_back` window of a curve already in hand.
+
+    The Results page fetched "all" and then fetched the selected period
+    separately, rebuilding from the same fills a second time — 3.65s of a
+    10.35s load, for points it was already holding. "all" contains every
+    shorter window by definition, so the window comes from there.
+
+    An unknown period returns the series untouched: showing more history than
+    was asked for is cosmetic, showing none is a broken chart.
+    """
+    if not series:
+        return []
+    days = TIME_BACK_DAYS.get(time_back)
+    if days is None:
+        return list(series)
+    cutoff = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+    return [p for p in series if _day_key(p.get("time")) >= cutoff]
+
+
 def fetch_all_net_liq_history(time_back="1y"):
     """The combined account curve across every connected broker."""
+    def _one(broker):
+        if broker == "t212":
+            return t212_api.fetch_net_liq_history(_get_t212_creds(), time_back)
+        if broker == "ibkr":
+            return _get_ibkr().fetch_net_liq_history(time_back=time_back)
+        return tastytrade_api.fetch_net_liq_history(
+            time_back=time_back, refresh_token=_get_refresh_token())
+
+    brokers = connected_brokers()
+    _prime_credentials(brokers)
     series = []
-    for broker in connected_brokers():
-        try:
-            if broker == "t212":
-                series.append(t212_api.fetch_net_liq_history(
-                    _get_t212_creds(), time_back))
-            elif broker == "ibkr":
-                series.append(_get_ibkr().fetch_net_liq_history(time_back=time_back))
-            else:
-                series.append(tastytrade_api.fetch_net_liq_history(
-                    time_back=time_back, refresh_token=_get_refresh_token()))
-        except Exception as e:
-            logger.warning("Net liq history failed for %s: %s", broker, e)
+    for broker, ok, value in _in_parallel(brokers, _one):
+        if ok:
+            series.append(value)
+        else:
+            logger.warning("Net liq history failed for %s: %s", broker, value)
     return merge_net_liq_series(series)
 
 
 def fetch_all_yearly_transfers():
     """Combined deposits across every connected broker."""
+    def _one(broker):
+        if broker == "t212":
+            return t212_api.fetch_yearly_transfers(_get_t212_creds())
+        if broker == "ibkr":
+            return _get_ibkr().fetch_yearly_transfers()
+        return tastytrade_api.fetch_yearly_transfers(
+            refresh_token=_get_refresh_token())
+
+    brokers = connected_brokers()
+    _prime_credentials(brokers)
     out = []
-    for broker in connected_brokers():
-        try:
-            if broker == "t212":
-                out.append(t212_api.fetch_yearly_transfers(_get_t212_creds()))
-            elif broker == "ibkr":
-                out.append(_get_ibkr().fetch_yearly_transfers())
-            else:
-                out.append(tastytrade_api.fetch_yearly_transfers(
-                    refresh_token=_get_refresh_token()))
-        except Exception as e:
-            logger.warning("Transfers failed for %s: %s", broker, e)
+    for broker, ok, value in _in_parallel(brokers, _one):
+        if ok:
+            out.append(value)
+        else:
+            logger.warning("Transfers failed for %s: %s", broker, value)
     return merge_yearly_transfers(out)
 
 

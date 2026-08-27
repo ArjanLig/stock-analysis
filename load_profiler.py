@@ -29,6 +29,16 @@ _STEPS_KEY = "_lp_steps"
 _START_KEY = "_lp_start"
 _PAGE_KEY = "_lp_page"
 
+# Logo lookups. Cheap on Portfolio (11 calls, 0.49s) but Screener and Watchlist
+# draw dozens, and each symbol without an ISIN is a HEAD request to parqet with
+# a 3-second timeout before the day-long cache takes over.
+LOGOS = {"calls": 0, "seconds": 0.0}
+
+
+def count_logo(seconds):
+    LOGOS["calls"] += 1
+    LOGOS["seconds"] += seconds
+
 
 def start(page):
     """Begin timing a page render. Resets every counter this module reads."""
@@ -37,6 +47,7 @@ def start(page):
     st.session_state[_PAGE_KEY] = page
     t212_api.reset_call_stats()
     tastytrade_api.reset_call_stats()
+    LOGOS.update({"calls": 0, "seconds": 0.0})
 
 
 def mark(label, seconds):
@@ -96,6 +107,9 @@ def panel():
             # means the same handshake is being paid for repeatedly.
             bits.append(f"Tastytrade: {tt['sessions']} sessies "
                         f"({tt['session_s']:.1f}s)")
+        if LOGOS["calls"]:
+            bits.append(f"Logo's: {LOGOS['calls']} lookups "
+                        f"({LOGOS['seconds']:.1f}s)")
         if tt.get("quote_calls"):
             bits.append(f"Yahoo: {tt['quote_calls']} quote-rondes "
                         f"over {tt['quote_symbols']} tickers "
