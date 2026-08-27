@@ -3562,20 +3562,30 @@ st.markdown(f"""
         display: grid;
         grid-template-columns: var(--pf-grid);
         align-items: center;
-        /* Room for the chevron on expandable rows, kept on plain ones too so
-           the last column sits in the same place either way. */
+        /* Wider insets do double duty: they give the row air at both edges and
+           they narrow the content box, and since the tracks are equal
+           fractions of it, the figures move closer together at the same time.
+           Right is the larger of the two because the chevron sits in it —
+           measured they differ, seen they read as the same margin. */
+        padding-left: 28px;
         padding-right: 34px;
+        /* Tighter than the flex default: equal tracks already hold the columns
+           apart, so 16px on top of that was spacing twice. */
+        gap: 10px;
     }}
     /* Labels may wrap now that a track has a width of its own; the figures may
        not, because a number broken over two lines reads as two numbers. Every
        card carries the same labels, so they wrap alike and the rows stay level. */
     .pf-aligned .pf-label {{ white-space: normal; }}
     @media (max-width: 768px) {{
-        /* Eight columns cannot line up on a phone. Back to wrapping. */
+        /* Eight columns cannot line up on a phone. Back to wrapping, and the
+           wide insets go with it — there is no room to spend on margins. */
         .pf-aligned > .portfolio-card,
         .pf-aligned > .pf-details > summary > .portfolio-card {{
             display: flex;
+            padding-left: 12px;
             padding-right: 12px;
+            gap: 10px;
         }}
     }}
 
