@@ -565,3 +565,169 @@ class TestHindsight(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+from portfolio_metrics import merge_by_symbol
+
+
+def _trade(day, quantity, net_value, **extra):
+    """A trade in the shape both brokers actually produce — detect_wheels reads
+    net_value, instrument_type, type and action, and raises without them."""
+    t = {
+        "date": date.fromisoformat(day), "quantity": float(quantity),
+        "net_value": net_value, "instrument_type": "Equity",
+        "type": "Trade", "action": "Buy to Open" if quantity > 0 else "Sell to Close",
+        "label": "Stock Buy" if quantity > 0 else "Stock Sell",
+    }
+    t.update(extra)
+    return t
+
+
+def _broker_row(broker, shares, equity_cost, trades=None, **extra):
+    row = {
+        "symbol": "NVDA", "broker": broker,
+        "shares_held": shares, "equity_cost": equity_cost,
+        "option_pl": 0.0, "total_pl": equity_cost, "dividends": 0.0,
+        "total_credits": 0.0, "total_debits": 0.0,
+        "trades": trades or [],
+    }
+    row.update(extra)
+    return row
+
+
+class TestMergeBySymbol(unittest.TestCase):
+    """A ticker at two brokers is one position to its owner.
+
+    The data keeps a row per broker on purpose — that is what the accounts
+    say — so this merges for the combined view only. See
+    docs/superpowers/specs/2026-08-27-merge-positions-across-brokers-design.md
+    """
+
+    def test_shares_and_money_add_up(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 10, -1000.0),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 5, -600.0),
+        })
+        self.assertEqual(list(out), ["NVDA"])
+        self.assertEqual(out["NVDA"]["shares_held"], 15)
+        self.assertAlmostEqual(out["NVDA"]["equity_cost"], -1600.0)
+        self.assertEqual(out["NVDA"]["broker"], "Tastytrade + Trading 212")
+
+    def test_the_suffix_goes_with_the_split_that_caused_it(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 10, -1000.0),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 5, -600.0),
+        })
+        self.assertNotIn("NVDA (Tastytrade)", out)
+        self.assertNotIn("NVDA (Trading 212)", out)
+
+    def test_cost_per_share_is_recomputed_not_averaged(self):
+        # 100/share for 10 and 120/share for 5 is 106.67 weighted, and 110 if
+        # you average the two averages. The second is the average of nothing.
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row(
+                "Tastytrade", 10, -1000.0, cost_per_share=-100.0),
+            "NVDA (Trading 212)": _broker_row(
+                "Trading 212", 5, -600.0, cost_per_share=-120.0),
+        })
+        self.assertAlmostEqual(out["NVDA"]["cost_per_share"], -1600.0 / 15)
+        self.assertAlmostEqual(out["NVDA"]["adjusted_cost"], -1600.0)
+
+    def test_trades_come_out_oldest_first(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 10, -1000.0, trades=[
+                _trade("2026-03-01", 10, -1000.0)]),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 5, -600.0, trades=[
+                _trade("2025-01-15", 5, -600.0)]),
+        })
+        self.assertEqual([t["date"].isoformat() for t in out["NVDA"]["trades"]],
+                         ["2025-01-15", "2026-03-01"])
+
+    def test_a_single_broker_name_passes_through_with_its_key(self):
+        row = _broker_row("Tastytrade", 10, -1000.0)
+        row["symbol"] = "MSFT"
+        out = merge_by_symbol({"MSFT": row})
+        self.assertEqual(out, {"MSFT": row})
+
+    def test_market_value_follows_the_merged_share_count(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row(
+                "Tastytrade", 10, -1000.0, current_price=200.0),
+            "NVDA (Trading 212)": _broker_row(
+                "Trading 212", 5, -600.0, current_price=200.0),
+        })
+        self.assertAlmostEqual(out["NVDA"]["market_value"], 3000.0)
+        self.assertAlmostEqual(out["NVDA"]["total_pl_real"],
+                               -1600.0 + 3000.0)
+
+    def test_an_agreed_fx_rate_survives_and_a_disputed_one_does_not(self):
+        agreed = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 10, -1000.0, fx_rate=1.0),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 5, -600.0, fx_rate=1.0),
+        })
+        self.assertEqual(agreed["NVDA"]["fx_rate"], 1.0)
+
+        disputed = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 10, -1000.0, fx_rate=1.0),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 5, -600.0, fx_rate=1.09),
+        })
+        self.assertNotIn("fx_rate", disputed["NVDA"])
+
+    def test_a_flat_position_does_not_divide_by_zero(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 0, -1000.0),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 0, 1000.0),
+        })
+        self.assertEqual(out["NVDA"]["cost_per_share"], 0.0)
+
+    def test_options_at_one_broker_still_reach_the_merged_row(self):
+        out = merge_by_symbol({
+            "NVDA (Tastytrade)": _broker_row("Tastytrade", 100, -10000.0, trades=[
+                _trade("2026-01-05", 100, -10000.0),
+                _trade("2026-02-01", -1, 250.0,
+                       instrument_type="Equity Option",
+                       action="Sell to Open", label="CC"),
+            ], option_pl=250.0),
+            "NVDA (Trading 212)": _broker_row("Trading 212", 5, -600.0),
+        })
+        self.assertEqual(len(out["NVDA"]["trades"]), 2)
+        self.assertIn("wheels", out["NVDA"])
+        self.assertAlmostEqual(out["NVDA"]["option_pl"], 250.0)
+        # adjusted_cost carries the option premium into the merged basis
+        self.assertAlmostEqual(out["NVDA"]["adjusted_cost"], -10600.0 + 250.0)
+
+    def test_three_brokers_would_merge_the_same_way(self):
+        # Nothing here counts to two — a third account is just another row.
+        out = merge_by_symbol({
+            "NVDA (A)": _broker_row("A", 1, -100.0),
+            "NVDA (B)": _broker_row("B", 2, -200.0),
+            "NVDA (C)": _broker_row("C", 3, -300.0),
+        })
+        self.assertEqual(out["NVDA"]["shares_held"], 6)
+        self.assertEqual(out["NVDA"]["broker"], "A + B + C")
+
+
+class TestMergeSortsMixedDateShapes(unittest.TestCase):
+    """A merged trade list is where one broker's date object would meet the
+    other's string. Sorting has to survive that rather than raise."""
+
+    def test_a_string_date_and_a_date_object_sort_together(self):
+        rows = {
+            "NVDA (A)": _broker_row("A", 1, -100.0, trades=[
+                dict(_trade("2026-05-01", 1, -100.0), date="2026-05-01")]),
+            "NVDA (B)": _broker_row("B", 1, -90.0, trades=[
+                _trade("2025-02-02", 1, -90.0)]),
+        }
+        out = merge_by_symbol(rows)
+        days = [str(t["date"])[:10] for t in out["NVDA"]["trades"]]
+        self.assertEqual(days, ["2025-02-02", "2026-05-01"])
+
+    def test_a_trade_without_a_date_does_not_take_the_list_down(self):
+        rows = {
+            "NVDA (A)": _broker_row("A", 1, -100.0, trades=[
+                dict(_trade("2026-05-01", 1, -100.0), date=None)]),
+            "NVDA (B)": _broker_row("B", 1, -90.0, trades=[
+                _trade("2025-02-02", 1, -90.0)]),
+        }
+        out = merge_by_symbol(rows)
+        self.assertEqual(len(out["NVDA"]["trades"]), 2)

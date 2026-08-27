@@ -58,6 +58,7 @@ from broker_adapter import (
 import load_profiler
 import plotly.graph_objects as go
 from portfolio_metrics import (compute_deployment, display_basis, has_option_legs,
+                               merge_by_symbol,
                                held_share_cost, fifo_realized, open_lots,
                                relative_performance,
                                valuation_stance, lots_cover,
@@ -10169,6 +10170,11 @@ elif page == "Portfolio":
     if portfolio_view != "Overview":
         held = {t: d for t, d in held.items()
                 if d.get("broker") == portfolio_view}
+    else:
+        # One holding, one row. The per-broker rows are still what the data
+        # says and still what a broker tab shows — a position has to stay
+        # checkable against the statement it came from.
+        held = merge_by_symbol(held)
 
     if not held:
         if portfolio_view != "Overview":
@@ -11132,6 +11138,8 @@ elif page == "Cost Basis":
         if not cost_basis:
             st.info(f"No positions at {_cb_view}.")
             st.stop()
+    else:
+        cost_basis = merge_by_symbol(cost_basis)
 
     def _is_put(t):
         """Check if trade is put via OCC symbol, fallback to description."""
