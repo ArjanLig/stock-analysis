@@ -425,3 +425,108 @@ def compute_deployment(held, net_liq, cash, target_pct,
         "below_buy": below_buy,
         "valued_count": valued_count,
     }
+
+
+# Fields that are money or share counts, and therefore add up when the same
+# holding is split across brokers. Everything else about a merged row is either
+# derived from these or has to be decided rather than summed.
+_SUMMED_FIELDS = (
+    "shares_held", "equity_cost", "option_pl", "total_pl",
+    "dividends", "total_credits", "total_debits",
+)
+
+
+def _trade_day(trade):
+    """A sortable day for a trade, whatever shape its date arrived in.
+
+    Both brokers hand back date objects today, but a merged list is precisely
+    where a string from one side would meet a date from the other and raise on
+    comparison. Normalising to YYYY-MM-DD sorts either, and a trade with no
+    date sorts first rather than taking the list down.
+    """
+    stamp = trade.get("date")
+    if stamp is None:
+        return ""
+    if hasattr(stamp, "strftime"):
+        return stamp.strftime("%Y-%m-%d")
+    return str(stamp)[:10]
+
+
+def merge_by_symbol(positions):
+    """Collapse rows that are the same holding at different brokers.
+
+    A ticker held at two brokers is two rows in the data — deliberately, since
+    that is what the accounts actually say — but one position in every sense
+    the owner cares about: one company, one holding, one average price paid.
+    Two rows make its weight read half its size and its cost basis read as two
+    different answers.
+
+    Grouped on `symbol`, so this knows no ticker names and covers whatever ends
+    up at two brokers next. Rows that are alone under their symbol pass through
+    untouched, key included.
+
+    Callers merge for a combined view and skip it for a per-broker one: a
+    position has to stay checkable against the broker's own statement, and that
+    is what the per-broker tabs are for.
+    """
+    groups = {}
+    for key, row in (positions or {}).items():
+        groups.setdefault(row.get("symbol") or key, []).append((key, row))
+
+    out = {}
+    for symbol, members in groups.items():
+        if len(members) == 1:
+            key, row = members[0]
+            out[key] = row
+            continue
+        out[symbol] = _merge_rows(symbol, [row for _key, row in members])
+    return out
+
+
+def _merge_rows(symbol, rows):
+    """One row out of several for the same instrument."""
+    from trade_utils import detect_wheels
+
+    merged = dict(rows[0])
+    merged["symbol"] = symbol
+
+    for field in _SUMMED_FIELDS:
+        merged[field] = sum((r.get(field) or 0) for r in rows)
+
+    # Oldest first, so FIFO retires the oldest lot of the whole holding rather
+    # than the oldest lot at one broker.
+    trades = [t for r in rows for t in (r.get("trades") or [])]
+    trades.sort(key=_trade_day)
+    merged["trades"] = trades
+    merged["wheels"] = detect_wheels(trades)
+
+    # Recomputed, never added: the sum of two averages is the average of
+    # nothing. Same formulas the per-broker rows were built with.
+    merged["adjusted_cost"] = merged["equity_cost"] + merged["option_pl"]
+    shares = merged["shares_held"]
+    merged["cost_per_share"] = (
+        float(merged["adjusted_cost"] / shares) if shares else 0.0)
+
+    merged["broker"] = " + ".join(
+        dict.fromkeys(r["broker"] for r in rows if r.get("broker")))
+
+    # The rows describe one instrument, so a quote either agrees across them or
+    # one side simply has none.
+    for field in ("current_price", "previous_close", "broker_price", "isin"):
+        merged[field] = next(
+            (r[field] for r in rows if r.get(field)),
+            rows[0].get(field))
+
+    # Only when every row agrees. A blended exchange rate describes no
+    # transaction that happened, and absent beats wrong.
+    for field in ("currency", "fx_rate"):
+        values = {r.get(field) for r in rows}
+        if len(values) == 1:
+            merged[field] = values.pop()
+        else:
+            merged.pop(field, None)
+
+    if merged.get("current_price") is not None:
+        merged["market_value"] = merged["current_price"] * shares
+        merged["total_pl_real"] = merged["total_pl"] + merged["market_value"]
+    return merged
