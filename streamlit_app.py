@@ -3545,6 +3545,40 @@ st.markdown(f"""
     .portfolio-card .pf-green {{ color: var(--accent); }}
     .portfolio-card .pf-red {{ color: var(--red); }}
 
+    /* ── Aligned position rows ──
+       A flex card sizes every cell to its own content, so "Trading 212" in one
+       row and "Tastytrade" in the next push everything after them to different
+       places and no column lines up with the one above it. A grid with the same
+       track list on every card fixes the widths whatever is in them. The track
+       count is the number of columns on screen, so it arrives as --pf-grid from
+       the code that knows which are selected.
+
+       Scoped to direct children: the option sub-cards inside <details> have
+       four cells of their own and must keep sizing themselves, and everything
+       else using .portfolio-card — the performer blocks, the yearly cards — is
+       left alone for the same reason. */
+    .pf-aligned > .portfolio-card,
+    .pf-aligned > .pf-details > summary > .portfolio-card {{
+        display: grid;
+        grid-template-columns: var(--pf-grid);
+        align-items: center;
+        /* Room for the chevron on expandable rows, kept on plain ones too so
+           the last column sits in the same place either way. */
+        padding-right: 34px;
+    }}
+    /* Labels may wrap now that a track has a width of its own; the figures may
+       not, because a number broken over two lines reads as two numbers. Every
+       card carries the same labels, so they wrap alike and the rows stay level. */
+    .pf-aligned .pf-label {{ white-space: normal; }}
+    @media (max-width: 768px) {{
+        /* Eight columns cannot line up on a phone. Back to wrapping. */
+        .pf-aligned > .portfolio-card,
+        .pf-aligned > .pf-details > summary > .portfolio-card {{
+            display: flex;
+            padding-right: 12px;
+        }}
+    }}
+
 
     /* ── Performer grid (Top/Bottom side by side, stacked on mobile) ── */
     .performer-grid {{
@@ -10746,7 +10780,11 @@ elif page == "Portfolio":
                 opts_by_ticker[ticker] = open_opts
 
         # ── Render cards ──
-        cards_html = '<div class="portfolio-cards">'
+        # Two fixed tracks for the logo and the ticker, then one equal track
+        # per selected column, so every row lines up with the one above it.
+        cards_html = (
+            f'<div class="portfolio-cards pf-aligned" style="--pf-grid:'
+            f'30px 52px repeat({len(selected)}, minmax(0, 1fr))">')
         for row in rows:
             cells = ""
             for col in selected:
@@ -12219,7 +12257,9 @@ elif page == "Results":
                 "Dividends": data["dividends"],
             })
 
-        cards_html = '<div class="portfolio-cards">'
+        cards_html = (
+            f'<div class="portfolio-cards pf-aligned" style="--pf-grid:'
+            f'30px 52px repeat({len(result_cols)}, minmax(0, 1fr))">')
         for row in rows:
             cells = ""
             for col in result_cols:
