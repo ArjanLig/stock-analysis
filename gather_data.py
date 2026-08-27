@@ -813,6 +813,16 @@ def fetch_stock_price(ticker):
         return 0, 0, 0
 
 
+# Yahoo daily-history tally, read by load_profiler. This is the one network
+# route the page profiler could not see, and the Results page rebuilds its
+# net-liq curve from it — one request per candidate ticker per symbol, serially.
+DAILY_CLOSES_STATS = {"calls": 0, "seconds": 0.0, "empty": 0}
+
+
+def reset_daily_closes_stats():
+    DAILY_CLOSES_STATS.update({"calls": 0, "seconds": 0.0, "empty": 0})
+
+
 def fetch_daily_closes(ticker, years=5):
     """Daily closing prices as {date: close}, newest year(s) first available.
 
@@ -824,6 +834,8 @@ def fetch_daily_closes(ticker, years=5):
         f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
         f"?interval=1d&range={int(years)}y"
     )
+    _t0 = time.perf_counter()
+    DAILY_CLOSES_STATS["calls"] += 1
     try:
         data = _http_get_json(url, YAHOO_HEADERS)
         result = data["chart"]["result"][0]
@@ -831,7 +843,10 @@ def fetch_daily_closes(ticker, years=5):
         closes = result["indicators"]["quote"][0]["close"]
     except Exception as e:
         print(f"  WARNING: daily closes unavailable for {ticker}: {e}")
+        DAILY_CLOSES_STATS["seconds"] += time.perf_counter() - _t0
+        DAILY_CLOSES_STATS["empty"] += 1
         return {}
+    DAILY_CLOSES_STATS["seconds"] += time.perf_counter() - _t0
 
     out = {}
     for ts, close in zip(timestamps, closes):
