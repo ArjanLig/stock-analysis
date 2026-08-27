@@ -415,3 +415,18 @@ class TestFloatDetectorStaysOnTheCashInclusiveBasis:
         rich = dict(base, cash=[120.0])
         assert compute_roce_metric(base)[0] == compute_roce_metric(rich)[0] == "ROCE"
         assert compute_roce_metric(rich)[1] > compute_roce_metric(base)[1]
+
+
+def test_roce_for_year_clamps_below_the_floor():
+    # A loss-maker whose cash leaves a sliver of capital employed: 
+    # CE = 100 − 20 − 79 = 1, EBIT −50 → −5000%, held at −100.
+    f = _fund_liq(cash=79, ta=100, cl=20, oi=-50)
+    pct, capped = roce_for_year(f, 0)
+    assert pct == -100.0 and capped is True
+
+
+def test_a_believable_loss_is_not_clamped():
+    # The floor must not swallow ordinary bad years. CE = 80, EBIT −20 → −25%.
+    f = _fund_liq(cash=0, ta=100, cl=20, oi=-20)
+    pct, capped = roce_for_year(f, 0)
+    assert round(pct, 1) == -25.0 and capped is False

@@ -111,6 +111,14 @@ def roce_for_year(fund, i):
     pct = oi_v / ce * 100
     if pct > ROCE_CEILING:
         return (ROCE_CEILING, True)
+    # Clamped below as well as above. Stripping cash can leave a loss-making
+    # company with a sliver of capital employed and a percentage with no
+    # meaning left in it: SE's worst year came out at −32,967% and its ten-year
+    # mean at −3,314%. The band it lands in is the same either way — fragile is
+    # fragile — but the figure is read by people, and one that absurd reads as
+    # a broken metric rather than a bad business.
+    if pct < -ROCE_CEILING:
+        return (-ROCE_CEILING, True)
     return (pct, False)
 
 
