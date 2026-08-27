@@ -61,7 +61,7 @@ from portfolio_metrics import (compute_deployment, display_basis, has_option_leg
                                merge_by_symbol,
                                held_share_cost, fifo_realized, open_lots,
                                relative_performance,
-                               valuation_stance, lots_cover,
+                               lots_cover,
                                average_buy_price, hindsight,
                                DEFAULT_TARGET_POS_PCT)
 from prescan_render import parse_verdict_section, gauge_fraction, band_tone
@@ -10226,20 +10226,6 @@ elif page == "Portfolio":
             logger.debug("Watchlist valuations unavailable: %s", e)
             return {}
 
-    def _val_age(updated_iso):
-        """Days since that ticker's valuation was last recomputed, or None.
-
-        A hold-or-sell call made on a fair value from months ago is a decision
-        about old work, so the age belongs next to the number it qualifies.
-        """
-        if not updated_iso:
-            return None
-        try:
-            _d = datetime.fromisoformat(str(updated_iso).replace("Z", "+00:00"))
-            return (datetime.now(_d.tzinfo) - _d).days
-        except Exception:
-            return None
-
     def _deployment_overview():
         """How much of the portfolio is committed, and what is left to buy with.
 
@@ -10557,22 +10543,10 @@ elif page == "Portfolio":
                     "Premie", "Days", "Weight", "Margin", "Margin %"]
         default_cols = ["Shares", "Cost Basis", "Current Price", "Day %",
                         "Mkt Value", "Unrealized P/L", "Return %", "Weight"]
-        # The hold-or-sell pair. Only offered when at least one holding has a
-        # usable valuation, so an account with no DCF work behind it does not
-        # get two columns of dashes.
-        _valuations = _cached_valuations(
-            (st.session_state.get("user") or {}).get("id"), tuple(held_tickers))
-        _stances = {}
-        for _t, _d in held.items():
-            _wl = _valuations.get((_d.get("symbol") or _t).upper()) or {}
-            _stances[_t] = valuation_stance(
-                _d.get("current_price"), _wl.get("fv_low"),
-                _wl.get("fv_mid"), _wl.get("fv_high"),
-            )
-        if any(_stances.values()):
-            for _c in ("vs Fair Value", "Val age"):
-                all_cols.insert(all_cols.index("Weight"), _c)
-                default_cols.insert(default_cols.index("Weight"), _c)
+        # No valuation columns here. Selling is not a call this table makes —
+        # a fair value belongs to the decision to buy, and reading "37% above
+        # fair value" beside a holding invites a trade the strategy does not
+        # take. The watchlist is where valuation lives.
         if not _has_wheels:
             all_cols = [c for c in all_cols if c not in _wheel_only]
             default_cols = [c for c in default_cols if c not in _wheel_only]
@@ -10584,8 +10558,6 @@ elif page == "Portfolio":
             all_cols.insert(0, "Broker")
             default_cols.insert(0, "Broker")
         sort_options = ["Ticker", "Weight", "Day %", "Return %", "Unrealized P/L", "Mkt Value", "Ann. %", "Margin %"]
-        if any(_stances.values()):
-            sort_options.append("vs Fair Value")
 
         with st.container(key="toolbar_inline"):
             col_left, col_right = st.columns(2)
@@ -10695,11 +10667,6 @@ elif page == "Portfolio":
                 "Days": days_held,
                 # None where the band cannot be trusted, so the cell reads "—"
                 # rather than a signal built on a broken DCF.
-                "vs Fair Value": (_stances.get(ticker) or {}).get("vs_mid"),
-                "_stance": (_stances.get(ticker) or {}).get("stance"),
-                "Val age": _val_age(
-                    (_valuations.get(symbol.upper()) or {}).get("updated")
-                ),
             })
 
         # ── Per-position margin requirements ──
@@ -10742,17 +10709,6 @@ elif page == "Portfolio":
             cls = ""
             if val is None:
                 return "—", ""
-            if col == "vs Fair Value":
-                # Coloured by decision, not by direction: above your own band is
-                # red because it asks whether to still hold, even though it got
-                # there by going up.
-                _st = (row or {}).get("_stance")
-                cls = (" pf-red" if _st == "above_band"
-                       else " pf-green" if _st == "below_band" else "")
-                return f"{val:+.0f}%", cls
-            if col == "Val age":
-                return (f"{val}d" if val < 400 else "stale"), (
-                    " pf-red" if val > 120 else "")
             if col in color_cols_set:
                 cls = " pf-green" if val > 0 else " pf-red" if val < 0 else ""
             if col in ("Cost Basis", "Break-even", "Current Price"):
