@@ -53,7 +53,7 @@ from broker_adapter import (
     fetch_earnings_dates, has_active_broker, get_active_broker,
     fetch_benchmark_monthly_returns,
     fetch_all_portfolio_data, fetch_all_balances, connected_brokers, BROKER_NAMES,
-    fetch_all_net_liq_history, fetch_all_yearly_transfers,
+    fetch_all_net_liq_history, fetch_all_yearly_transfers, slice_net_liq,
 )
 import load_profiler
 import plotly.graph_objects as go
@@ -4111,7 +4111,8 @@ def _watchlist_overview():
     def _cached_watchlist(user_id):
         return list_watchlist(_sb_client, user_id=user_id)
 
-    watchlist = _cached_watchlist(st.session_state["user"]["id"])
+    with load_profiler.timed("watchlist-configs uit Supabase"):
+        watchlist = _cached_watchlist(st.session_state["user"]["id"])
     if not watchlist:
         st.info("Your watchlist is empty. Add a ticker above or use 'Add to Watchlist' on the DCF page.")
         return
@@ -4142,7 +4143,8 @@ def _watchlist_overview():
 
     _wl_configs = _load_all_configs(st.session_state["user"]["id"], tuple(item['ticker'] for item in watchlist))
     wl_tickers = list(_wl_configs.keys())
-    batch_prices = _fetch_prices_batch(tuple(wl_tickers)) if wl_tickers else {}
+    with load_profiler.timed("koersen"):
+        batch_prices = _fetch_prices_batch(tuple(wl_tickers)) if wl_tickers else {}
 
     @st.cache_data(ttl=86400, show_spinner=False)
     def _cached_fundamentals(t):
@@ -4261,7 +4263,8 @@ def _watchlist_overview():
     def _cached_earnings(tickers_tuple):
         return fetch_earnings_dates(list(tickers_tuple))
 
-    _earnings_map = _cached_earnings(tuple(wl_tickers)) if wl_tickers else {}
+    with load_profiler.timed("earnings-datums"):
+        _earnings_map = _cached_earnings(tuple(wl_tickers)) if wl_tickers else {}
 
     # ── Category definitions ──
     _categories = ["Yes", "Maybe", "Watch Later", "No", "Uncategorized"]
@@ -9073,11 +9076,13 @@ def _logo_img(symbol, isin=None, css_class="pf-logo", style=""):
     gets its initial in a disc — deliberate-looking, unlike the broken-image
     icon a stripped onerror leaves behind.
     """
+    _t_logo = time.perf_counter()
     if isin:
         src = f"https://assets.parqet.com/logos/isin/{isin}"
     else:
         symbol_url = f"https://assets.parqet.com/logos/symbol/{symbol}"
         src = symbol_url if _logo_resolves(symbol_url) else None
+    load_profiler.count_logo(time.perf_counter() - _t_logo)
     _cls = f'class="{css_class}" ' if css_class else ""
     _sty = f'style="{style}" ' if style else ""
     if src:
@@ -11409,9 +11414,10 @@ elif page == "Cost Basis":
             logger.debug("Prices for closed positions unavailable: %s", e)
             return {}
 
-    _closed_prices = _cached_closed_prices(tuple(sorted(
-        {(d.get("symbol") or t) for t, d in closed_tickers.items()}
-    )))
+    with load_profiler.timed("koersen gesloten posities"):
+        _closed_prices = _cached_closed_prices(tuple(sorted(
+            {(d.get("symbol") or t) for t, d in closed_tickers.items()}
+        )))
 
     def _render_grid(tickers):
         items = list(tickers.items())
@@ -11423,16 +11429,18 @@ elif page == "Cost Basis":
                         _render_ticker_card(items[i + j][0], items[i + j][1])
 
     st.markdown(f"### Active ({len(active_tickers)})")
-    if active_tickers:
-        _render_grid(active_tickers)
-    else:
-        st.caption("No active positions.")
+    with load_profiler.timed(f"kaarten actief ({len(active_tickers)})"):
+        if active_tickers:
+            _render_grid(active_tickers)
+        else:
+            st.caption("No active positions.")
 
     st.markdown(f"### Closed ({len(closed_tickers)})")
-    if closed_tickers:
-        _render_grid(closed_tickers)
-    else:
-        st.caption("No closed positions.")
+    with load_profiler.timed(f"kaarten gesloten ({len(closed_tickers)})"):
+        if closed_tickers:
+            _render_grid(closed_tickers)
+        else:
+            st.caption("No closed positions.")
 
     # ── JS: instant client-side card filtering ──
     components.html(
@@ -11678,16 +11686,28 @@ elif page == "Results":
       # kept showing whichever broker was loaded first.
       cache_key = f"net_liq_{api_time_back}::{_res_view}"
       if cache_key not in st.session_state:
-          try:
-              with st.spinner("Loading net liq history..."):
-                  with load_profiler.timed(f"net liq history ({api_time_back}) — 2e opbouw"):
-                      st.session_state[cache_key] = (
-                          fetch_all_net_liq_history(api_time_back)
-                          if _res_view == "Overview"
-                          else fetch_net_liq_history(api_time_back))
-          except Exception as e:
-              logger.warning("Net liq history fetch failed (%s): %s", api_time_back, e)
-              st.session_state[cache_key] = None
+          # The full curve is already loaded above, under _nl_key, and "all"
+          # contains every shorter period by definition. Cut the window out of
+          # it instead of rebuilding from the same fills — that second build
+          # was 3.65s of a 10.35s page. Only fall back to fetching when the
+          # full curve is missing, which means its own load failed.
+          _all_series = st.session_state.get(_nl_key)
+          if _all_series:
+              with load_profiler.timed(f"net liq window ({api_time_back}) uit 'all'"):
+                  st.session_state[cache_key] = slice_net_liq(
+                      _all_series, api_time_back)
+          else:
+              try:
+                  with st.spinner("Loading net liq history..."):
+                      with load_profiler.timed(f"net liq history ({api_time_back})"):
+                          st.session_state[cache_key] = (
+                              fetch_all_net_liq_history(api_time_back)
+                              if _res_view == "Overview"
+                              else fetch_net_liq_history(api_time_back))
+              except Exception as e:
+                  logger.warning("Net liq history fetch failed (%s): %s",
+                                 api_time_back, e)
+                  st.session_state[cache_key] = None
 
       net_liq_data = st.session_state[cache_key]
       if net_liq_data:
@@ -12306,12 +12326,13 @@ elif page == "Screener":
         # Names already on the watchlist get marked rather than filtered: seeing a
         # familiar name pass is confirmation, and its absence would read as a miss.
         _wl = set()
-        try:
-            _wl = {e["ticker"].upper() for e in
-                   list_watchlist(_sb_client,
-                                  user_id=(st.session_state.get("user") or {}).get("id"))}
-        except Exception as _e:
-            logger.debug("Watchlist unavailable for screener marks: %s", _e)
+        with load_profiler.timed("watchlist-vinkjes"):
+            try:
+                _wl = {e["ticker"].upper() for e in
+                       list_watchlist(_sb_client,
+                                      user_id=(st.session_state.get("user") or {}).get("id"))}
+            except Exception as _e:
+                logger.debug("Watchlist unavailable for screener marks: %s", _e)
 
         if not passes:
             st.info("No names pass in this index.")
@@ -12342,6 +12363,7 @@ elif page == "Screener":
                                          metadata={"ticker": t})
                     st.error(f"Could not add {t}: {type(e).__name__}")
 
+            _t_screener_rows = time.perf_counter()
             _w = [0.42, 1.1, 2.1, 1.5, 0.85, 0.6, 1.0]
             hdr = st.columns(_w, vertical_alignment="center")
             for _c, _label in zip(hdr, ["", "Ticker", "Company", "Sector",
@@ -12382,6 +12404,8 @@ elif page == "Screener":
                                  f'font-size:0.85rem">{r.get("years_used", 0)}y</span>',
                                  unsafe_allow_html=True)
                 cols[6].markdown(f'${-r.get("net_debt", 0):,.0f}M')
+            load_profiler.mark(f"rijen renderen ({len(passes)} namen)",
+                               time.perf_counter() - _t_screener_rows)
             st.caption(f"{len(passes)} name(s) · a grey check = already on your watchlist · "
                        "+ adds the EDGAR facts; assumptions stay yours to author")
 
