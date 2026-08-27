@@ -262,13 +262,6 @@ def connected_brokers():
     return out
 
 
-# Wall-clock of the last fetch_all_portfolio_data, per broker name. Diagnostics
-# only — the Portfolio page reads it to show where a slow cold load spent its
-# time. Brokers are fetched one after another, so these add up rather than
-# overlap, which is the first thing worth seeing.
-LAST_FETCH_SECONDS: dict = {}
-
-
 def _prime_credentials(brokers):
     """Resolve every broker's credentials on the calling thread.
 
@@ -286,7 +279,7 @@ def _prime_credentials(brokers):
         _get_ibkr()
 
 
-def _in_parallel(brokers, fn, timings):
+def _in_parallel(brokers, fn):
     """Run `fn(broker)` for every broker at once.
 
     Returns [(broker, ok, value_or_exception)] in the order given, so a caller
@@ -299,20 +292,17 @@ def _in_parallel(brokers, fn, timings):
     """
     if not brokers:
         return []
-    out = {}
+    out, start = {}, time.perf_counter()
     with ThreadPoolExecutor(max_workers=len(brokers)) as pool:
-        futures = {}
-        starts = {}
-        for b in brokers:
-            starts[b] = time.perf_counter()
-            futures[pool.submit(fn, b)] = b
+        futures = {pool.submit(fn, b): b for b in brokers}
         for future in as_completed(futures):
             b = futures[future]
-            timings[BROKER_NAMES[b]] = time.perf_counter() - starts[b]
             try:
                 out[b] = (True, future.result())
             except Exception as e:
                 out[b] = (False, e)
+    logger.debug("%s across %d broker(s) in %.1fs", getattr(fn, "__name__", fn),
+                 len(brokers), time.perf_counter() - start)
     return [(b, out[b][0], out[b][1]) for b in brokers if b in out]
 
 
@@ -342,18 +332,14 @@ def fetch_all_portfolio_data():
     number as the truth.
     """
     per_broker, failures = {}, []
-    LAST_FETCH_SECONDS.clear()
     brokers = connected_brokers()
     _prime_credentials(brokers)
-    results = _in_parallel(brokers, _fetch_one, LAST_FETCH_SECONDS)
-    for broker, ok, value in results:
+    for broker, ok, value in _in_parallel(brokers, _fetch_one):
         if ok:
             cb, acct = value
             per_broker[broker] = (cb or {}, acct)
         else:
             failures.append((BROKER_NAMES[broker], value))
-    logger.info("Portfolio fetch per broker: %s",
-                ", ".join(f"{n} {s:.1f}s" for n, s in LAST_FETCH_SECONDS.items()))
 
     counts = {}
     for cb, _ in per_broker.values():
@@ -506,7 +492,7 @@ def fetch_all_balances():
     per_broker, failures = {}, []
     brokers = connected_brokers()
     _prime_credentials(brokers)
-    for broker, ok, value in _in_parallel(brokers, _one, {}):
+    for broker, ok, value in _in_parallel(brokers, _one):
         if ok:
             per_broker[BROKER_NAMES[broker]] = value or {}
         else:
