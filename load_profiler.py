@@ -22,6 +22,7 @@ import time
 
 import streamlit as st
 
+import gather_data
 import t212_api
 import tastytrade_api
 
@@ -48,6 +49,7 @@ def start(page):
     t212_api.reset_call_stats()
     tastytrade_api.reset_call_stats()
     LOGOS.update({"calls": 0, "seconds": 0.0})
+    gather_data.reset_daily_closes_stats()
 
 
 def mark(label, seconds):
@@ -110,6 +112,12 @@ def panel():
         if LOGOS["calls"]:
             bits.append(f"Logo's: {LOGOS['calls']} lookups "
                         f"({LOGOS['seconds']:.1f}s)")
+        dc = gather_data.DAILY_CLOSES_STATS
+        if dc["calls"]:
+            # One request per candidate ticker per symbol, serially. The
+            # Results page rebuilds its whole curve from these.
+            bits.append(f"Yahoo dagkoersen: {dc['calls']} calls "
+                        f"({dc['seconds']:.1f}s, {dc['empty']} leeg)")
         if tt.get("quote_calls"):
             bits.append(f"Yahoo: {tt['quote_calls']} quote-rondes "
                         f"over {tt['quote_symbols']} tickers "
