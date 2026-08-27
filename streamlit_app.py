@@ -8821,6 +8821,23 @@ def _broker_view_control(page_key):
     return view
 
 
+@contextlib.contextmanager
+def _timed(label):
+    """Record how long a page block took, into st.session_state['_page_steps'].
+
+    Diagnostic only. Steps accumulate per script run and the list is reset at
+    the top of the page, so what is shown is always the run that just happened
+    — including the cold one, because the first run after a reboot is the run
+    that fills every cache.
+    """
+    _t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        st.session_state.setdefault("_page_steps", []).append(
+            (label, time.perf_counter() - _t0))
+
+
 def _load_portfolio_data():
     """Fetch and enrich portfolio data (cached in session_state, auto-refreshes every 5 min)."""
     # Auto-refresh after 5 minutes
@@ -10120,7 +10137,10 @@ elif page == "Portfolio":
         unsafe_allow_html=True,
     )
     st.markdown("")
-    cost_basis = _load_portfolio_data()
+    _t_page_start = time.perf_counter()
+    st.session_state["_page_steps"] = []
+    with _timed("brokerdata + prijzen ophalen"):
+        cost_basis = _load_portfolio_data()
 
     held = {
         t: d for t, d in cost_basis.items()
@@ -10794,11 +10814,13 @@ elif page == "Portfolio":
         st.markdown(cards_html, unsafe_allow_html=True)
 
 
-    _portfolio_cards()
+    with _timed("posities + hero-kaarten"):
+        _portfolio_cards()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.container(key="deployment_block"):
-        _deployment_overview()
+    with _timed("deployment (balansen + margin + waarderingen)"):
+        with st.container(key="deployment_block"):
+            _deployment_overview()
 
     # ── Contribution & Relative performance ──
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -10807,11 +10829,15 @@ elif page == "Portfolio":
 
     _perf_rows = []
     _index_closes = {}
+    _t_index = time.perf_counter()
     try:
         _index_closes = _cached_index_closes()
     except Exception as e:
         logger.warning("Index history unavailable: %s", e)
+    st.session_state.setdefault("_page_steps", []).append(
+        ("SPY-koersen 5j (index)", time.perf_counter() - _t_index))
 
+    _t_contrib = time.perf_counter()
     _today = date.today()
     for _tk, _d in held.items():
         _sym = _d.get("symbol", _tk)
@@ -10977,6 +11003,8 @@ elif page == "Portfolio":
             f'<div class="greeks-grid">{"".join(_card_htmls)}</div>',
             unsafe_allow_html=True,
         )
+    st.session_state.setdefault("_page_steps", []).append(
+        ("contributie + vs S&P 500", time.perf_counter() - _t_contrib))
 
     # ── Portfolio Exposure (loads independently via fragment) ──
     @st.cache_data(ttl=86400, show_spinner=False)
@@ -11058,8 +11086,9 @@ elif page == "Portfolio":
         except Exception as e:
             st.warning(f"Could not load portfolio exposure: {e}")
 
-    with st.container(key="allocation_block"):
-        _portfolio_exposure()
+    with _timed("sector- en landenverdeling"):
+        with st.container(key="allocation_block"):
+            _portfolio_exposure()
 
     # ── Load timings (temporary diagnostic) ──
     # Measures the cold load only, which is the one that waits on the brokers:
@@ -11081,6 +11110,22 @@ elif page == "Portfolio":
                    if _prices is not None else "")
                 + f"\n| **totaal** | **{_brokers_total + (_prices or 0.0):.1f}s** |"
             )
+            _steps = st.session_state.get("_page_steps") or []
+            if _steps:
+                _page_total = time.perf_counter() - _t_page_start
+                _measured = sum(s for _, s in _steps)
+                st.markdown("**Deze paginaweergave, per blok**")
+                st.markdown(
+                    "| blok | tijd |\n|---|---|\n"
+                    + "\n".join(f"| {n} | {s:.2f}s |" for n, s in _steps)
+                    + f"\n| overig (opmaak, widgets) | {max(0.0, _page_total - _measured):.2f}s |"
+                    + f"\n| **hele pagina** | **{_page_total:.2f}s** |"
+                )
+                st.caption(
+                    "Meet alleen wat de server doet. Zit hier weinig tijd in "
+                    "terwijl het toch traag voelt, dan gaat het om het opstarten "
+                    "van de app (slapende container) of om de browser, niet om deze code."
+                )
             if _t212.get("requests"):
                 st.caption(
                     f"Trading 212: {_t212.get('requests', 0)} requests, "
