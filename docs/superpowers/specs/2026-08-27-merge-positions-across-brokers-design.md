@@ -76,7 +76,11 @@ being called one position.
 Recomputing rather than adding matters for `cost_per_share`: adding two
 averages gives a number that is not an average of anything.
 
-**`broker`:** the contributing names joined — `"Tastytrade + Trading 212"`.
+**`broker`:** the contributing names joined, abbreviated — `"TT + T212"`.
+Single-broker rows keep their full name. The short form exists because
+`"Tastytrade + Trading 212"` is wider than any other value in that column and
+set the width for every row under it, pushing the weight figure onto a second
+line. An unfamiliar broker keeps its name rather than being guessed at.
 
 **`isin`, `broker_price`, `current_price`, `previous_close`:** first non-empty
 value. The rows describe the same instrument, so these agree or one side simply
