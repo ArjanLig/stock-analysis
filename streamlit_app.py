@@ -2041,11 +2041,13 @@ st.set_page_config(
 )
 
 # ── Authentication gate ──
-from auth import render_login_page, logout, inject_remember_me_handler, handle_remember_me, save_session_to_browser
+from auth import (render_login_page, logout, handle_remember_me,
+                  save_session_to_browser)
 
 if "supabase_client" not in st.session_state:
-    # Try to restore session from browser localStorage
-    inject_remember_me_handler()
+    # The remember-me cookie arrives with the request, so this is decided
+    # server-side on the first render — no JavaScript round trip, and no
+    # reload with the token pinned to the URL.
     client, user = handle_remember_me()
     if client and user:
         st.session_state["supabase_client"] = client
@@ -2071,8 +2073,13 @@ if time.time() - _last_auth_check > 300:
         try:
             _sb_client.auth.refresh_session()
             st.session_state["_auth_checked_at"] = time.time()
+            # This refresh rotated the token too. Store the new one, or the
+            # next visit arrives holding the one it just replaced.
+            save_session_to_browser(_sb_client)
         except Exception as e2:
-            log_error("AUTH_ERROR", f"Session expired and refresh failed: {e2}")
+            # Type only: the message carries the refresh token.
+            log_error("AUTH_ERROR",
+                      f"Session expired and refresh failed: {type(e2).__name__}")
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()

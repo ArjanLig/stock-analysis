@@ -5,6 +5,7 @@ Keeps auth logic out of the main app. All functions return typed tuples
 so callers can handle errors consistently.
 """
 
+import json
 import logging
 import os
 from datetime import date
@@ -160,22 +161,57 @@ def handle_oauth_callback():
         return None, None
 
 
+# Where the refresh token lives between visits. A cookie rather than
+# localStorage because Streamlit can read a cookie server-side, through
+# st.context.cookies, on the same request that renders the page. Reading
+# localStorage takes JavaScript, and the only way to hand its contents back to
+# Python was to put the token in the URL and reload — which meant a long-lived
+# credential sat in the address bar and the browser history on every visit.
+_COOKIE = "lt_refresh_token"
+_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+
+
+def _write_cookie(value, max_age):
+    """Set or clear the remember-me cookie from the browser.
+
+    Secure only over HTTPS, so this still works against a local http://
+    dev server, where the flag would otherwise stop the cookie being set.
+    """
+    st.html(f"""
+    <script>
+        (function () {{
+            const secure = location.protocol === 'https:' ? '; Secure' : '';
+            document.cookie = {json.dumps(_COOKIE)} + '=' + {json.dumps(value)}
+                + '; Path=/; Max-Age={int(max_age)}; SameSite=Lax' + secure;
+        }})();
+    </script>
+    """, unsafe_allow_javascript=True)
+
+
 def save_session_to_browser(client):
-    """Store Supabase refresh token in browser localStorage for persistent login."""
+    """Persist the session's *current* refresh token for the next visit.
+
+    Call this after anything that mints one — the initial login, a remember-me
+    restore, a mid-session refresh. Supabase rotates: every refresh consumes
+    the token it was given and issues a new one, and the consumed one stops
+    working within seconds. Storing only the token from the original login
+    meant the second visit presented a spent token and was refused, which is
+    what logged the user out again and again.
+    """
     try:
         session = client.auth.get_session()
         if session and session.refresh_token:
-            st.html(f"""
-            <script>
-                localStorage.setItem('lt_refresh_token', '{session.refresh_token}');
-            </script>
-            """, unsafe_allow_javascript=True)
-    except Exception:
-        pass
+            _write_cookie(session.refresh_token, _COOKIE_MAX_AGE)
+    except Exception as e:
+        # Never the token itself: Supabase puts it in the exception text, and
+        # this used to travel into the error_logs table.
+        logger.warning("Could not persist remember-me token: %s", type(e).__name__)
 
 
 def clear_browser_session():
-    """Remove stored tokens from browser localStorage."""
+    """Drop the stored token. Also clears the localStorage key this used to
+    live in, so a browser carrying one from before does not keep offering it."""
+    _write_cookie("", 0)
     st.html("""
     <script>
         localStorage.removeItem('lt_refresh_token');
@@ -183,46 +219,30 @@ def clear_browser_session():
     """, unsafe_allow_javascript=True)
 
 
-def inject_remember_me_handler():
-    """Check localStorage for a stored refresh token and pass it via query param.
-
-    Must be called early, before render_login_page().
-    """
-    st.html("""
-    <script>
-        const url = new URL(window.location.href);
-        if (!url.searchParams.has('remember_token') && !url.searchParams.has('access_token')) {
-            const token = localStorage.getItem('lt_refresh_token');
-            if (token) {
-                url.searchParams.set('remember_token', token);
-                window.location.href = url.toString();
-            }
-        }
-    </script>
-    """, unsafe_allow_javascript=True)
-
-
 def handle_remember_me():
-    """Restore session from stored refresh token in query params.
+    """Restore a session from the remember-me cookie.
 
-    Returns (client, user) on success or (None, None) if not present/failed.
+    Returns (client, user) on success or (None, None) when there is nothing
+    stored or the stored token no longer works.
     """
-    params = st.query_params
-    remember_token = params.get("remember_token")
-    if not remember_token:
+    try:
+        token = st.context.cookies.get(_COOKIE)
+    except Exception:
+        token = None
+    if not token:
         return None, None
 
     try:
         client = init_auth_client()
-        client.auth.refresh_session(remember_token)
+        client.auth.refresh_session(token)
         user = client.auth.get_user().user
-        st.query_params.clear()
+        # The token just used is now spent. Store the one that replaced it,
+        # or the next visit repeats this with a dead credential.
+        save_session_to_browser(client)
         return client, user
     except Exception as e:
-        logger.warning("Remember-me session restore failed: %s", e)
-        log_error("AUTH_ERROR", f"Remember-me restore failed: {e}", page="Login")
-        st.query_params.clear()
-        # Token is invalid/expired — clear it from browser
+        # Type only. The message carries the token.
+        logger.warning("Remember-me restore failed: %s", type(e).__name__)
         clear_browser_session()
         return None, None
 
