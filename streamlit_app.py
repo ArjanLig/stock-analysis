@@ -174,6 +174,22 @@ def _fmt_fv_dollar(x: float) -> str:
     return f"${x:.2f}"
 
 
+def _resolve_watchlist_price(cfg: dict,
+                             live_price: float | None) -> tuple[float, bool]:
+    """Return (price, is_stale) for one watchlist row.
+
+    Yahoo throttles Streamlit Cloud's datacenter IP, so quotes go missing in
+    normal operation. Falling back to 0 was worse than it looked: the price
+    column blanked, but upside, P/E and FCF-yield are all computed from this
+    number and collapsed with it, so a throttled row read as a real verdict.
+    The config carries the price from its last refresh — show that, flagged.
+    """
+    if live_price and live_price > 0:
+        return float(live_price), False
+    stored = cfg.get('stock_price') or 0.0
+    return (float(stored) if stored > 0 else 0.0), True
+
+
 def _latest_fcf_yield(fund: dict, equity_market_value: float | None,
                       live_price: float | None) -> float | None:
     """Trailing FCF yield from the most recent year that reports FCF.
@@ -4173,8 +4189,11 @@ def _watchlist_overview():
 
     @st.cache_data(ttl=60)
     def _fetch_prices_batch(tickers_tuple):
+        # Omit the symbols that came back empty rather than mapping them to
+        # 0.0. A 0 here is indistinguishable from a real quote downstream, and
+        # the row builder needs to know the difference to fall back.
         prices = fetch_current_prices(list(tickers_tuple))
-        return {t: (p["price"] if p else 0.0) for t, p in prices.items()}
+        return {t: p["price"] for t, p in prices.items() if p and p.get("price")}
 
     # Load all configs once (avoid redundant load_config calls)
     # Clear cache if returning from editor
@@ -4246,8 +4265,9 @@ def _watchlist_overview():
     rows = []
     for t, cfg_wl in _wl_configs.items():
         try:
-            live_price = batch_prices.get(t, 0.0)
-            if live_price > 0:
+            live_price, _price_stale = _resolve_watchlist_price(
+                cfg_wl, batch_prices.get(t))
+            if not _price_stale:
                 cfg_wl['stock_price'] = live_price
             # Use Valuation Bridge values if available, otherwise compute
             if '_computed_intrinsic' in cfg_wl:
@@ -4294,6 +4314,7 @@ def _watchlist_overview():
             'company': _prettify_company(cfg_wl.get('company', t)),
             'category': cfg_wl.get('category', 'Uncategorized'),
             'price': live_price,
+            'price_stale': _price_stale,
             'intrinsic': _wl_intrinsic,
             'buy_price': _wl_buy,
             'upside': upside,
@@ -4310,6 +4331,19 @@ def _watchlist_overview():
         })
 
     rows.sort(key=lambda r: r['upside'], reverse=True)
+
+    # Say it out loud. This failure mode was invisible for as long as it was:
+    # the quotes just quietly became $0.00 and every metric derived from them
+    # went with it, so the table looked authoritative while it was wrong.
+    _stale_rows = [r['ticker'] for r in rows if r.get('price_stale')]
+    if _stale_rows:
+        st.warning(
+            f"Live quotes unavailable for {len(_stale_rows)} of {len(rows)} "
+            f"tickers — showing the last stored price for "
+            f"{', '.join(_stale_rows[:8])}"
+            f"{' and others' if len(_stale_rows) > 8 else ''}. "
+            "Upside and multiples for those rows are based on that older price."
+        )
 
     # Fetch earnings dates (cached 5 min)
     @st.cache_data(ttl=3600, show_spinner=False)
@@ -4437,7 +4471,18 @@ def _watchlist_overview():
             unsafe_allow_html=True,
         )
         cols[2].markdown(row['company'])
-        cols[3].markdown(f"${row['price']:.2f}")
+        if row.get('price_stale'):
+            # Grey and dotted-underlined so a stored price can never be
+            # mistaken for a live one at a glance.
+            cols[3].markdown(
+                f'<span title="Live quote unavailable — last stored price" '
+                f'style="color:{T["text_muted"]};border-bottom:1px dotted '
+                f'{T["text_muted"]};cursor:help">'
+                f'${row["price"]:.2f}</span>',
+                unsafe_allow_html=True,
+            )
+        else:
+            cols[3].markdown(f"${row['price']:.2f}")
         cols[4].markdown(
             _render_fv_cell(
                 price=row['price'],

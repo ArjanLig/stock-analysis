@@ -657,3 +657,42 @@ def test_effective_stc_matches_what_the_engine_reports_it_used():
     out = dcf_calculator.compute_intrinsic_value(cfg)
     assert per_year == out["stc_used"]
     assert terminal == out["terminal_stc_used"]
+
+
+class TestResolveWatchlistPrice:
+    """A missing Yahoo quote must never reach the table as 0.
+
+    Yahoo throttles Streamlit Cloud's datacenter IP, so quotes go missing in
+    normal operation. Rendering that as $0.00 does not merely blank the price
+    column — upside, P/E and FCF-yield are all derived from it and silently
+    collapse too, which is what made the bug hard to spot.
+    """
+
+    def test_live_price_wins(self):
+        cfg = {"stock_price": 100.0}
+        price, stale = streamlit_app._resolve_watchlist_price(cfg, 123.45)
+        assert price == 123.45
+        assert stale is False
+
+    def test_falls_back_to_stored_price(self):
+        cfg = {"stock_price": 100.0}
+        price, stale = streamlit_app._resolve_watchlist_price(cfg, None)
+        assert price == 100.0, "must not render a missing quote as 0"
+        assert stale is True
+
+    def test_zero_live_price_is_treated_as_missing(self):
+        cfg = {"stock_price": 100.0}
+        price, stale = streamlit_app._resolve_watchlist_price(cfg, 0.0)
+        assert price == 100.0
+        assert stale is True
+
+    def test_no_stored_price_either(self):
+        price, stale = streamlit_app._resolve_watchlist_price({}, None)
+        assert price == 0.0
+        assert stale is True
+
+    def test_stored_price_of_zero_is_not_a_price(self):
+        price, stale = streamlit_app._resolve_watchlist_price(
+            {"stock_price": 0.0}, None)
+        assert price == 0.0
+        assert stale is True

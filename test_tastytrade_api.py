@@ -8,6 +8,7 @@ without network access, broker credentials, or a Streamlit runtime.
 import json
 import sys
 import unittest
+import urllib.error
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -660,6 +661,69 @@ class TestFetchCurrentPrices(unittest.TestCase):
         mock_urlopen.side_effect = Exception("timeout")
         result = tastytrade_api.fetch_current_prices(["AAPL"])
         self.assertIsNone(result["AAPL"])
+
+
+def _ok_response(price=150.0, prev=148.0):
+    """A urlopen context manager yielding one Yahoo chart payload."""
+    payload = json.dumps({
+        "chart": {"result": [{"meta": {
+            "regularMarketPrice": price,
+            "chartPreviousClose": prev,
+        }}]}
+    }).encode()
+    resp = MagicMock()
+    resp.read.return_value = payload
+    resp.__enter__ = lambda s: s
+    resp.__exit__ = MagicMock(return_value=False)
+    return resp
+
+
+def _http_error(code):
+    return urllib.error.HTTPError(
+        url="https://query1.finance.yahoo.com/", code=code,
+        msg="err", hdrs=None, fp=None,
+    )
+
+
+@patch("tastytrade_api.time.sleep", lambda *_a, **_kw: None)
+class TestFetchCurrentPricesRetry(unittest.TestCase):
+    """Yahoo throttles datacenter IPs; a 429 must be retried, not swallowed.
+
+    Without this the watchlist silently renders $0.00 for every throttled
+    ticker, which also zeroes the upside, P/E and FCF-yield derived from it.
+    """
+
+    @patch("urllib.request.urlopen")
+    def test_retries_on_429_then_succeeds(self, mock_urlopen):
+        mock_urlopen.side_effect = [
+            _http_error(429), _http_error(429), _ok_response(),
+        ]
+        result = tastytrade_api.fetch_current_prices(["AAPL"])
+        self.assertIsNotNone(result["AAPL"], "429 must be retried, not dropped")
+        self.assertAlmostEqual(result["AAPL"]["price"], 150.0)
+        self.assertEqual(mock_urlopen.call_count, 3)
+
+    @patch("urllib.request.urlopen")
+    def test_retries_on_503(self, mock_urlopen):
+        mock_urlopen.side_effect = [_http_error(503), _ok_response(99.0, 98.0)]
+        result = tastytrade_api.fetch_current_prices(["AAPL"])
+        self.assertAlmostEqual(result["AAPL"]["price"], 99.0)
+
+    @patch("urllib.request.urlopen")
+    def test_no_retry_on_404(self, mock_urlopen):
+        # A 404 is an answer ("no such symbol"), not a transient fault.
+        # Retrying it just burns the budget the throttled tickers need.
+        mock_urlopen.side_effect = _http_error(404)
+        result = tastytrade_api.fetch_current_prices(["NOSUCH"])
+        self.assertIsNone(result["NOSUCH"])
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch("urllib.request.urlopen")
+    def test_gives_up_and_returns_none(self, mock_urlopen):
+        mock_urlopen.side_effect = _http_error(429)
+        result = tastytrade_api.fetch_current_prices(["AAPL"])
+        self.assertIsNone(result["AAPL"])
+        self.assertGreater(mock_urlopen.call_count, 1)
 
 
 class TestFetchEarningsDates(unittest.TestCase):
