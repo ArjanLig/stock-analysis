@@ -5,6 +5,7 @@ All tastytrade SDK / Streamlit / dotenv dependencies are mocked so tests run
 without network access, broker credentials, or a Streamlit runtime.
 """
 
+import asyncio
 import json
 import sys
 import unittest
@@ -1020,3 +1021,72 @@ class TestFetchBetaWeightedDelta(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFetchQuotesViaBroker(unittest.TestCase):
+    """The authenticated feed that replaces Yahoo as the primary source."""
+
+    def _streamer(self, trades, summaries):
+        streamer = AsyncMock()
+        streamer.__aenter__ = AsyncMock(return_value=streamer)
+        streamer.__aexit__ = AsyncMock(return_value=False)
+        streamer.subscribe = AsyncMock()
+
+        def _listen(event_type):
+            events = (trades if event_type is tastytrade_api.TradeEvent
+                      else summaries)
+
+            async def _gen():
+                for e in events:
+                    yield e
+                # The real feed never ends; a symbol it has no opinion on just
+                # never arrives. Hang so the timeout is what ends the wait.
+                await asyncio.sleep(3600)
+
+            return _gen()
+
+        streamer.listen = MagicMock(side_effect=_listen)
+        return streamer
+
+    def test_returns_price_and_previous_close(self):
+        trades = [SimpleNamespace(event_symbol="MSFT", price=Decimal("451.10"))]
+        summaries = [SimpleNamespace(event_symbol="MSFT",
+                                     prev_day_close_price=Decimal("448.00"))]
+        with patch("tastytrade_api._get_session", MagicMock()), \
+             patch("tastytrade_api.DXLinkStreamer",
+                   return_value=self._streamer(trades, summaries)):
+            out = tastytrade_api.fetch_quotes_via_broker(["MSFT"])
+        self.assertAlmostEqual(out["MSFT"]["price"], 451.10)
+        self.assertAlmostEqual(out["MSFT"]["previousClose"], 448.00)
+
+    def test_timeout_keeps_the_symbols_it_did_get(self):
+        # 80 good quotes must not be thrown away because five European lines
+        # never answer. This is the normal shape of a real call.
+        trades = [SimpleNamespace(event_symbol="MSFT", price=Decimal("451.10"))]
+        summaries = [SimpleNamespace(event_symbol="MSFT",
+                                     prev_day_close_price=Decimal("448.00"))]
+        with patch("tastytrade_api._get_session", MagicMock()), \
+             patch("tastytrade_api.DXLinkStreamer",
+                   return_value=self._streamer(trades, summaries)):
+            out = tastytrade_api.fetch_quotes_via_broker(
+                ["MSFT", "RMS.PA"], timeout=0.3)
+        self.assertIn("MSFT", out)
+        self.assertNotIn("RMS.PA", out, "unanswered symbol must be omitted")
+
+    def test_missing_previous_close_falls_back_to_price(self):
+        trades = [SimpleNamespace(event_symbol="MSFT", price=Decimal("451.10"))]
+        with patch("tastytrade_api._get_session", MagicMock()), \
+             patch("tastytrade_api.DXLinkStreamer",
+                   return_value=self._streamer(trades, [])):
+            out = tastytrade_api.fetch_quotes_via_broker(["MSFT"], timeout=0.3)
+        self.assertAlmostEqual(out["MSFT"]["previousClose"], 451.10)
+
+    def test_feed_failure_returns_empty_not_an_exception(self):
+        with patch("tastytrade_api._get_session",
+                   MagicMock(side_effect=RuntimeError("no session"))):
+            self.assertEqual(tastytrade_api.fetch_quotes_via_broker(["MSFT"]), {})
+
+    def test_empty_input_does_not_open_a_session(self):
+        with patch("tastytrade_api._get_session") as sess:
+            self.assertEqual(tastytrade_api.fetch_quotes_via_broker([]), {})
+        sess.assert_not_called()

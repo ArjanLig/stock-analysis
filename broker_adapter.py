@@ -546,7 +546,32 @@ def fetch_all_net_liq():
 # ---------------------------------------------------------------------------
 
 def fetch_current_prices(tickers):
-    return tastytrade_api.fetch_current_prices(tickers)
+    """Current prices, broker feed first and Yahoo only for what it missed.
+
+    Yahoo used to be the whole story here. It throttles by source IP and has
+    been widening the datacenter ranges it blocks — Cloud Run in June, the
+    Streamlit Cloud app by September — and no amount of retrying fixes being
+    blocked for where you are. The broker feed is authenticated, so it is not
+    subject to that, and it covers the US listings that are most of any
+    watchlist. Yahoo still handles what the broker does not carry, chiefly
+    European lines, and the caller falls back to the stored price from there.
+    """
+    tickers = list(tickers)
+    if not tickers:
+        return {}
+
+    out = {}
+    if st.session_state.get("tt_refresh_token"):
+        try:
+            out = tastytrade_api.fetch_quotes_via_broker(
+                tickers, refresh_token=_get_refresh_token())
+        except Exception as e:
+            logger.warning("Broker quotes failed, falling back to Yahoo: %s", e)
+
+    missing = [t for t in tickers if not out.get(t)]
+    if missing:
+        out.update(tastytrade_api.fetch_current_prices(missing))
+    return {t: out.get(t) for t in tickers}
 
 
 def fetch_ticker_profiles(tickers):

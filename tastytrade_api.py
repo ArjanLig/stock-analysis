@@ -21,7 +21,12 @@ from error_logger import log_error
 from trade_utils import detect_wheels as _detect_wheels
 from dotenv import load_dotenv
 from tastytrade import Session, Account, DXLinkStreamer
-from tastytrade.dxfeed import Greeks as GreeksEvent, Quote as QuoteEvent
+from tastytrade.dxfeed import (
+    Greeks as GreeksEvent,
+    Quote as QuoteEvent,
+    Summary as SummaryEvent,
+    Trade as TradeEvent,
+)
 from tastytrade.instruments import Option, Equity, NestedOptionChain
 from tastytrade.metrics import get_market_metrics
 from tastytrade.order import NewOrder, OrderType, OrderTimeInForce, OrderAction
@@ -741,6 +746,86 @@ def fetch_current_prices(tickers):
     CALL_STATS["quote_symbols"] += len(tickers)
     CALL_STATS["quote_s"] += time.perf_counter() - _t0
     return prices
+
+
+# How long to wait for the market data feed before giving up and letting the
+# caller fall back. The feed answers in well under a second when it answers at
+# all; this bound exists so a silent socket cannot hold a page load hostage.
+_BROKER_QUOTE_TIMEOUT = 10.0
+
+
+def fetch_quotes_via_broker(tickers, refresh_token=None,
+                            timeout=_BROKER_QUOTE_TIMEOUT):
+    """Live quotes from the broker's own market data feed.
+
+    This exists because Yahoo throttles by source IP and has been steadily
+    widening the datacenter ranges it blocks — it took out this project's
+    Cloud Run service in June and Streamlit Cloud by September. That is not a
+    problem any amount of retrying solves. The broker feed is authenticated,
+    so it is not rate-limited by where the request comes from.
+
+    Trade carries the last traded price and Summary the previous close, which
+    together cover what the Yahoo path returned, so day-change keeps working.
+
+    Returns {ticker: {"price", "previousClose"}} for the symbols the feed
+    answered on, and simply omits the rest — Tastytrade lists US equities, so
+    European tickers come back absent by design and the caller falls back.
+    """
+    tickers = [t for t in dict.fromkeys(tickers)]
+    if not tickers:
+        return {}
+
+    async def _collect():
+        session = _get_session(refresh_token)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        last, prev = {}, {}
+
+        async def _trades(streamer):
+            await streamer.subscribe(TradeEvent, tickers)
+            async for ev in streamer.listen(TradeEvent):
+                if ev.price:
+                    last[ev.event_symbol] = float(ev.price)
+                if len(last) >= len(tickers):
+                    return
+
+        async def _summaries(streamer):
+            await streamer.subscribe(SummaryEvent, tickers)
+            async for ev in streamer.listen(SummaryEvent):
+                if ev.prev_day_close_price:
+                    prev[ev.event_symbol] = float(ev.prev_day_close_price)
+                if len(prev) >= len(tickers):
+                    return
+
+        async with DXLinkStreamer(session, ssl_context=ctx) as streamer:
+            # A symbol the feed has no opinion on — a European line, a
+            # delisting — never completes, so the timeout is the normal exit,
+            # not an error. Keep whatever arrived before the clock ran out
+            # rather than throwing a good 80 quotes away over the other five.
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(_trades(streamer), _summaries(streamer)),
+                    timeout=timeout,
+                )
+            except (TimeoutError, asyncio.TimeoutError):
+                logger.info("Broker feed timed out with %s/%s symbols in hand",
+                            len(last), len(tickers))
+        return last, prev
+
+    _t0 = time.perf_counter()
+    try:
+        last, prev = asyncio.run(_collect())
+    except Exception as e:
+        logger.warning("Broker quote feed unavailable: %s", e)
+        return {}
+    finally:
+        CALL_STATS["quote_s"] += time.perf_counter() - _t0
+
+    out = {t: {"price": p, "previousClose": prev.get(t, p)}
+           for t, p in last.items() if p and p > 0}
+    logger.info("Broker feed answered on %s/%s symbols", len(out), len(tickers))
+    return out
 
 
 def fetch_earnings_dates(tickers, refresh_token=None):
