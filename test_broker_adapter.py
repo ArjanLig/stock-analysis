@@ -351,3 +351,83 @@ class TestSliceNetLiq(unittest.TestCase):
                  {"time": recent, "close": 2.0}]
         out = broker_adapter.slice_net_liq(mixed, "1m")
         self.assertEqual([p["close"] for p in out], [2.0])
+
+
+class TestFetchCurrentPricesLayering(unittest.TestCase):
+    """Broker feed first, Yahoo only for the gaps.
+
+    Yahoo blocks by source IP and has been widening the datacenter ranges it
+    refuses, so it cannot be the primary source for a cloud-hosted app. The
+    broker feed is authenticated and unaffected, but only lists US equities —
+    so both paths have to work, and the split has to be by symbol.
+    """
+
+    def _st(self, connected=True):
+        return types.SimpleNamespace(
+            session_state={"tt_refresh_token": "rt"} if connected else {})
+
+    def test_broker_covers_everything_yahoo_not_called(self):
+        broker = {"MSFT": {"price": 451.0, "previousClose": 450.0}}
+        with patch.object(broker_adapter, "st", self._st()), \
+             patch.object(broker_adapter, "_get_refresh_token",
+                          return_value="rt"), \
+             patch.object(broker_adapter.tastytrade_api,
+                          "fetch_quotes_via_broker", return_value=broker), \
+             patch.object(broker_adapter.tastytrade_api,
+                          "fetch_current_prices") as yahoo:
+            out = broker_adapter.fetch_current_prices(["MSFT"])
+        yahoo.assert_not_called()
+        self.assertAlmostEqual(out["MSFT"]["price"], 451.0)
+
+    def test_yahoo_fills_only_what_the_broker_missed(self):
+        # RMS.PA is a Paris line; Tastytrade does not carry it.
+        broker = {"MSFT": {"price": 451.0, "previousClose": 450.0}}
+        with patch.object(broker_adapter, "st", self._st()), \
+             patch.object(broker_adapter, "_get_refresh_token",
+                          return_value="rt"), \
+             patch.object(broker_adapter.tastytrade_api,
+                          "fetch_quotes_via_broker", return_value=broker), \
+             patch.object(
+                 broker_adapter.tastytrade_api, "fetch_current_prices",
+                 return_value={"RMS.PA": {"price": 1613.5,
+                                          "previousClose": 1600.0}}) as yahoo:
+            out = broker_adapter.fetch_current_prices(["MSFT", "RMS.PA"])
+        yahoo.assert_called_once_with(["RMS.PA"])
+        self.assertAlmostEqual(out["MSFT"]["price"], 451.0)
+        self.assertAlmostEqual(out["RMS.PA"]["price"], 1613.5)
+
+    def test_no_broker_connected_uses_yahoo_for_all(self):
+        with patch.object(broker_adapter, "st", self._st(connected=False)), \
+             patch.object(broker_adapter.tastytrade_api,
+                          "fetch_quotes_via_broker") as feed, \
+             patch.object(
+                 broker_adapter.tastytrade_api, "fetch_current_prices",
+                 return_value={"MSFT": {"price": 451.0,
+                                        "previousClose": 450.0}}):
+            out = broker_adapter.fetch_current_prices(["MSFT"])
+        feed.assert_not_called()
+        self.assertAlmostEqual(out["MSFT"]["price"], 451.0)
+
+    def test_broker_blowing_up_does_not_take_prices_down(self):
+        with patch.object(broker_adapter, "st", self._st()), \
+             patch.object(broker_adapter, "_get_refresh_token",
+                          return_value="rt"), \
+             patch.object(broker_adapter.tastytrade_api,
+                          "fetch_quotes_via_broker",
+                          side_effect=RuntimeError("socket died")), \
+             patch.object(
+                 broker_adapter.tastytrade_api, "fetch_current_prices",
+                 return_value={"MSFT": {"price": 451.0,
+                                        "previousClose": 450.0}}):
+            out = broker_adapter.fetch_current_prices(["MSFT"])
+        self.assertAlmostEqual(out["MSFT"]["price"], 451.0)
+
+    def test_every_requested_ticker_is_a_key(self):
+        # The watchlist reads by .get(); a missing key and a None must not be
+        # two different things downstream.
+        with patch.object(broker_adapter, "st", self._st(connected=False)), \
+             patch.object(broker_adapter.tastytrade_api,
+                          "fetch_current_prices", return_value={}):
+            out = broker_adapter.fetch_current_prices(["MSFT", "RMS.PA"])
+        self.assertEqual(set(out), {"MSFT", "RMS.PA"})
+        self.assertIsNone(out["MSFT"])
