@@ -9,8 +9,10 @@ import logging
 import os
 import ssl
 import time
+import urllib.error
 import urllib.request
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
@@ -659,43 +661,82 @@ def fetch_ticker_profiles(tickers):
     return profiles
 
 
+# Yahoo throttles by source IP, and Streamlit Cloud is a datacenter IP shared
+# with every other app on the node. Firing a whole watchlist at it through an
+# unbounded executor earned a burst of 429s and, because every failure used to
+# collapse to None, a table full of $0.00 — which silently zeroed the upside,
+# P/E and FCF-yield computed from that price too. Cap the fan-out so we stop
+# provoking the throttle, and retry the throttle responses we still get.
+_QUOTE_MAX_WORKERS = 8
+_QUOTE_RETRIES = 3
+_QUOTE_BACKOFF = 0.5
+# 404 is an answer ("no such symbol" — e.g. a European listing looked up on its
+# bare ticker), not a transient fault. Retrying it only burns the budget the
+# throttled symbols need.
+_QUOTE_RETRY_STATUSES = frozenset({403, 429, 500, 502, 503, 504})
+# One hostile Retry-After must not be able to stall the page behind it.
+_QUOTE_RETRY_AFTER_CAP = 5.0
+
+
 def fetch_current_prices(tickers):
-    """Fetch current market prices from Yahoo Finance for a list of tickers."""
+    """Fetch current market prices from Yahoo Finance for a list of tickers.
+
+    Returns {ticker: {"price", "previousClose"} | None}. A None means the quote
+    is genuinely unavailable after retries — callers must not render it as 0.
+    """
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
     def _fetch_one(ticker):
-        try:
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
-                data = json.loads(resp.read())
-                meta = data["chart"]["result"][0]["meta"]
-                return ticker, {
-                    "price": meta["regularMarketPrice"],
-                    "previousClose": meta.get("chartPreviousClose", meta.get("previousClose")),
-                }
-        except Exception as e:
-            logger.debug("Price fetch failed for %s: %s", ticker, e)
-            return ticker, None
-
-    async def _fetch_all():
-        loop = asyncio.get_event_loop()
-        tasks = [loop.run_in_executor(None, _fetch_one, t) for t in tickers]
-        return await asyncio.gather(*tasks)
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+        for attempt in range(_QUOTE_RETRIES):
+            try:
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+                    data = json.loads(resp.read())
+                    meta = data["chart"]["result"][0]["meta"]
+                    return ticker, {
+                        "price": meta["regularMarketPrice"],
+                        "previousClose": meta.get(
+                            "chartPreviousClose", meta.get("previousClose")),
+                    }
+            except urllib.error.HTTPError as e:
+                if (e.code not in _QUOTE_RETRY_STATUSES
+                        or attempt == _QUOTE_RETRIES - 1):
+                    logger.warning("Price fetch failed for %s: HTTP %s",
+                                   ticker, e.code)
+                    return ticker, None
+                backoff = _QUOTE_BACKOFF * (2 ** attempt)
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                if retry_after:
+                    try:
+                        backoff = min(max(backoff, float(retry_after)),
+                                      _QUOTE_RETRY_AFTER_CAP)
+                    except ValueError:
+                        pass
+                time.sleep(backoff)
+            except Exception as e:
+                if attempt == _QUOTE_RETRIES - 1:
+                    logger.warning("Price fetch failed for %s: %s", ticker, e)
+                    return ticker, None
+                time.sleep(_QUOTE_BACKOFF * (2 ** attempt))
+        return ticker, None
 
     prices = {}
     _t0 = time.perf_counter()
-    try:
-        results = asyncio.run(_fetch_all())
-        for ticker, result in results:
-            prices[ticker] = result
-    except Exception as e:
-        logger.debug("Async price fetch failed, falling back to sequential: %s", e)
-        for ticker in tickers:
-            _, result = _fetch_one(ticker)
-            prices[ticker] = result
+    tickers = list(tickers)
+    if tickers:
+        with ThreadPoolExecutor(
+            max_workers=min(_QUOTE_MAX_WORKERS, len(tickers))
+        ) as pool:
+            for ticker, result in pool.map(_fetch_one, tickers):
+                prices[ticker] = result
+    _failed = [t for t, p in prices.items() if p is None]
+    if _failed:
+        logger.warning("No quote for %s/%s symbols: %s",
+                       len(_failed), len(tickers), ", ".join(_failed[:10]))
     CALL_STATS["quote_calls"] += 1
     CALL_STATS["quote_symbols"] += len(tickers)
     CALL_STATS["quote_s"] += time.perf_counter() - _t0
